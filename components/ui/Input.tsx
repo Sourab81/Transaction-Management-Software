@@ -7,9 +7,9 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 const Input: React.FC<InputProps> = ({ label, error, className = '', ...props }) => {
   return (
-    <div>
+    <div className="app-field">
       {label && (
-        <label className="form-label fw-medium">
+        <label className="form-label">
           {label}
         </label>
       )}
@@ -17,7 +17,7 @@ const Input: React.FC<InputProps> = ({ label, error, className = '', ...props })
         className={`form-control ${error ? 'is-invalid' : ''} ${className}`}
         {...props}
       />
-      {error && <div className="invalid-feedback">{error}</div>}
+      {error && <div className="form-hint text-danger">{error}</div>}
     </div>
   );
 };

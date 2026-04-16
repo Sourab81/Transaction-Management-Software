@@ -15,41 +15,43 @@ interface CountersTableProps {
 
 const CountersTable: React.FC<CountersTableProps> = ({ counters }) => {
   return (
-    <div className="card border-0 shadow-sm" style={{borderRadius: '1.5rem', overflow: 'hidden'}}>
-      <div className="card-header bg-light border-bottom-0">
-        <h3 className="h5 mb-0 fw-semibold text-dark">Counters Overview</h3>
-      </div>
-      <div className="card-body p-0">
-        <div className="table-responsive">
-          <table className="table table-hover mb-0">
-            <thead className="table-light">
-              <tr>
-                <th className="border-0 fw-semibold text-muted small text-uppercase">Counter</th>
-                <th className="border-0 fw-semibold text-muted small text-uppercase">Code</th>
-                <th className="border-0 fw-semibold text-muted small text-uppercase">Opening Balance</th>
-                <th className="border-0 fw-semibold text-muted small text-uppercase">Current Balance</th>
-                <th className="border-0 fw-semibold text-muted small text-uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {counters.map((counter) => (
-                <tr key={counter.id}>
-                  <td className="fw-medium text-dark">{counter.name}</td>
-                  <td>{counter.code}</td>
-                  <td>${counter.openingBalance.toLocaleString()}</td>
-                  <td>${counter.currentBalance.toLocaleString()}</td>
-                  <td>
-                    <span className={`badge ${counter.status === 'Active' ? 'bg-success' : 'bg-secondary'} rounded-pill px-3 py-2`}>
-                      {counter.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <section className="table-panel">
+      <div className="table-panel__header">
+        <div>
+          <p className="eyebrow">Counters</p>
+          <h3 className="table-panel__title">Counter overview</h3>
+          <p className="table-panel__copy">Balances and status across active service counters.</p>
         </div>
       </div>
-    </div>
+      <div className="data-table-wrapper">
+        <table className="table data-table align-middle mobile-card-table">
+          <thead>
+            <tr>
+              <th>Counter</th>
+              <th>Code</th>
+              <th>Opening Balance</th>
+              <th>Current Balance</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {counters.map((counter) => (
+              <tr key={counter.id}>
+                <td data-label="Counter"><span className="data-table__primary">{counter.name}</span></td>
+                <td data-label="Code">{counter.code}</td>
+                <td data-label="Opening Balance">Rs. {counter.openingBalance.toLocaleString('en-IN')}</td>
+                <td data-label="Current Balance">Rs. {counter.currentBalance.toLocaleString('en-IN')}</td>
+                <td data-label="Status">
+                  <span className={`status-chip ${counter.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
+                    {counter.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 };
 

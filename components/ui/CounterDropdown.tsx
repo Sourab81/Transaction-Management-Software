@@ -12,21 +12,17 @@ interface CounterDropdownProps {
   counters: Counter[];
   selectedCounterId: string;
   onChange: (counterId: string) => void;
+  disabled?: boolean;
 }
 
-const CounterDropdown: React.FC<CounterDropdownProps> = ({ counters, selectedCounterId, onChange }) => {
-  const selectedCounter = counters.find(c => c.id === selectedCounterId);
-
+const CounterDropdown: React.FC<CounterDropdownProps> = ({ counters, selectedCounterId, onChange, disabled = false }) => {
   return (
     <select
       value={selectedCounterId}
       onChange={(e) => onChange(e.target.value)}
-      className="form-select border-0 bg-transparent fw-medium"
-      style={{
-        fontSize: '14px',
-        height: '40px',
-        cursor: 'pointer'
-      }}
+      className="form-select counter-select__field fw-medium"
+      aria-label="Select department"
+      disabled={disabled}
     >
       {counters.map((counter) => (
         <option key={counter.id} value={counter.id}>

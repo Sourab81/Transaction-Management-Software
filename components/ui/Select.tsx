@@ -8,9 +8,9 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 
 const Select: React.FC<SelectProps> = ({ label, options, error, className = '', ...props }) => {
   return (
-    <div>
+    <div className="app-field">
       {label && (
-        <label className="form-label fw-medium">
+        <label className="form-label">
           {label}
         </label>
       )}
@@ -24,7 +24,7 @@ const Select: React.FC<SelectProps> = ({ label, options, error, className = '', 
           </option>
         ))}
       </select>
-      {error && <div className="invalid-feedback">{error}</div>}
+      {error && <div className="form-hint text-danger">{error}</div>}
     </div>
   );
 };

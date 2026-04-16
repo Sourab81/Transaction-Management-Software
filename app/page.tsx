@@ -1,5 +1,5 @@
-import Dashboard from '../components/dashboard/Dashboard';
+import HomeRouteRedirect from '../components/auth/HomeRouteRedirect';
 
 export default function Home() {
-  return <Dashboard />;
+  return <HomeRouteRedirect />;
 }

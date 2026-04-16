@@ -1,5 +1,6 @@
 import React from 'react';
-import { FaBell, FaUser, FaBars, FaSearch } from 'react-icons/fa';
+import { FaBars, FaBell, FaSearch, FaSignOutAlt, FaUser } from 'react-icons/fa';
+import { getModuleDisplayById, getRoleLabel, type UserRole } from '../../lib/platform-structure';
 import CounterDropdown from '../ui/CounterDropdown';
 
 interface Counter {
@@ -14,98 +15,126 @@ interface HeaderProps {
   activeTab: string;
   counters: Counter[];
   selectedCounterId: string;
+  notificationCount: number;
+  searchValue: string;
+  currentUser: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    businessId?: string;
+  };
+  onLogout: () => void;
   onCounterChange: (counterId: string) => void;
   onSearch: (query: string) => void;
+  onNotificationsClick: () => void;
   isSidebarOpen: boolean;
   onSidebarToggle: () => void;
 }
 
-const pageHeadings: Record<string, string> = {
-  dashboard: 'Dashboard',
-  services: 'Service Catalog',
-  customers: 'Customer Hub',
-  transactions: 'Transactions',
-  history: 'History & Events',
-  reports: 'Reports Center',
-  additions: 'Configuration Options',
-};
+const Header: React.FC<HeaderProps> = ({
+  activeTab,
+  counters,
+  selectedCounterId,
+  notificationCount,
+  searchValue,
+  currentUser,
+  onLogout,
+  onCounterChange,
+  onSearch,
+  onNotificationsClick,
+  isSidebarOpen,
+  onSidebarToggle,
+}) => {
+  const currentModule = getModuleDisplayById(activeTab, currentUser.role);
+  const heading = currentModule?.heading || 'Dashboard';
+  const description = currentModule?.description || 'Overview of your workspace.';
+  const roleLabel = getRoleLabel(currentUser.role);
+  const showDepartmentSelector = (currentUser.role === 'Customer' || currentUser.role === 'Employee') && counters.length > 0;
+  const showMissingDepartmentState = currentUser.role === 'Employee' && counters.length === 0;
+  const isDepartmentLocked = currentUser.role === 'Employee';
 
-const Header: React.FC<HeaderProps> = ({ activeTab, counters, selectedCounterId, onCounterChange, onSearch, isSidebarOpen, onSidebarToggle }) => {
-  const heading = pageHeadings[activeTab] || pageHeadings.dashboard;
   return (
-    <header className="bg-white border-bottom" style={{ zIndex: 40, position: 'sticky', top: 0 }}>
-      <div className="container-fluid" style={{ maxWidth: '1400px' }}>
-        <div className="d-flex align-items-center justify-content-between py-3 px-2">
-          {/* Left Section - Logo and Mobile Menu */}
-          <div className="d-flex align-items-center gap-3">
-            <button
-              className="btn btn-link text-dark p-1 d-md-none"
-              aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-              onClick={onSidebarToggle}
-              style={{ border: 'none', background: 'none' }}
-            >
-              <FaBars size={18} />
-            </button>
-            <div className="d-flex align-items-center gap-2">
-              <div className="bg-primary text-white rounded-2 d-flex align-items-center justify-content-center fw-bold" style={{ width: '32px', height: '32px', fontSize: '14px' }}>
-                E
-              </div>
-              <div className="d-none d-sm-block">
-                <h6 className="mb-0 fw-semibold text-dark">{heading}</h6>
-              </div>
-            </div>
+    <header className="app-header">
+      <div className="app-header__inner">
+        <div className="app-header__title">
+          <button
+            type="button"
+            className="icon-button mobile-menu-button"
+            aria-label={isSidebarOpen ? 'Close sidebar' : 'Toggle sidebar'}
+            title="Toggle sidebar"
+            onClick={onSidebarToggle}
+          >
+            <FaBars size={16} />
+          </button>
+          <div className="page-chip">E</div>
+          <div className="app-header__heading">
+            <p className="eyebrow">{heading}</p>
+            <h1>{description}</h1>
           </div>
+        </div>
 
-          {/* Center Section - Search */}
-          <div className="flex-grow-1 mx-4" style={{ maxWidth: '500px' }}>
-            <div className="position-relative">
-              <FaSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" size={14} />
-              <input
-                type="text"
-                className="form-control border-0 bg-light"
-                placeholder="Search..."
-                style={{
-                  paddingLeft: '40px',
-                  borderRadius: '8px',
-                  height: '40px',
-                  fontSize: '14px'
-                }}
-                onChange={(e) => onSearch(e.target.value)}
-              />
-            </div>
-          </div>
+        <label className="header-search" aria-label="Global search">
+          <FaSearch className="header-search__icon" size={14} />
+          <input
+            type="text"
+            className="header-search__input"
+            placeholder="Search customers, transactions, services..."
+            value={searchValue}
+            onChange={(event) => onSearch(event.target.value)}
+          />
+        </label>
 
-          {/* Right Section - Actions */}
-          <div className="d-flex align-items-center gap-3">
-            <div className="d-flex" style={{ minWidth: '180px' }}>
+        <div className="app-header__actions">
+          {showDepartmentSelector ? (
+            <div className="header-counter">
+              <p className="eyebrow mb-1">Department</p>
               <CounterDropdown
                 counters={counters}
                 selectedCounterId={selectedCounterId}
                 onChange={onCounterChange}
+                disabled={isDepartmentLocked}
               />
             </div>
-
-            <button
-              className="btn btn-link text-dark p-2 position-relative"
-              style={{ border: 'none', background: 'none' }}
-              aria-label="Notifications"
-            >
-              <FaBell size={18} />
-              <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: '10px', padding: '2px 6px' }}>
-                3
-              </span>
-            </button>
-
-            <div className="d-flex align-items-center gap-2">
-              <div className="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold" style={{ width: '32px', height: '32px', fontSize: '14px' }}>
-                <FaUser size={14} />
-              </div>
-              <div className="d-none d-lg-block">
-                <div className="small fw-medium text-dark">Operator</div>
-                <div className="small text-muted">malviyasourabh81@gmail.com</div>
+          ) : null}
+          {showMissingDepartmentState ? (
+            <div className="header-counter">
+              <p className="eyebrow mb-1">Department</p>
+              <div className="counter-chip">
+                <span className="fw-semibold d-block">Department not assigned</span>
+                <span className="page-muted small d-block mt-1">Ask the business user to assign your department.</span>
               </div>
             </div>
+          ) : null}
+
+          <button
+            type="button"
+            className="icon-button app-header__notification"
+            aria-label="Notifications"
+            onClick={onNotificationsClick}
+          >
+            <FaBell size={16} />
+            <span className="notification-badge">{notificationCount}</span>
+          </button>
+
+          <div className="profile-card">
+            <div className="app-avatar">
+              <FaUser size={13} />
+            </div>
+            <div className="profile-card__meta">
+              <p className="profile-card__name">{currentUser.name}</p>
+              <p className="profile-card__detail">
+                <span className="profile-card__role">{roleLabel}</span>
+                <span className="profile-card__separator" aria-hidden="true">|</span>
+                <span className="profile-card__email">{currentUser.email}</span>
+              </p>
+            </div>
           </div>
+
+          <button type="button" className="btn-app btn-app-ghost header-logout" onClick={onLogout}>
+            <FaSignOutAlt />
+            Logout
+          </button>
         </div>
       </div>
     </header>

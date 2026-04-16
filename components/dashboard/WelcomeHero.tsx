@@ -1,38 +1,78 @@
 import React from 'react';
+import { FaArrowRight, FaStar } from 'react-icons/fa';
+import { getRoleLabel, type UserRole } from '../../lib/platform-structure';
 
-const WelcomeHero: React.FC = () => {
+interface WelcomeHeroProps {
+  userName: string;
+  role: UserRole;
+  counterName: string;
+  counterStatus: string;
+  onPrimaryAction: () => void;
+  onSecondaryAction: () => void;
+}
+
+const WelcomeHero: React.FC<WelcomeHeroProps> = ({
+  userName,
+  role,
+  counterName,
+  counterStatus,
+  onPrimaryAction,
+  onSecondaryAction,
+}) => {
   const currentTime = new Date();
   const hour = currentTime.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const roleLabel = getRoleLabel(role);
 
   return (
-    <div className="glass-card position-relative overflow-hidden">
-      <div className="card-body p-5">
-        <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-4">
-          <div>
-            <h1 className="display-6 fw-bold mb-3" style={{ letterSpacing: '0.03em' }}>
-              {greeting}, Operator! 👋
-            </h1>
-            <p className="lead text-muted mb-0">
-              Welcome back to your eNest dashboard — here’s a quick overview of your center.
-            </p>
+    <section className="hero-panel glass-card">
+      <div className="hero-panel__content">
+        <p className="eyebrow">{roleLabel} workspace</p>
+        <h1 className="hero-panel__headline">{greeting}, {userName}. Keep the service desk moving.</h1>
+        <p className="hero-panel__copy">
+          Track counters, process transactions, and review operations from a simpler dashboard built
+          for day-to-day speed.
+        </p>
+
+        <div className="section-hero__actions">
+          <button type="button" className="btn-app btn-app-primary" onClick={onPrimaryAction}>
+            Start Transaction
+            <FaArrowRight size={13} />
+          </button>
+          <button type="button" className="btn-app btn-app-secondary" onClick={onSecondaryAction}>
+            <FaStar size={13} />
+            Open Favorites
+          </button>
+        </div>
+
+        <div className="hero-panel__meta">
+          <div className="hero-stat">
+            <span className="hero-stat__label">Current Counter</span>
+            <span className="hero-stat__value">{counterName}</span>
+            <span className="hero-stat__hint">Selected for new activity</span>
           </div>
-          <div className="bg-white bg-opacity-85 rounded-4 px-4 py-3 shadow-sm" style={{ backdropFilter: 'blur(10px)' }}>
-            <p className="text-uppercase text-muted small mb-1" style={{ letterSpacing: '0.18em' }}>Today's Date</p>
-            <p className="h6 fw-semibold mb-0 text-dark">
+          <div className="hero-stat">
+            <span className="hero-stat__label">Status</span>
+            <span className="hero-stat__value d-flex align-items-center gap-2">
+              <span className="pulse-dot" />
+              {counterStatus}
+            </span>
+            <span className="hero-stat__hint">Live and ready for service</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat__label">Today</span>
+            <span className="hero-stat__value">
               {currentTime.toLocaleDateString('en-US', {
                 weekday: 'long',
-                year: 'numeric',
                 month: 'long',
                 day: 'numeric',
               })}
-            </p>
+            </span>
+            <span className="hero-stat__hint">Plan the next wave of tasks</span>
           </div>
         </div>
-        <div className="position-absolute top-0 end-0 translate-middle bg-primary bg-opacity-20 rounded-circle" style={{ width: '8rem', height: '8rem', right: '-2rem', top: '1rem' }}></div>
-        <div className="position-absolute bottom-0 start-0 translate-middle bg-info bg-opacity-20 rounded-circle" style={{ width: '7rem', height: '7rem', left: '-2rem', bottom: '-1rem' }}></div>
       </div>
-    </div>
+    </section>
   );
 };
 

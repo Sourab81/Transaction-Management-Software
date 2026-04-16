@@ -1,6 +1,5 @@
 import React from 'react';
-import { FaPlusCircle, FaRedoAlt, FaChartBar, FaStar } from 'react-icons/fa';
-import Button from '../ui/Button';
+import { FaChartBar, FaPlusCircle, FaRedoAlt, FaStar } from 'react-icons/fa';
 
 interface QuickActionsProps {
   onAction: (action: string) => void;
@@ -8,32 +7,65 @@ interface QuickActionsProps {
 
 const QuickActions: React.FC<QuickActionsProps> = ({ onAction }) => {
   const actions = [
-    { id: 'new-transaction', label: 'New Transaction', icon: <FaPlusCircle />, color: 'bg-primary-subtle hover:bg-primary text-primary border-primary-subtle' },
-    { id: 'repeat-customer', label: 'Repeat Customer', icon: <FaRedoAlt />, color: 'bg-success-subtle hover:bg-success text-success border-success-subtle' },
-    { id: 'daily-report', label: 'Daily Report', icon: <FaChartBar />, color: 'bg-info-subtle hover:bg-info text-info border-info-subtle' },
-    { id: 'favorites', label: 'Favorites', icon: <FaStar />, color: 'bg-warning-subtle hover:bg-warning text-warning border-warning-subtle' },
-  ];
+    {
+      id: 'new-transaction',
+      label: 'New Transaction',
+      copy: 'Start a fresh service workflow in one click.',
+      icon: <FaPlusCircle />,
+      tone: 'primary',
+    },
+    {
+      id: 'repeat-customer',
+      label: 'Repeat Customer',
+      copy: 'Load the latest customer transaction back into the workflow for review.',
+      icon: <FaRedoAlt />,
+      tone: 'success',
+    },
+    {
+      id: 'daily-report',
+      label: 'Daily Closing',
+      copy: 'Generate today\'s closing snapshot with totals, pending dues, and net amount.',
+      icon: <FaChartBar />,
+      tone: 'info',
+    },
+    {
+      id: 'favorites',
+      label: 'Favorites',
+      copy: 'Jump to the services your team uses most often.',
+      icon: <FaStar />,
+      tone: 'warning',
+    },
+  ] as const;
 
   return (
-    <div className="card border-0 shadow-sm" style={{borderRadius: '1.5rem'}}>
-      <div className="card-body p-4">
-        <h3 className="h5 mb-4 fw-semibold text-dark">Quick Actions</h3>
-        <div className="row g-3">
+    <section className="panel p-4 dashboard-balance-panel">
+      <div className="panel-header mb-4">
+        <div>
+          <p className="eyebrow">Quick Actions</p>
+          <h2 className="panel-title">High-frequency shortcuts</h2>
+        </div>
+      </div>
+
+      <div className="dashboard-balance-panel__body">
+        <div className="quick-action-grid">
           {actions.map((action) => (
-            <div key={action.id} className="col-6">
-              <button
-                onClick={() => onAction(action.id)}
-                className={`btn border d-flex flex-column align-items-center justify-content-center p-3 w-100 h-100 transition-all ${action.color}`}
-                style={{borderRadius: '1rem', minHeight: '5rem'}}
-              >
-                <span className="fs-4 mb-2">{action.icon}</span>
-                <span className="small fw-medium">{action.label}</span>
-              </button>
-            </div>
+            <button
+              key={action.id}
+              type="button"
+              className="quick-action-button"
+              data-tone={action.tone}
+              onClick={() => onAction(action.id)}
+            >
+              <span className="quick-action__icon">{action.icon}</span>
+              <div>
+                <p className="quick-action__label">{action.label}</p>
+                <p className="quick-action__copy">{action.copy}</p>
+              </div>
+            </button>
           ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 

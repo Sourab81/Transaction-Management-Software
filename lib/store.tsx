@@ -1,148 +1,1380 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react';
+import {
+  buildDefaultCustomerPermissions,
+  createCustomerPermissions,
+  normalizeCustomerPermissions,
+  type CustomerPermissions,
+} from './platform-structure';
+import {
+  deriveTransactionStatus,
+  getPostedTransactionAmount,
+  type DailyClosingSummary,
+} from './transaction-workflow';
+import {
+  createBusinessSubscription,
+  getBusinessAccessState,
+  toStoredBusinessSubscription,
+  type BusinessStatusReason,
+  type BusinessSubscription,
+} from './subscription';
 
-interface Customer {
+export const createRecordId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+export interface Business {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  password: string;
+  status?: 'Active' | 'Inactive';
+  statusReason?: BusinessStatusReason;
+  joinedDate?: string;
+  permissions: CustomerPermissions;
+  onboardingCompleted?: boolean;
+  onboardingStep?: BusinessOnboardingStep;
+  subscription?: BusinessSubscription;
+}
+
+export type BusinessOnboardingStep = 'welcome' | 'departments' | 'accounts' | 'services' | 'customers' | 'dashboard';
+
+export interface BusinessCustomer {
   id: string;
   name: string;
   phone: string;
   email?: string;
+  status?: 'Active' | 'Inactive';
+  joinedDate?: string;
 }
 
-interface Transaction {
+export type TransactionPaymentMode = 'cash' | 'upi' | 'bank' | 'card';
+export type TransactionStatus = 'completed' | 'pending' | 'cancelled' | 'refunded';
+
+export interface TransactionUpiPaymentDetails {
+  kind: 'upi';
+  transactionId: string;
+  utrNumber: string;
+}
+
+export interface TransactionCardPaymentDetails {
+  kind: 'card';
+  transactionId: string;
+  cardType: string;
+  cardNetwork: string;
+  lastFourDigits: string;
+}
+
+export interface TransactionBankPaymentDetails {
+  kind: 'bank';
+  bankTransferType: string;
+  bankTransactionReferenceNumber: string;
+  senderAccountHolderName: string;
+  senderBankName: string;
+  senderAccountNumber: string;
+}
+
+export type TransactionPaymentDetails =
+  | TransactionUpiPaymentDetails
+  | TransactionCardPaymentDetails
+  | TransactionBankPaymentDetails;
+
+export interface Employee {
   id: string;
+  name: string;
+  phone: string;
+  email: string;
+  password: string;
+  permissions: CustomerPermissions;
+  departmentId?: string;
+  status?: 'Active' | 'Inactive';
+  joinedDate?: string;
+}
+
+export interface Transaction {
+  id: string;
+  transactionNumber: string;
   customerId: string;
   customerName: string;
+  customerPhone: string;
+  serviceId: string;
   service: string;
-  amount: number;
-  status: 'completed' | 'pending' | 'failed';
+  servicePrice: number;
+  totalAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  paymentMode: TransactionPaymentMode;
+  paymentDetails?: TransactionPaymentDetails;
+  departmentId?: string;
+  departmentName: string;
+  accountId?: string;
+  accountLabel: string;
+  handledById: string;
+  handledByName: string;
+  handledByRole: 'Customer' | 'Employee';
+  note?: string;
+  status: TransactionStatus;
   date: string;
+  createdAt: string;
 }
 
-interface Counter {
+export interface Counter {
   id: string;
   name: string;
   code: string;
+  linkedAccountIds?: string[];
+  defaultAccountId?: string;
+  linkedAccountId?: string;
   openingBalance: number;
   currentBalance: number;
   status: 'Active' | 'Inactive';
 }
 
-interface AppState {
-  customers: Customer[];
-  transactions: Transaction[];
-  notifications: Notification[];
-  counters: Counter[];
+export interface Account {
+  id: string;
+  accountHolder: string;
+  bankName: string;
+  accountNumber: string;
+  ifsc: string;
+  openingBalance: number;
+  currentBalance: number;
+  status: 'Active' | 'Inactive';
+  date: string;
 }
 
-interface Notification {
+export interface Service {
+  id: string;
+  departmentId?: string;
+  departmentName: string;
+  name: string;
+  category: string;
+  price: number;
+  status: 'Active' | 'Inactive';
+  description: string;
+}
+
+export interface RecentService {
+  id: string;
+  name: string;
+  customer: string;
+  amount: number;
+  status: 'Completed' | 'Pending' | 'Cancelled' | 'Refunded';
+}
+
+export interface HistoryEvent {
+  id: string;
+  title: string;
+  module: string;
+  actor: string;
+  status: 'Completed' | 'Pending' | 'Failed';
+  date: string;
+}
+
+export interface ReportItem {
+  id: string;
+  name: string;
+  type: string;
+  owner: string;
+  status: 'Ready' | 'Draft' | 'Scheduled';
+  date: string;
+  summary?: DailyClosingSummary;
+}
+
+export interface AdditionOption {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  status: 'Enabled' | 'Disabled';
+  date: string;
+}
+
+export interface Expense {
+  id: string;
+  title: string;
+  category: string;
+  amount: number;
+  status: 'Active' | 'Inactive';
+  date: string;
+  notes?: string;
+}
+
+export interface Notification {
   id: string;
   type: 'success' | 'warning' | 'error' | 'info';
   message: string;
   timestamp: string;
 }
 
-type AppAction =
-  | { type: 'ADD_TRANSACTION'; payload: Omit<Transaction, 'id' | 'date'> }
-  | { type: 'ADD_CUSTOMER'; payload: Omit<Customer, 'id'> }
-  | { type: 'ADD_NOTIFICATION'; payload: Omit<Notification, 'id' | 'timestamp'> }
-  | { type: 'DISMISS_NOTIFICATION'; payload: string };
+export interface BusinessWorkspace {
+  customers: BusinessCustomer[];
+  employees: Employee[];
+  transactions: Transaction[];
+  notifications: Notification[];
+  counters: Counter[];
+  accounts: Account[];
+  services: Service[];
+  expenses: Expense[];
+  recentServices: RecentService[];
+  historyEvents: HistoryEvent[];
+  reports: ReportItem[];
+}
 
-const initialState: AppState = {
-  customers: [
-    { id: '1', name: 'John Doe', phone: '1234567890', email: 'john@example.com' },
-    { id: '2', name: 'Jane Smith', phone: '0987654321', email: 'jane@example.com' },
-  ],
-  transactions: [
-    {
-      id: '1',
-      customerId: '1',
-      customerName: 'John Doe',
-      service: 'Mobile Recharge',
-      amount: 50,
-      status: 'completed',
-      date: '2024-01-15',
-    },
-    {
-      id: '2',
-      customerId: '2',
-      customerName: 'Jane Smith',
-      service: 'Bill Payment',
-      amount: 100,
-      status: 'pending',
-      date: '2024-01-15',
-    },
-  ],
+export interface AdminWorkspace {
+  notifications: Notification[];
+  historyEvents: HistoryEvent[];
+  reports: ReportItem[];
+  additionOptions: AdditionOption[];
+}
+
+export interface AppState {
+  businesses: Business[];
+  businessWorkspacesById: Record<string, BusinessWorkspace>;
+  adminWorkspace: AdminWorkspace;
+}
+
+type WorkspaceScopedAction =
+  | { type: 'ADD_TRANSACTION'; businessId: string; payload: Omit<Transaction, 'id' | 'date' | 'transactionNumber' | 'createdAt'> }
+  | { type: 'UPDATE_TRANSACTION'; businessId: string; payload: Transaction }
+  | { type: 'ADD_CUSTOMER'; businessId: string; payload: Omit<BusinessCustomer, 'id'> & { id?: string } }
+  | { type: 'UPDATE_CUSTOMER'; businessId: string; payload: BusinessCustomer }
+  | { type: 'ADD_EMPLOYEE'; businessId: string; payload: Omit<Employee, 'id'> }
+  | { type: 'UPDATE_EMPLOYEE'; businessId: string; payload: Employee }
+  | { type: 'ADD_COUNTER'; businessId: string; payload: Omit<Counter, 'id'> }
+  | { type: 'UPDATE_COUNTER'; businessId: string; payload: Counter }
+  | { type: 'ADD_ACCOUNT'; businessId: string; payload: Omit<Account, 'id' | 'date'> & { id?: string } }
+  | { type: 'UPDATE_ACCOUNT'; businessId: string; payload: Account }
+  | { type: 'ADD_SERVICE'; businessId: string; payload: Omit<Service, 'id'> & { id?: string } }
+  | { type: 'UPDATE_SERVICE'; businessId: string; payload: Service }
+  | { type: 'ADD_EXPENSE'; businessId: string; payload: Omit<Expense, 'id'> }
+  | { type: 'UPDATE_EXPENSE'; businessId: string; payload: Expense }
+  | { type: 'ADD_REPORT'; businessId?: string; payload: Omit<ReportItem, 'id' | 'date'> }
+  | { type: 'ADD_HISTORY_EVENT'; businessId?: string; payload: Omit<HistoryEvent, 'id' | 'date'> }
+  | { type: 'ADD_NOTIFICATION'; businessId?: string; payload: Omit<Notification, 'id' | 'timestamp'> }
+  | { type: 'DISMISS_NOTIFICATION'; businessId?: string; payload: string }
+  | { type: 'DELETE_ACCOUNT'; businessId: string; payload: string }
+  | { type: 'DELETE_SERVICE'; businessId: string; payload: string }
+  | { type: 'DELETE_CUSTOMER'; businessId: string; payload: string }
+  | { type: 'DELETE_EMPLOYEE'; businessId: string; payload: string }
+  | { type: 'DELETE_COUNTER'; businessId: string; payload: string }
+  | { type: 'DELETE_EXPENSE'; businessId: string; payload: string }
+  | { type: 'DELETE_TRANSACTION'; businessId: string; payload: string }
+  | { type: 'DELETE_HISTORY_EVENT'; businessId?: string; payload: string }
+  | { type: 'DELETE_REPORT'; businessId?: string; payload: string };
+
+type BusinessDirectoryAction =
+  | { type: 'ADD_BUSINESS'; payload: Omit<Business, 'id'> }
+  | { type: 'UPDATE_BUSINESS'; payload: Business }
+  | { type: 'DELETE_BUSINESS'; payload: string };
+
+type AdminAction =
+  | { type: 'UPDATE_ADDITION_OPTION'; payload: AdditionOption }
+  | { type: 'DELETE_ADDITION_OPTION'; payload: string };
+
+type AppAction = WorkspaceScopedAction | BusinessDirectoryAction | AdminAction;
+
+const today = () => new Date().toISOString().split('T')[0];
+const nowIso = () => new Date().toISOString();
+
+const createTransactionNumber = () => {
+  const now = new Date();
+  const dateCode = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('');
+  const timeCode = [
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+    String(now.getSeconds()).padStart(2, '0'),
+  ].join('');
+  const randomCode = Math.random().toString(36).slice(2, 6).toUpperCase();
+
+  return `TXN-${dateCode}-${timeCode}-${randomCode}`;
+};
+
+const createDefaultAccount = (): Account => ({
+  id: createRecordId(),
+  accountHolder: 'Primary Account',
+  bankName: 'Default Bank',
+  accountNumber: '000000000001',
+  ifsc: 'ENST0000001',
+  openingBalance: 0,
+  currentBalance: 0,
+  status: 'Active',
+  date: today(),
+});
+
+const createDefaultDepartment = (linkedAccountId?: string): Counter => ({
+  id: createRecordId(),
+  name: 'MAIN DEPARTMENT',
+  code: 'D1',
+  linkedAccountIds: linkedAccountId ? [linkedAccountId] : [],
+  defaultAccountId: linkedAccountId,
+  linkedAccountId,
+  openingBalance: 0,
+  currentBalance: 0,
+  status: 'Active',
+});
+
+export const getDepartmentLinkedAccountIds = (
+  counter?: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId'> | null,
+) => {
+  const linkedAccountIds = [
+    ...(counter?.linkedAccountIds ?? []),
+    ...(counter?.linkedAccountId ? [counter.linkedAccountId] : []),
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(linkedAccountIds));
+};
+
+export const getDepartmentDefaultAccountId = (
+  counter?: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId' | 'defaultAccountId'> | null,
+) => {
+  const linkedAccountIds = getDepartmentLinkedAccountIds(counter);
+
+  if (counter?.defaultAccountId && linkedAccountIds.includes(counter.defaultAccountId)) {
+    return counter.defaultAccountId;
+  }
+
+  return linkedAccountIds[0];
+};
+
+export const getDepartmentLinkedAccounts = (
+  counter: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId'> | null | undefined,
+  accounts: Account[],
+) => {
+  const linkedAccountIds = new Set(getDepartmentLinkedAccountIds(counter));
+
+  return accounts.filter((account) => linkedAccountIds.has(account.id));
+};
+
+export const getDepartmentDefaultAccount = (
+  counter: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId' | 'defaultAccountId'> | null | undefined,
+  accounts: Account[],
+) => {
+  const defaultAccountId = getDepartmentDefaultAccountId(counter);
+  return defaultAccountId ? accounts.find((account) => account.id === defaultAccountId) : undefined;
+};
+
+export const getServicesForDepartment = (
+  services: Service[],
+  departmentId?: string | null,
+) => {
+  if (!departmentId) {
+    return [];
+  }
+
+  return services.filter((service) => service.departmentId === departmentId);
+};
+
+const ensureWorkspaceDefaults = (workspace: BusinessWorkspace): BusinessWorkspace => {
+  const nextAccounts = [...workspace.accounts];
+  const nextCounters = [...workspace.counters];
+
+  if (nextAccounts.length === 0) {
+    nextAccounts.push(createDefaultAccount());
+  }
+
+  if (nextCounters.length === 0) {
+    nextCounters.push(createDefaultDepartment(nextAccounts[0]?.id));
+  } else if (!nextCounters.some((counter) => getDepartmentLinkedAccountIds(counter).length > 0) && nextAccounts[0]) {
+    nextCounters[0] = {
+      ...nextCounters[0],
+      linkedAccountIds: [nextAccounts[0].id],
+      defaultAccountId: nextAccounts[0].id,
+      linkedAccountId: nextAccounts[0].id,
+    };
+  }
+
+  return {
+    ...workspace,
+    accounts: nextAccounts,
+    counters: nextCounters,
+  };
+};
+
+export const createEmptyBusinessWorkspace = (): BusinessWorkspace => ({
+  customers: [],
+  employees: [],
+  transactions: [],
+  notifications: [],
+  counters: [],
+  accounts: [],
+  services: [],
+  expenses: [],
+  recentServices: [],
+  historyEvents: [],
+  reports: [],
+});
+
+export const createBusinessWorkspaceFromPermissions = (permissions: CustomerPermissions): BusinessWorkspace => {
+  normalizeCustomerPermissions(permissions);
+  return ensureWorkspaceDefaults(createEmptyBusinessWorkspace());
+};
+
+export const getBusinessWorkspace = (state: AppState, businessId?: string) => {
+  if (!businessId) {
+    return createEmptyBusinessWorkspace();
+  }
+
+  const business = state.businesses.find((item) => item.id === businessId);
+  if (!business) {
+    return createEmptyBusinessWorkspace();
+  }
+
+  return state.businessWorkspacesById[businessId] ?? createBusinessWorkspaceFromPermissions(business.permissions);
+};
+
+export const aggregateBusinessWorkspaces = (workspaces: BusinessWorkspace[]): BusinessWorkspace => ({
+  customers: workspaces.flatMap((workspace) => workspace.customers),
+  employees: workspaces.flatMap((workspace) => workspace.employees),
+  transactions: workspaces.flatMap((workspace) => workspace.transactions),
+  notifications: workspaces.flatMap((workspace) => workspace.notifications),
+  counters: workspaces.flatMap((workspace) => workspace.counters),
+  accounts: workspaces.flatMap((workspace) => workspace.accounts),
+  services: workspaces.flatMap((workspace) => workspace.services),
+  expenses: workspaces.flatMap((workspace) => workspace.expenses),
+  recentServices: workspaces.flatMap((workspace) => workspace.recentServices),
+  historyEvents: workspaces.flatMap((workspace) => workspace.historyEvents),
+  reports: workspaces.flatMap((workspace) => workspace.reports),
+});
+
+const initialBusinesses: Business[] = [
+  {
+    id: 'business-1',
+    name: 'John Doe',
+    phone: '1234567890',
+    email: 'john@example.com',
+    password: '',
+    status: 'Active',
+    joinedDate: '2024-01-10',
+    onboardingCompleted: true,
+    onboardingStep: 'dashboard',
+    subscription: createBusinessSubscription('year-1', '2026-01-10'),
+    permissions: createCustomerPermissions([
+      'customers.list',
+      'customers.payment_list',
+      'services.access',
+      'reports.bank_counter_report',
+    ]),
+  },
+  {
+    id: 'business-2',
+    name: 'Jane Smith',
+    phone: '0987654321',
+    email: 'jane@example.com',
+    password: '',
+    status: 'Active',
+    joinedDate: '2024-01-12',
+    onboardingCompleted: true,
+    onboardingStep: 'dashboard',
+    subscription: createBusinessSubscription('year-3', '2026-01-12'),
+    permissions: createCustomerPermissions([
+      'customers.list',
+      'services.access',
+    ]),
+  },
+];
+
+const initialAdminWorkspace: AdminWorkspace = {
   notifications: [
     {
-      id: '1',
+      id: 'admin-notification-1',
       type: 'warning',
-      message: '2 transactions are pending approval',
+      message: '2 business records still need credential setup.',
       timestamp: '2 minutes ago',
     },
     {
-      id: '2',
+      id: 'admin-notification-2',
       type: 'info',
-      message: 'Daily report generated successfully',
+      message: 'Daily admin report generated successfully.',
       timestamp: '1 hour ago',
     },
   ],
-  counters: [
+  historyEvents: [
+    { id: 'admin-history-1', title: 'Business directory reviewed', module: 'Customers', actor: 'Admin', status: 'Completed', date: '2024-01-15' },
+    { id: 'admin-history-2', title: 'Credential reminder scheduled', module: 'Reminder', actor: 'Admin', status: 'Pending', date: '2024-01-15' },
+    { id: 'admin-history-3', title: 'Report queue updated', module: 'Reports', actor: 'Admin', status: 'Completed', date: '2024-01-14' },
+  ],
+  reports: [
+    { id: 'admin-report-1', name: 'Daily Revenue Summary', type: 'Revenue', owner: 'Finance Team', status: 'Ready', date: '2024-01-15' },
+    { id: 'admin-report-2', name: 'Business Activity', type: 'Businesses', owner: 'Support Team', status: 'Scheduled', date: '2024-01-16' },
+    { id: 'admin-report-3', name: 'Credential Audit', type: 'Security', owner: 'Operations', status: 'Draft', date: '2024-01-17' },
+  ],
+  additionOptions: [
     {
-      id: 'counter-1',
-      name: 'SOFTWARE DEPARTMENT',
-      code: 'C1',
-      openingBalance: 10000,
-      currentBalance: 10000,
-      status: 'Active',
+      id: 'addition-1',
+      title: 'Service Rules',
+      category: 'Services',
+      description: 'Configure billing logic, thresholds, and categories.',
+      status: 'Enabled',
+      date: '2024-01-10',
     },
     {
-      id: 'counter-2',
-      name: 'RETAIL COUNTER',
-      code: 'C2',
-      openingBalance: 4500,
-      currentBalance: 4200,
-      status: 'Active',
+      id: 'addition-2',
+      title: 'Customer Segments',
+      category: 'Customers',
+      description: 'Create tags, loyalty tiers, and priority groups.',
+      status: 'Enabled',
+      date: '2024-01-11',
+    },
+    {
+      id: 'addition-3',
+      title: 'Transaction Settings',
+      category: 'Transactions',
+      description: 'Set payment methods, approval flows, and limits.',
+      status: 'Enabled',
+      date: '2024-01-12',
+    },
+    {
+      id: 'addition-4',
+      title: 'Report Settings',
+      category: 'Reports',
+      description: 'Choose templates, export formats, and schedules.',
+      status: 'Disabled',
+      date: '2024-01-13',
+    },
+    {
+      id: 'addition-5',
+      title: 'Audit Controls',
+      category: 'History',
+      description: 'Manage filters, user actions, and change tracking.',
+      status: 'Enabled',
+      date: '2024-01-14',
+    },
+    {
+      id: 'addition-6',
+      title: 'Integration Options',
+      category: 'Integrations',
+      description: 'Link external services, APIs, and data feeds.',
+      status: 'Disabled',
+      date: '2024-01-15',
     },
   ],
 };
 
+const buildInitialState = (): AppState => ({
+  businesses: initialBusinesses,
+  businessWorkspacesById: Object.fromEntries(
+    initialBusinesses.map((business) => [
+      business.id,
+      createBusinessWorkspaceFromPermissions(business.permissions),
+    ])
+  ),
+  adminWorkspace: initialAdminWorkspace,
+});
+
+const initialState: AppState = buildInitialState();
+
+export const APP_STATE_STORAGE_KEY = 'enest-app-state-v2';
+const LEGACY_APP_STATE_STORAGE_KEY = 'enest-app-state-v1';
+
+type BusinessNormalizationInput =
+  Omit<Business, 'permissions' | 'password' | 'email' | 'onboardingCompleted' | 'onboardingStep' | 'statusReason' | 'subscription'> &
+  Partial<Pick<Business, 'permissions' | 'password' | 'email' | 'onboardingCompleted' | 'onboardingStep' | 'statusReason' | 'subscription'>>;
+
+const normalizeBusiness = (
+  business: BusinessNormalizationInput,
+): Business => {
+  const joinedDate = business.joinedDate || today();
+  const accessState = getBusinessAccessState({
+    status: business.status || 'Active',
+    statusReason: business.statusReason,
+    joinedDate,
+    subscription: business.subscription,
+  });
+
+  return {
+    ...business,
+    email: business.email?.trim().toLowerCase() ?? '',
+    password: business.password ?? '',
+    permissions: normalizeCustomerPermissions(business.permissions ?? buildDefaultCustomerPermissions()),
+    status: accessState.status,
+    statusReason: accessState.reason,
+    joinedDate,
+    onboardingCompleted: business.onboardingCompleted ?? false,
+    onboardingStep: business.onboardingCompleted ? 'dashboard' : business.onboardingStep || 'welcome',
+    subscription: toStoredBusinessSubscription(accessState.subscription),
+  };
+};
+
+const normalizeBusinessCustomer = (customer: Partial<BusinessCustomer> & Pick<BusinessCustomer, 'id' | 'name' | 'phone'>): BusinessCustomer => ({
+  id: customer.id,
+  name: customer.name,
+  phone: customer.phone,
+  email: customer.email ?? '',
+  status: customer.status || 'Active',
+  joinedDate: customer.joinedDate || today(),
+});
+
+const normalizeEmployee = (
+  employee: Omit<Employee, 'email' | 'password' | 'permissions'> & {
+    email?: string;
+    password?: string;
+    permissions?: CustomerPermissions;
+  },
+  fallbackPermissions?: CustomerPermissions,
+): Employee => ({
+  ...employee,
+  email: employee.email?.trim().toLowerCase() ?? '',
+  password: employee.password ?? 'employee123',
+  permissions: normalizeCustomerPermissions(employee.permissions ?? fallbackPermissions ?? buildDefaultCustomerPermissions()),
+  departmentId: employee.departmentId || undefined,
+  status: employee.status || 'Active',
+  joinedDate: employee.joinedDate || today(),
+});
+
+const normalizeCounter = (counter: Counter): Counter => ({
+  ...counter,
+  linkedAccountIds: getDepartmentLinkedAccountIds(counter),
+  defaultAccountId: getDepartmentDefaultAccountId(counter),
+  linkedAccountId: getDepartmentDefaultAccountId(counter),
+  status: counter.status || 'Active',
+});
+
+const normalizeAccount = (account: Account): Account => ({
+  ...account,
+  status: account.status || 'Active',
+  date: account.date || today(),
+});
+
+const normalizeTransactionStatus = (status?: string): Transaction['status'] => {
+  if (status === 'pending' || status === 'completed' || status === 'cancelled' || status === 'refunded') {
+    return status;
+  }
+
+  if (status === 'failed') {
+    return 'cancelled';
+  }
+
+  return 'completed';
+};
+
+const normalizeTransactionPaymentDetails = (
+  paymentMode: Transaction['paymentMode'],
+  paymentDetails?: Transaction['paymentDetails'],
+): Transaction['paymentDetails'] => {
+  if (paymentMode === 'cash' || !paymentDetails) {
+    return undefined;
+  }
+
+  if (paymentMode === 'upi' && paymentDetails.kind === 'upi') {
+    return {
+      kind: 'upi',
+      transactionId: paymentDetails.transactionId.trim(),
+      utrNumber: paymentDetails.utrNumber.trim(),
+    };
+  }
+
+  if (paymentMode === 'card' && paymentDetails.kind === 'card') {
+    return {
+      kind: 'card',
+      transactionId: paymentDetails.transactionId.trim(),
+      cardType: paymentDetails.cardType.trim(),
+      cardNetwork: paymentDetails.cardNetwork.trim(),
+      lastFourDigits: paymentDetails.lastFourDigits.trim(),
+    };
+  }
+
+  if (paymentMode === 'bank' && paymentDetails.kind === 'bank') {
+    return {
+      kind: 'bank',
+      bankTransferType: paymentDetails.bankTransferType.trim(),
+      bankTransactionReferenceNumber: paymentDetails.bankTransactionReferenceNumber.trim(),
+      senderAccountHolderName: paymentDetails.senderAccountHolderName.trim(),
+      senderBankName: paymentDetails.senderBankName.trim(),
+      senderAccountNumber: paymentDetails.senderAccountNumber.trim(),
+    };
+  }
+
+  return undefined;
+};
+
+const normalizeTransaction = (
+  transaction: Partial<Transaction> & Pick<Transaction, 'id' | 'customerId' | 'customerName' | 'service'>
+): Transaction => {
+  const status = normalizeTransactionStatus(transaction.status);
+  const paymentMode = transaction.paymentMode || 'cash';
+  const legacyAmount = typeof transaction.totalAmount === 'number'
+    ? transaction.totalAmount
+    : typeof (transaction as Partial<{ amount: number }>).amount === 'number'
+      ? (transaction as Partial<{ amount: number }>).amount || 0
+      : 0;
+  const paidAmount = typeof transaction.paidAmount === 'number'
+    ? transaction.paidAmount
+    : status === 'pending'
+      ? 0
+      : legacyAmount;
+  const dueAmount = typeof transaction.dueAmount === 'number'
+    ? transaction.dueAmount
+    : deriveTransactionStatus(status, legacyAmount, paidAmount).dueAmount;
+
+  return {
+    id: transaction.id,
+    transactionNumber: transaction.transactionNumber || createTransactionNumber(),
+    customerId: transaction.customerId,
+    customerName: transaction.customerName,
+    customerPhone: transaction.customerPhone || '',
+    serviceId: transaction.serviceId || '',
+    service: transaction.service,
+    servicePrice: typeof transaction.servicePrice === 'number' ? transaction.servicePrice : legacyAmount,
+    totalAmount: legacyAmount,
+    paidAmount,
+    dueAmount,
+    paymentMode,
+    paymentDetails: normalizeTransactionPaymentDetails(paymentMode, transaction.paymentDetails),
+    departmentId: transaction.departmentId || undefined,
+    departmentName: transaction.departmentName || '',
+    accountId: transaction.accountId || undefined,
+    accountLabel: transaction.accountLabel || '',
+    handledById: transaction.handledById || '',
+    handledByName: transaction.handledByName || '',
+    handledByRole: transaction.handledByRole === 'Employee' ? 'Employee' : 'Customer',
+    note: transaction.note || '',
+    status,
+    date: transaction.date || today(),
+    createdAt: transaction.createdAt || nowIso(),
+  };
+};
+
+const normalizeService = (
+  service: Partial<Service> & Pick<Service, 'id' | 'name'>,
+  counters: Counter[],
+): Service => {
+  const fallbackDepartment = counters.find((counter) => counter.status !== 'Inactive') || counters[0];
+  const matchedDepartment = counters.find((counter) => counter.id === service.departmentId);
+  const resolvedDepartment = matchedDepartment || fallbackDepartment;
+
+  return {
+    id: service.id,
+    departmentId: resolvedDepartment?.id,
+    departmentName: resolvedDepartment?.name || service.departmentName || 'Unassigned Department',
+    name: service.name || 'Untitled Service',
+    category: service.category || 'General',
+    price: typeof service.price === 'number' ? service.price : 0,
+    status: service.status === 'Inactive' ? 'Inactive' : 'Active',
+    description: service.description || '',
+  };
+};
+
+const createRecentServiceFromTransaction = (transaction: Transaction): RecentService => ({
+  id: transaction.id,
+  name: transaction.service,
+  customer: transaction.customerName,
+  amount: transaction.totalAmount,
+  status:
+    transaction.status === 'completed'
+      ? 'Completed'
+      : transaction.status === 'pending'
+        ? 'Pending'
+        : transaction.status === 'refunded'
+          ? 'Refunded'
+          : 'Cancelled',
+});
+
+const applyBalanceDelta = <
+  TRecord extends Account | Counter,
+>(records: TRecord[], recordId: string | undefined, delta: number): TRecord[] => {
+  if (!recordId || delta === 0) {
+    return records;
+  }
+
+  return records.map((record) =>
+    record.id === recordId
+      ? ({
+          ...record,
+          currentBalance: record.currentBalance + delta,
+        } as TRecord)
+      : record
+  );
+};
+
+const normalizeWorkspace = (
+  workspace: Partial<BusinessWorkspace> | undefined,
+  permissions: CustomerPermissions
+): BusinessWorkspace => {
+  const seededWorkspace = createBusinessWorkspaceFromPermissions(normalizeCustomerPermissions(permissions));
+  const normalizedCounters = (workspace?.counters ?? seededWorkspace.counters).map((counter) =>
+    normalizeCounter(counter as Counter)
+  );
+  const normalizedWorkspace: BusinessWorkspace = {
+    ...seededWorkspace,
+    ...workspace,
+    customers: (workspace?.customers ?? seededWorkspace.customers).map((customer) =>
+      normalizeBusinessCustomer(customer as Partial<BusinessCustomer> & Pick<BusinessCustomer, 'id' | 'name' | 'phone'>)
+    ),
+    employees: (workspace?.employees ?? seededWorkspace.employees).map((employee) =>
+      normalizeEmployee(
+        employee as Omit<Employee, 'email' | 'password' | 'permissions'> & {
+          email?: string;
+          password?: string;
+          permissions?: CustomerPermissions;
+        },
+        permissions,
+      )
+    ),
+    transactions: (workspace?.transactions ?? seededWorkspace.transactions).map((transaction) =>
+      normalizeTransaction(transaction as Partial<Transaction> & Pick<Transaction, 'id' | 'customerId' | 'customerName' | 'service'>)
+    ),
+    notifications: workspace?.notifications ?? seededWorkspace.notifications,
+    counters: normalizedCounters,
+    accounts: (workspace?.accounts ?? seededWorkspace.accounts).map((account) =>
+      normalizeAccount(account as Account)
+    ),
+    services: (workspace?.services ?? seededWorkspace.services).map((service) =>
+      normalizeService(service as Partial<Service> & Pick<Service, 'id' | 'name'>, normalizedCounters)
+    ),
+    expenses: workspace?.expenses ?? seededWorkspace.expenses,
+    recentServices: workspace?.recentServices ?? seededWorkspace.recentServices,
+    historyEvents: workspace?.historyEvents ?? seededWorkspace.historyEvents,
+    reports: workspace?.reports ?? seededWorkspace.reports,
+  };
+
+  return ensureWorkspaceDefaults(normalizedWorkspace);
+};
+
+const normalizeAdminWorkspace = (workspace?: Partial<AdminWorkspace>): AdminWorkspace => ({
+  notifications: workspace?.notifications ?? initialAdminWorkspace.notifications,
+  historyEvents: workspace?.historyEvents ?? initialAdminWorkspace.historyEvents,
+  reports: workspace?.reports ?? initialAdminWorkspace.reports,
+  additionOptions: workspace?.additionOptions ?? initialAdminWorkspace.additionOptions,
+});
+
+interface LegacyCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  status?: 'Active' | 'Inactive';
+  joinedDate?: string;
+  permissions?: CustomerPermissions;
+}
+
+export interface LegacyAppState {
+  customers?: LegacyCustomer[];
+  notifications?: Notification[];
+  historyEvents?: HistoryEvent[];
+  reports?: ReportItem[];
+  additionOptions?: AdditionOption[];
+}
+
+export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
+  const migratedBusinesses = (legacyState.customers ?? []).map((customer) =>
+    normalizeBusiness({
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email ?? '',
+      password: '',
+      status: customer.status,
+      joinedDate: customer.joinedDate,
+      permissions: customer.permissions,
+    })
+  );
+
+  const fallbackBusinesses = migratedBusinesses.length > 0 ? migratedBusinesses : initialState.businesses;
+
+  return {
+    businesses: fallbackBusinesses,
+    businessWorkspacesById: Object.fromEntries(
+      fallbackBusinesses.map((business) => [
+        business.id,
+        createBusinessWorkspaceFromPermissions(business.permissions),
+      ])
+    ),
+    adminWorkspace: normalizeAdminWorkspace({
+      notifications: legacyState.notifications,
+      historyEvents: legacyState.historyEvents,
+      reports: legacyState.reports,
+      additionOptions: legacyState.additionOptions,
+    }),
+  };
+};
+
+const loadInitialState = (): AppState => {
+  if (typeof window === 'undefined') return initialState;
+
+  try {
+    const storedState = window.localStorage.getItem(APP_STATE_STORAGE_KEY);
+
+    if (storedState) {
+      const parsedState = JSON.parse(storedState) as Partial<AppState>;
+      const businesses = (parsedState.businesses ?? initialState.businesses).map((business) =>
+        normalizeBusiness(
+          business as BusinessNormalizationInput
+        )
+      );
+
+      return {
+        businesses,
+        businessWorkspacesById: Object.fromEntries(
+          businesses.map((business) => [
+            business.id,
+            normalizeWorkspace(parsedState.businessWorkspacesById?.[business.id], business.permissions),
+          ])
+        ),
+        adminWorkspace: normalizeAdminWorkspace(parsedState.adminWorkspace),
+      };
+    }
+
+    const legacyState = window.localStorage.getItem(LEGACY_APP_STATE_STORAGE_KEY);
+    if (legacyState) {
+      return migrateLegacyState(JSON.parse(legacyState) as LegacyAppState);
+    }
+
+    return initialState;
+  } catch {
+    return initialState;
+  }
+};
+
+const withBusinessWorkspace = (
+  state: AppState,
+  businessId: string,
+  updater: (workspace: BusinessWorkspace) => BusinessWorkspace
+) => {
+  const business = state.businesses.find((item) => item.id === businessId);
+  if (!business) return state;
+
+  const currentWorkspace = state.businessWorkspacesById[businessId] ?? createBusinessWorkspaceFromPermissions(business.permissions);
+  const nextWorkspace = updater(currentWorkspace);
+
+  return {
+    ...state,
+    businessWorkspacesById: {
+      ...state.businessWorkspacesById,
+      [businessId]: nextWorkspace,
+    },
+  };
+};
+
+const withAdminWorkspace = (
+  state: AppState,
+  updater: (workspace: AdminWorkspace) => AdminWorkspace
+) => ({
+  ...state,
+  adminWorkspace: updater(state.adminWorkspace),
+});
+
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'ADD_BUSINESS': {
+      const newBusiness = normalizeBusiness({
+        ...action.payload,
+        id: createRecordId(),
+      });
+
+      return {
+        ...state,
+        businesses: [...state.businesses, newBusiness],
+        businessWorkspacesById: {
+          ...state.businessWorkspacesById,
+          [newBusiness.id]: createBusinessWorkspaceFromPermissions(newBusiness.permissions),
+        },
+      };
+    }
+    case 'UPDATE_BUSINESS': {
+      const updatedBusiness = normalizeBusiness(action.payload);
+      const existingWorkspace = state.businessWorkspacesById[updatedBusiness.id];
+
+      return {
+        ...state,
+        businesses: state.businesses.map((business) =>
+          business.id === updatedBusiness.id ? updatedBusiness : business
+        ),
+        businessWorkspacesById: {
+          ...state.businessWorkspacesById,
+          [updatedBusiness.id]: normalizeWorkspace(existingWorkspace, updatedBusiness.permissions),
+        },
+      };
+    }
+    case 'DELETE_BUSINESS': {
+      const nextWorkspaces = { ...state.businessWorkspacesById };
+      delete nextWorkspaces[action.payload];
+
+      return {
+        ...state,
+        businesses: state.businesses.filter((business) => business.id !== action.payload),
+        businessWorkspacesById: nextWorkspaces,
+      };
+    }
     case 'ADD_TRANSACTION':
-      const newTransaction: Transaction = {
-        ...action.payload,
-        id: Date.now().toString(),
-        date: new Date().toISOString().split('T')[0],
-      };
-      return {
-        ...state,
-        transactions: [newTransaction, ...state.transactions],
-      };
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newTransaction = normalizeTransaction({
+          ...action.payload,
+          id: createRecordId(),
+          transactionNumber: createTransactionNumber(),
+          date: today(),
+          createdAt: nowIso(),
+        });
+        const postedAmount = getPostedTransactionAmount(newTransaction.status, newTransaction.paidAmount);
+        const recentService = createRecentServiceFromTransaction(newTransaction);
+
+        return {
+          ...workspace,
+          accounts: applyBalanceDelta(workspace.accounts, newTransaction.accountId, postedAmount),
+          counters: applyBalanceDelta(workspace.counters, newTransaction.departmentId, postedAmount),
+          recentServices: [recentService, ...workspace.recentServices].slice(0, 8),
+          transactions: [newTransaction, ...workspace.transactions],
+        };
+      });
+    case 'UPDATE_TRANSACTION':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const previousTransaction = workspace.transactions.find((transaction) => transaction.id === action.payload.id);
+        if (!previousTransaction) {
+          return workspace;
+        }
+
+        const normalizedTransaction = normalizeTransaction(action.payload);
+        const previousPostedAmount = getPostedTransactionAmount(previousTransaction.status, previousTransaction.paidAmount);
+        const nextPostedAmount = getPostedTransactionAmount(normalizedTransaction.status, normalizedTransaction.paidAmount);
+        const nextAccounts = applyBalanceDelta(
+          applyBalanceDelta(workspace.accounts, previousTransaction.accountId, -previousPostedAmount),
+          normalizedTransaction.accountId,
+          nextPostedAmount,
+        );
+        const nextCounters = applyBalanceDelta(
+          applyBalanceDelta(workspace.counters, previousTransaction.departmentId, -previousPostedAmount),
+          normalizedTransaction.departmentId,
+          nextPostedAmount,
+        );
+        const nextRecentServices = workspace.recentServices.some((recentService) => recentService.id === normalizedTransaction.id)
+          ? workspace.recentServices.map((recentService) =>
+              recentService.id === normalizedTransaction.id
+                ? createRecentServiceFromTransaction(normalizedTransaction)
+                : recentService
+            )
+          : [createRecentServiceFromTransaction(normalizedTransaction), ...workspace.recentServices].slice(0, 8);
+
+        return {
+          ...workspace,
+          accounts: nextAccounts,
+          counters: nextCounters,
+          recentServices: nextRecentServices,
+          transactions: workspace.transactions.map((transaction) =>
+            transaction.id === normalizedTransaction.id ? normalizedTransaction : transaction
+          ),
+        };
+      });
     case 'ADD_CUSTOMER':
-      const newCustomer: Customer = {
-        ...action.payload,
-        id: Date.now().toString(),
-      };
-      return {
-        ...state,
-        customers: [...state.customers, newCustomer],
-      };
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newCustomer = normalizeBusinessCustomer({
+          ...action.payload,
+          id: action.payload.id || createRecordId(),
+        });
+
+        return {
+          ...workspace,
+          customers: [...workspace.customers, newCustomer],
+        };
+      });
+    case 'UPDATE_CUSTOMER':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        customers: workspace.customers.map((customer) =>
+          customer.id === action.payload.id ? normalizeBusinessCustomer(action.payload) : customer
+        ),
+      }));
+    case 'ADD_EMPLOYEE':
+      {
+        const businessPermissions = state.businesses.find((business) => business.id === action.businessId)?.permissions;
+
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newEmployee = normalizeEmployee({
+          ...action.payload,
+          id: createRecordId(),
+        }, businessPermissions);
+
+        return {
+          ...workspace,
+          employees: [newEmployee, ...workspace.employees],
+        };
+      });
+      }
+    case 'UPDATE_EMPLOYEE':
+      {
+        const businessPermissions = state.businesses.find((business) => business.id === action.businessId)?.permissions;
+
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        employees: workspace.employees.map((employee) =>
+          employee.id === action.payload.id ? normalizeEmployee(action.payload, businessPermissions) : employee
+        ),
+      }));
+      }
+    case 'ADD_COUNTER':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newCounter = normalizeCounter({
+          ...action.payload,
+          id: createRecordId(),
+        });
+
+        return {
+          ...workspace,
+          counters: [newCounter, ...workspace.counters],
+        };
+      });
+    case 'UPDATE_COUNTER':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        counters: workspace.counters.map((counter) =>
+          counter.id === action.payload.id ? normalizeCounter(action.payload) : counter
+        ),
+      }));
+    case 'ADD_ACCOUNT':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newAccount: Account = {
+          ...action.payload,
+          id: action.payload.id || createRecordId(),
+          date: today(),
+        };
+
+        return {
+          ...workspace,
+          accounts: [newAccount, ...workspace.accounts],
+        };
+      });
+    case 'UPDATE_ACCOUNT':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        accounts: workspace.accounts.map((account) =>
+          account.id === action.payload.id ? action.payload : account
+        ),
+      }));
+    case 'ADD_SERVICE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newService: Service = {
+          ...action.payload,
+          id: action.payload.id || createRecordId(),
+        };
+
+        return {
+          ...workspace,
+          services: [newService, ...workspace.services],
+        };
+      });
+    case 'UPDATE_SERVICE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        services: workspace.services.map((service) =>
+          service.id === action.payload.id ? action.payload : service
+        ),
+      }));
+    case 'ADD_EXPENSE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const newExpense: Expense = {
+          ...action.payload,
+          id: createRecordId(),
+        };
+
+        return {
+          ...workspace,
+          expenses: [newExpense, ...workspace.expenses],
+        };
+      });
+    case 'UPDATE_EXPENSE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        expenses: workspace.expenses.map((expense) =>
+          expense.id === action.payload.id ? action.payload : expense
+        ),
+      }));
+    case 'ADD_REPORT':
+      if (action.businessId) {
+        return withBusinessWorkspace(state, action.businessId, (workspace) => {
+          const newReport: ReportItem = {
+            ...action.payload,
+            id: createRecordId(),
+            date: today(),
+          };
+
+          return {
+            ...workspace,
+            reports: [newReport, ...workspace.reports],
+          };
+        });
+      }
+
+      return withAdminWorkspace(state, (workspace) => {
+        const newReport: ReportItem = {
+          ...action.payload,
+          id: createRecordId(),
+          date: today(),
+        };
+
+        return {
+          ...workspace,
+          reports: [newReport, ...workspace.reports],
+        };
+      });
+    case 'ADD_HISTORY_EVENT':
+      if (action.businessId) {
+        return withBusinessWorkspace(state, action.businessId, (workspace) => {
+          const newHistoryEvent: HistoryEvent = {
+            ...action.payload,
+            id: createRecordId(),
+            date: today(),
+          };
+
+          return {
+            ...workspace,
+            historyEvents: [newHistoryEvent, ...workspace.historyEvents],
+          };
+        });
+      }
+
+      return withAdminWorkspace(state, (workspace) => {
+        const newHistoryEvent: HistoryEvent = {
+          ...action.payload,
+          id: createRecordId(),
+          date: today(),
+        };
+
+        return {
+          ...workspace,
+          historyEvents: [newHistoryEvent, ...workspace.historyEvents],
+        };
+      });
     case 'ADD_NOTIFICATION':
-      const newNotification: Notification = {
-        ...action.payload,
-        id: Date.now().toString(),
-        timestamp: 'Just now',
-      };
-      return {
-        ...state,
-        notifications: [newNotification, ...state.notifications],
-      };
+      if (action.businessId) {
+        return withBusinessWorkspace(state, action.businessId, (workspace) => {
+          const newNotification: Notification = {
+            ...action.payload,
+            id: createRecordId(),
+            timestamp: 'Just now',
+          };
+
+          return {
+            ...workspace,
+            notifications: [newNotification, ...workspace.notifications],
+          };
+        });
+      }
+
+      return withAdminWorkspace(state, (workspace) => {
+        const newNotification: Notification = {
+          ...action.payload,
+          id: createRecordId(),
+          timestamp: 'Just now',
+        };
+
+        return {
+          ...workspace,
+          notifications: [newNotification, ...workspace.notifications],
+        };
+      });
     case 'DISMISS_NOTIFICATION':
-      return {
-        ...state,
-        notifications: state.notifications.filter(n => n.id !== action.payload),
-      };
+      if (action.businessId) {
+        return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+          ...workspace,
+          notifications: workspace.notifications.filter((notification) => notification.id !== action.payload),
+        }));
+      }
+
+      return withAdminWorkspace(state, (workspace) => ({
+        ...workspace,
+        notifications: workspace.notifications.filter((notification) => notification.id !== action.payload),
+      }));
+    case 'DELETE_ACCOUNT':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        accounts: workspace.accounts.filter((account) => account.id !== action.payload),
+        counters: workspace.counters.map((counter) =>
+          normalizeCounter({
+            ...counter,
+            linkedAccountIds: getDepartmentLinkedAccountIds(counter).filter((accountId) => accountId !== action.payload),
+            defaultAccountId: counter.defaultAccountId === action.payload
+              ? getDepartmentLinkedAccountIds(counter).filter((accountId) => accountId !== action.payload)[0]
+              : counter.defaultAccountId,
+            linkedAccountId: counter.linkedAccountId === action.payload ? undefined : counter.linkedAccountId,
+          })
+        ),
+      }));
+    case 'DELETE_SERVICE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        services: workspace.services.filter((service) => service.id !== action.payload),
+      }));
+    case 'DELETE_CUSTOMER':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        customers: workspace.customers.filter((customer) => customer.id !== action.payload),
+      }));
+    case 'DELETE_EMPLOYEE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        employees: workspace.employees.filter((employee) => employee.id !== action.payload),
+      }));
+    case 'DELETE_COUNTER':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        counters: workspace.counters.filter((counter) => counter.id !== action.payload),
+      }));
+    case 'DELETE_EXPENSE':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+        ...workspace,
+        expenses: workspace.expenses.filter((expense) => expense.id !== action.payload),
+      }));
+    case 'DELETE_TRANSACTION':
+      return withBusinessWorkspace(state, action.businessId, (workspace) => {
+        const deletedTransaction = workspace.transactions.find((transaction) => transaction.id === action.payload);
+        if (!deletedTransaction) {
+          return workspace;
+        }
+
+        const postedAmount = getPostedTransactionAmount(deletedTransaction.status, deletedTransaction.paidAmount);
+
+        return {
+          ...workspace,
+          accounts: applyBalanceDelta(workspace.accounts, deletedTransaction.accountId, -postedAmount),
+          counters: applyBalanceDelta(workspace.counters, deletedTransaction.departmentId, -postedAmount),
+          recentServices: workspace.recentServices.filter((recentService) => recentService.id !== action.payload),
+          transactions: workspace.transactions.filter((transaction) => transaction.id !== action.payload),
+        };
+      });
+    case 'DELETE_HISTORY_EVENT':
+      if (action.businessId) {
+        return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+          ...workspace,
+          historyEvents: workspace.historyEvents.filter((event) => event.id !== action.payload),
+        }));
+      }
+
+      return withAdminWorkspace(state, (workspace) => ({
+        ...workspace,
+        historyEvents: workspace.historyEvents.filter((event) => event.id !== action.payload),
+      }));
+    case 'DELETE_REPORT':
+      if (action.businessId) {
+        return withBusinessWorkspace(state, action.businessId, (workspace) => ({
+          ...workspace,
+          reports: workspace.reports.filter((report) => report.id !== action.payload),
+        }));
+      }
+
+      return withAdminWorkspace(state, (workspace) => ({
+        ...workspace,
+        reports: workspace.reports.filter((report) => report.id !== action.payload),
+      }));
+    case 'UPDATE_ADDITION_OPTION':
+      return withAdminWorkspace(state, (workspace) => ({
+        ...workspace,
+        additionOptions: workspace.additionOptions.map((option) =>
+          option.id === action.payload.id ? action.payload : option
+        ),
+      }));
+    case 'DELETE_ADDITION_OPTION':
+      return withAdminWorkspace(state, (workspace) => ({
+        ...workspace,
+        additionOptions: workspace.additionOptions.filter((option) => option.id !== action.payload),
+      }));
     default:
       return state;
   }
@@ -154,7 +1386,16 @@ const AppContext = createContext<{
 } | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [state, dispatch] = useReducer(appReducer, initialState, loadInitialState);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(state));
+      window.localStorage.removeItem(LEGACY_APP_STATE_STORAGE_KEY);
+    } catch {
+      // Keep the app usable if the browser blocks local storage.
+    }
+  }, [state]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
