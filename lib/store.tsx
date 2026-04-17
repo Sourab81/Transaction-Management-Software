@@ -221,7 +221,6 @@ export interface BusinessWorkspace {
   accounts: Account[];
   services: Service[];
   expenses: Expense[];
-  recentServices: RecentService[];
   historyEvents: HistoryEvent[];
   reports: ReportItem[];
 }
@@ -409,7 +408,6 @@ export const createEmptyBusinessWorkspace = (): BusinessWorkspace => ({
   accounts: [],
   services: [],
   expenses: [],
-  recentServices: [],
   historyEvents: [],
   reports: [],
 });
@@ -441,7 +439,6 @@ export const aggregateBusinessWorkspaces = (workspaces: BusinessWorkspace[]): Bu
   accounts: workspaces.flatMap((workspace) => workspace.accounts),
   services: workspaces.flatMap((workspace) => workspace.services),
   expenses: workspaces.flatMap((workspace) => workspace.expenses),
-  recentServices: workspaces.flatMap((workspace) => workspace.recentServices),
   historyEvents: workspaces.flatMap((workspace) => workspace.historyEvents),
   reports: workspaces.flatMap((workspace) => workspace.reports),
 });
@@ -779,6 +776,16 @@ const createRecentServiceFromTransaction = (transaction: Transaction): RecentSer
           : 'Cancelled',
 });
 
+export const getRecentServicesFromTransactions = (
+  transactions: Transaction[],
+  limit = 8,
+): RecentService[] =>
+  transactions
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, limit)
+    .map(createRecentServiceFromTransaction);
+
 const applyBalanceDelta = <
   TRecord extends Account | Counter,
 >(records: TRecord[], recordId: string | undefined, delta: number): TRecord[] => {
@@ -832,7 +839,6 @@ const normalizeWorkspace = (
       normalizeService(service as Partial<Service> & Pick<Service, 'id' | 'name'>, normalizedCounters)
     ),
     expenses: workspace?.expenses ?? seededWorkspace.expenses,
-    recentServices: workspace?.recentServices ?? seededWorkspace.recentServices,
     historyEvents: workspace?.historyEvents ?? seededWorkspace.historyEvents,
     reports: workspace?.reports ?? seededWorkspace.reports,
   };
@@ -1015,13 +1021,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
           createdAt: nowIso(),
         });
         const postedAmount = getPostedTransactionAmount(newTransaction.status, newTransaction.paidAmount);
-        const recentService = createRecentServiceFromTransaction(newTransaction);
 
         return {
           ...workspace,
           accounts: applyBalanceDelta(workspace.accounts, newTransaction.accountId, postedAmount),
           counters: applyBalanceDelta(workspace.counters, newTransaction.departmentId, postedAmount),
-          recentServices: [recentService, ...workspace.recentServices].slice(0, 8),
           transactions: [newTransaction, ...workspace.transactions],
         };
       });
@@ -1045,19 +1049,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
           normalizedTransaction.departmentId,
           nextPostedAmount,
         );
-        const nextRecentServices = workspace.recentServices.some((recentService) => recentService.id === normalizedTransaction.id)
-          ? workspace.recentServices.map((recentService) =>
-              recentService.id === normalizedTransaction.id
-                ? createRecentServiceFromTransaction(normalizedTransaction)
-                : recentService
-            )
-          : [createRecentServiceFromTransaction(normalizedTransaction), ...workspace.recentServices].slice(0, 8);
 
         return {
           ...workspace,
           accounts: nextAccounts,
           counters: nextCounters,
-          recentServices: nextRecentServices,
           transactions: workspace.transactions.map((transaction) =>
             transaction.id === normalizedTransaction.id ? normalizedTransaction : transaction
           ),
@@ -1335,7 +1331,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
           ...workspace,
           accounts: applyBalanceDelta(workspace.accounts, deletedTransaction.accountId, -postedAmount),
           counters: applyBalanceDelta(workspace.counters, deletedTransaction.departmentId, -postedAmount),
-          recentServices: workspace.recentServices.filter((recentService) => recentService.id !== action.payload),
           transactions: workspace.transactions.filter((transaction) => transaction.id !== action.payload),
         };
       });
@@ -1380,34 +1375,78 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-const AppContext = createContext<{
-  state: AppState;
-  dispatch: React.Dispatch<AppAction>;
-} | null>(null);
+const toPersistedWorkspace = (workspace: BusinessWorkspace): BusinessWorkspace => ({
+  ...workspace,
+  notifications: [],
+  recentServices: [],
+});
+
+const toPersistedAdminWorkspace = (workspace: AdminWorkspace): AdminWorkspace => ({
+  ...workspace,
+  notifications: [],
+});
+
+const toPersistedAppState = (state: AppState): AppState => ({
+  businesses: state.businesses,
+  businessWorkspacesById: Object.fromEntries(
+    Object.entries(state.businessWorkspacesById).map(([businessId, workspace]) => [
+      businessId,
+      toPersistedWorkspace(workspace),
+    ])
+  ),
+  adminWorkspace: toPersistedAdminWorkspace(state.adminWorkspace),
+});
+
+const AppStateContext = createContext<AppState | null>(null);
+const AppDispatchContext = createContext<React.Dispatch<AppAction> | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState, loadInitialState);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(state));
-      window.localStorage.removeItem(LEGACY_APP_STATE_STORAGE_KEY);
-    } catch {
-      // Keep the app usable if the browser blocks local storage.
-    }
+    const timeoutId = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          APP_STATE_STORAGE_KEY,
+          JSON.stringify(toPersistedAppState(state))
+        );
+        window.localStorage.removeItem(LEGACY_APP_STATE_STORAGE_KEY);
+      } catch {
+        // Keep the app usable if the browser blocks local storage.
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
   }, [state]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
-      {children}
-    </AppContext.Provider>
+    <AppDispatchContext.Provider value={dispatch}>
+      <AppStateContext.Provider value={state}>
+        {children}
+      </AppStateContext.Provider>
+    </AppDispatchContext.Provider>
   );
 }
 
-export function useApp() {
-  const context = useContext(AppContext);
+export function useAppState() {
+  const context = useContext(AppStateContext);
   if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
+    throw new Error('useAppState must be used within an AppProvider');
   }
   return context;
+}
+
+export function useAppDispatch() {
+  const context = useContext(AppDispatchContext);
+  if (!context) {
+    throw new Error('useAppDispatch must be used within an AppProvider');
+  }
+  return context;
+}
+
+export function useApp() {
+  return {
+    state: useAppState(),
+    dispatch: useAppDispatch(),
+  };
 }

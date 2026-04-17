@@ -18,7 +18,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ events, onView, onDelete })
   const hasActions = Boolean(onView || onDelete);
 
   return (
-    <section className="table-panel">
+    <section className="table-panel" style={{height: '50rem', overflowY: 'auto'}}>
       <div className="table-panel__header">
         <div>
           <p className="eyebrow">History</p>

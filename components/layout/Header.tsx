@@ -67,7 +67,6 @@ const Header: React.FC<HeaderProps> = ({
           >
             <FaBars size={16} />
           </button>
-          <div className="page-chip">E</div>
           <div className="app-header__heading">
             <p className="eyebrow">{heading}</p>
             <h1>{description}</h1>

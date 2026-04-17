@@ -212,6 +212,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
     () => getServicesForDepartment(workspace.services, selectedDepartment?.id),
     [selectedDepartment?.id, workspace.services],
   );
+  const activeServices = useMemo(
+    () => services.filter((service) => service.status === 'Active'),
+    [services],
+  );
   const customers = workspace.customers;
   const accounts = workspace.accounts;
   const initialState = buildInitialState(draft, customers, services);
@@ -232,7 +236,11 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
   const [bankPaymentDetails, setBankPaymentDetails] = useState<BankPaymentDetailFormState>(createEmptyBankPaymentDetails());
   const [validationError, setValidationError] = useState('');
   const [isQuickServiceCreatorOpen, setIsQuickServiceCreatorOpen] = useState(false);
-  const [quickServiceDepartmentId, setQuickServiceDepartmentId] = useState(selectedDepartment?.id || availableDepartments[0]?.id || '');
+  const [quickServiceDepartmentId, setQuickServiceDepartmentId] = useState(
+    selectedDepartment?.status === 'Active'
+      ? selectedDepartment.id
+      : availableDepartments.find((department) => department.status === 'Active')?.id || '',
+  );
   const [quickServiceName, setQuickServiceName] = useState('');
   const [quickServiceCategory, setQuickServiceCategory] = useState('General');
   const [quickServicePrice, setQuickServicePrice] = useState('');
@@ -257,6 +265,29 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
   const activeRequestedStatus = isSingleServiceEntry
     ? transactionLines[0]?.status || 'completed'
     : sharedStatus;
+  const accessibleDepartments = availableDepartments.length > 0
+    ? availableDepartments
+    : selectedDepartment
+      ? [selectedDepartment]
+      : [];
+  const activeAccessibleDepartments = accessibleDepartments.filter((department) => department.status === 'Active');
+  const isSelectedDepartmentActive = selectedDepartment?.status === 'Active';
+  const inactiveServiceCount = services.length - activeServices.length;
+  const canOpenQuickServiceCreator = Boolean(selectedDepartment) && isSelectedDepartmentActive && activeAccessibleDepartments.length > 0;
+  const canAddTransactionLines = Boolean(selectedDepartment) && isSelectedDepartmentActive && activeServices.length > 0;
+  const canSaveTransaction = Boolean(selectedDepartment) && isSelectedDepartmentActive && activeServices.length > 0;
+  const transactionRestrictionMessage = !selectedDepartment
+    ? 'Select a department before saving the transaction.'
+    : !isSelectedDepartmentActive
+      ? `${selectedDepartment.name} is inactive. Activate the department before creating transactions.`
+      : '';
+  const serviceAvailabilityMessage = selectedDepartment && isSelectedDepartmentActive
+    ? services.length === 0
+      ? 'Use New Service to create the first service for this department, or add it from the Services page.'
+      : activeServices.length === 0
+        ? 'All services in this department are inactive. Activate a service before creating a transaction.'
+        : ''
+    : '';
 
   const matchedCustomer = phone
     ? customers.find((customer) => customer.phone === phone) || null
@@ -272,19 +303,25 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
   })();
 
   const serviceOptions = [
-    { value: '', label: services.length > 0 ? 'Select Service' : selectedDepartment ? 'No service in this department' : 'Select a department first' },
-    ...services.map((service) => ({
+    {
+      value: '',
+      label: !selectedDepartment
+        ? 'Select a department first'
+        : !isSelectedDepartmentActive
+          ? 'Selected department is inactive'
+          : activeServices.length > 0
+            ? 'Select Service'
+            : services.length > 0
+              ? 'No active service in this department'
+              : 'No service in this department',
+    },
+    ...activeServices.map((service) => ({
       value: service.id,
       label: `${service.name} | Rs. ${service.price}`,
     })),
   ];
   const selectedTransactionAccount = departmentAccounts.find((account) => account.id === resolvedSelectedTransactionAccountId) || defaultDepartmentAccount;
   const hasNonCashTransactionLine = activePaymentMode !== 'cash';
-  const accessibleDepartments = availableDepartments.length > 0
-    ? availableDepartments
-    : selectedDepartment
-      ? [selectedDepartment]
-      : [];
   const isEmployeeDepartmentLocked = actor.role === 'Employee';
 
   const selectCustomer = (customerId: string) => {
@@ -341,7 +378,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
   };
 
   const handleServiceChange = (lineId: string, serviceId: string) => {
-    const service = services.find((item) => item.id === serviceId);
+    const service = activeServices.find((item) => item.id === serviceId);
     setValidationError('');
 
     updateTransactionLine(lineId, (line) => {
@@ -382,7 +419,11 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
   };
 
   const resetQuickServiceCreator = () => {
-    setQuickServiceDepartmentId(selectedDepartment?.id || accessibleDepartments[0]?.id || '');
+    setQuickServiceDepartmentId(
+      selectedDepartment?.status === 'Active'
+        ? selectedDepartment.id
+        : activeAccessibleDepartments[0]?.id || '',
+    );
     setQuickServiceName('');
     setQuickServiceCategory('General');
     setQuickServicePrice('');
@@ -402,9 +443,9 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
   };
 
   const handleQuickServiceCreate = () => {
-    const selectedServiceDepartment = accessibleDepartments.find((department) => department.id === quickServiceDepartmentId);
+    const selectedServiceDepartment = activeAccessibleDepartments.find((department) => department.id === quickServiceDepartmentId);
     if (!selectedServiceDepartment) {
-      setQuickServiceError('Choose the department that should own this service.');
+      setQuickServiceError('Choose an active department that should own this service.');
       return;
     }
 
@@ -620,6 +661,11 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
       return;
     }
 
+    if (selectedDepartment.status !== 'Active') {
+      setValidationError(`${selectedDepartment.name} is inactive. Activate the department before creating transactions.`);
+      return;
+    }
+
     if (!phone.trim() || !name.trim()) {
       setValidationError('Customer phone and name are required.');
       return;
@@ -632,6 +678,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
         const selectedServiceRecord = services.find((service) => service.id === line.serviceId);
         if (!selectedServiceRecord) {
           throw new Error(`Select a service in transaction row ${index + 1}.`);
+        }
+
+        if (selectedServiceRecord.status !== 'Active') {
+          throw new Error(`${selectedServiceRecord.name} is inactive in transaction row ${index + 1}. Activate the service before saving.`);
         }
 
         const parsedTotalAmount = parseNonNegativeNumber(line.totalAmount);
@@ -1058,6 +1108,12 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
           </div>
         )}
 
+        {transactionRestrictionMessage ? (
+          <div className="form-alert" role="status">
+            {transactionRestrictionMessage}
+          </div>
+        ) : null}
+
         <div className="form-section-card mb-4">
           <div className="d-flex flex-column flex-md-row justify-content-between gap-3 mb-3">
             <div>
@@ -1135,12 +1191,12 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
                 variant="secondary"
                 className="transaction-entry-table__mobile-service-action"
                 onClick={openQuickServiceCreator}
-                disabled={accessibleDepartments.length === 0}
+                disabled={!canOpenQuickServiceCreator}
               >
                 <FaPlusCircle />
                 New Service
               </Button>
-              <Button type="button" variant="secondary" onClick={addTransactionLine} disabled={services.length === 0}>
+              <Button type="button" variant="secondary" onClick={addTransactionLine} disabled={!canAddTransactionLines}>
                 <FaPlusCircle />
                 Add Row
               </Button>
@@ -1165,7 +1221,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
                         type="button"
                         className="transaction-entry-table__header-action"
                         onClick={openQuickServiceCreator}
-                        disabled={accessibleDepartments.length === 0}
+                        disabled={!canOpenQuickServiceCreator}
                       >
                         <FaPlusCircle size={10} />
                         New Service
@@ -1208,6 +1264,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
                         value={line.serviceId}
                         onChange={(event) => handleServiceChange(line.id, event.target.value)}
                         options={serviceOptions}
+                        disabled={!selectedDepartment || !isSelectedDepartmentActive || activeServices.length === 0}
                         required
                       />
                     </td>
@@ -1289,13 +1346,13 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
                       setQuickServiceError('');
                     }}
                     options={[
-                      { value: '', label: accessibleDepartments.length > 0 ? 'Select Department' : 'No Department Available' },
-                      ...accessibleDepartments.map((department) => ({
+                      { value: '', label: activeAccessibleDepartments.length > 0 ? 'Select Department' : 'No Active Department Available' },
+                      ...activeAccessibleDepartments.map((department) => ({
                         value: department.id,
                         label: `${department.name} (${department.code})`,
                       })),
                     ]}
-                    disabled={isEmployeeDepartmentLocked || accessibleDepartments.length === 0}
+                    disabled={isEmployeeDepartmentLocked || activeAccessibleDepartments.length === 0}
                     required
                   />
                   {isEmployeeDepartmentLocked ? (
@@ -1376,8 +1433,13 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
                 One shared payment mode and status will be applied to all rows in this save.
               </span>
             ) : null}
-            {services.length === 0 ? (
-              <span className="page-muted small">Use New Service to create the first service for this department, or add it from the Services page.</span>
+            {serviceAvailabilityMessage ? (
+              <span className="page-muted small">{serviceAvailabilityMessage}</span>
+            ) : null}
+            {inactiveServiceCount > 0 && isSelectedDepartmentActive ? (
+              <span className="page-muted small">
+                {inactiveServiceCount} inactive service{inactiveServiceCount === 1 ? '' : 's'} hidden from this transaction form.
+              </span>
             ) : null}
           </div>
 
@@ -1449,7 +1511,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
           <p className="page-muted small mb-0 me-sm-auto">
             Saving this creates {transactionLines.length} transaction record{transactionLines.length === 1 ? '' : 's'} and updates the customer record, balances, history, and notifications.
           </p>
-          <Button type="submit" className="form-submit-button">
+          <Button type="submit" className="form-submit-button" disabled={!canSaveTransaction}>
             Save Transaction
           </Button>
         </div>

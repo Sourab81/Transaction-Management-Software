@@ -28,12 +28,7 @@ const WelcomeHero: React.FC<WelcomeHeroProps> = ({
     <section className="hero-panel glass-card">
       <div className="hero-panel__content">
         <p className="eyebrow">{roleLabel} workspace</p>
-        <h1 className="hero-panel__headline">{greeting}, {userName}. Keep the service desk moving.</h1>
-        <p className="hero-panel__copy">
-          Track counters, process transactions, and review operations from a simpler dashboard built
-          for day-to-day speed.
-        </p>
-
+        <h1 className="hero-panel__headline">{greeting}, {userName} !</h1>
         <div className="section-hero__actions">
           <button type="button" className="btn-app btn-app-primary" onClick={onPrimaryAction}>
             Start Transaction

@@ -53,6 +53,7 @@ import TransactionEditForm, { type TransactionEditorValues } from '../forms/Tran
 import TransactionTable from '../tables/TransactionTable';
 import CountersTable from '../tables/CountersTable';
 import RecentServicesTable from '../tables/RecentServicesTable';
+// import SectionHero from './SectionHero';
 import AccountsTable from '../tables/AccountsTable';
 import ServicesTable from '../tables/ServicesTable';
 import CustomersTable from '../tables/CustomersTable';
@@ -1400,11 +1401,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         <section className="hero-panel glass-card">
           <div className="hero-panel__content">
             <p className="eyebrow">Admin Workspace</p>
-            <h1 className="hero-panel__headline">Oversee businesses, subscriptions, and renewal risk from one place.</h1>
-            <p className="hero-panel__copy">
-              Review every business workspace, monitor expiring plans, manage renewals, and keep admin alerts visible without the operator-only shortcuts.
-            </p>
-
+            <h1 className="hero-panel__headline">Monitor business performance, subscriptions, and renewal.</h1>
             <div className="section-hero__actions">
               <button type="button" className="btn-app btn-app-primary" onClick={() => openModule('customers')}>
                 Open Business Directory
@@ -1537,20 +1534,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
           </div>
         </section>
       </div>
-
-      <div className="col-12">
-        <SectionHero
-          eyebrow="Manage Your Plans"
-          title="Subscription purchase transactions"
-          description="Business plan purchases replace the operator transaction feed here, with filters tailored to plan type, renewal state, and workspace access."
-          action={{
-            label: 'Business Directory',
-            icon: <FaUsers />,
-            onClick: () => openModule('customers'),
-          }}
-        />
-      </div>
-
+      
       {isAdminPlanFiltersOpen ? renderAdminPlanFilters() : null}
 
       <div className="col-12">

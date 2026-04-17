@@ -1,5 +1,7 @@
 import React from 'react';
 import { FaCog, FaEdit, FaFilter } from 'react-icons/fa';
+import { MdHeight } from 'react-icons/md';
+import { RiFontSize } from 'react-icons/ri';
 
 export interface SubscriptionTransactionRow {
   businessId: string;
@@ -37,9 +39,9 @@ const SubscriptionTransactionsTable: React.FC<SubscriptionTransactionsTableProps
     <section className="table-panel">
       <div className="table-panel__header">
         <div>
-          <p className="eyebrow">Transactions</p>
-          <h3 className="table-panel__title">Plan purchases</h3>
-          <p className="table-panel__copy">Track subscription purchases, renewals, and workspace access by business.</p>
+          <p className="eyebrow">SUBSCRIPTIONS</p>
+          <h3 className="table-panel__title"style={{fontSize: '1.5rem'}}>Manage subscriptions and workspace access.</h3>
+          <p className="table-panel__copy">Track purchases, renewals, and access by business</p>
         </div>
         {onToggleFilters ? (
           <button

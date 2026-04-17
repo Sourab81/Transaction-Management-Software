@@ -794,19 +794,6 @@ small {
   display: inline-flex;
 }
 
-.page-chip {
-  align-items: center;
-  background: linear-gradient(145deg, var(--accent) 0%, var(--accent-strong) 100%);
-  border-radius: 16px;
-  box-shadow: 0 16px 30px rgba(47, 109, 246, 0.18);
-  color: white;
-  display: inline-flex;
-  font-weight: 700;
-  height: 2.8rem;
-  justify-content: center;
-  width: 2.8rem;
-}
-
 .app-header__heading {
   min-width: 0;
 }
@@ -1062,15 +1049,9 @@ small {
   font-size: clamp(2rem, 3vw, 3rem);
   line-height: 1.04;
   margin: 0.5rem 0 1rem;
-  max-width: 38rem;
+  max-width: 68rem;
 }
 
-.hero-panel__copy {
-  color: var(--foreground-soft);
-  font-size: 1.02rem;
-  margin: 0;
-  max-width: 40rem;
-}
 
 .hero-panel__meta {
   display: grid;
@@ -2292,6 +2273,7 @@ small {
 
 .table-panel {
   overflow: hidden;
+  overflow-y: auto;
 }
 
 .table-panel__header {
@@ -2946,12 +2928,6 @@ small {
 
   .app-header__title {
     align-items: flex-start;
-  }
-
-  .page-chip {
-    border-radius: 14px;
-    height: 2.45rem;
-    width: 2.45rem;
   }
 
   .app-header__heading h1 {
