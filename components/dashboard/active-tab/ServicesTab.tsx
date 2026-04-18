@@ -3,9 +3,12 @@
 import SectionHero from '../SectionHero';
 import ServicesTable from '../../tables/ServicesTable';
 import { FaPlusCircle } from 'react-icons/fa';
+import { getModuleUi } from '../../../lib/module-ui';
+import EmptyState from '../../ui/state/EmptyState';
+import type { DashboardTabContext } from './types';
 
 interface ServicesTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function ServicesTab({ ctx }: ServicesTabProps) {
@@ -21,6 +24,13 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
     renderSummaryCards,
     serviceSummary,
   } = ctx;
+  const servicesUi = getModuleUi('services');
+  const addServiceAction = canManageModule('services') && canEmployeeOperateOnDepartment
+    ? {
+        label: 'Add Service',
+        onClick: () => handleQuickAction('add-service'),
+      }
+    : undefined;
 
   return (
     <div className="row g-4">
@@ -44,11 +54,20 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
       {renderSummaryCards(serviceSummary)}
 
       <div className="col-12">
-        <ServicesTable
-          services={visibleServices}
-          onEdit={canManageModule('services') ? handleEditService : undefined}
-          onDelete={canDeleteModule('services') ? (id: string) => handleDeleteRecord('DELETE_SERVICE', id) : undefined}
-        />
+        {visibleServices.length === 0 ? (
+          <EmptyState
+            eyebrow={servicesUi?.label}
+            title={servicesUi?.emptyTitle || 'No services available yet'}
+            description={servicesUi?.emptyDescription || 'Add a service to make it available in the transaction workflow.'}
+            action={addServiceAction}
+          />
+        ) : (
+          <ServicesTable
+            services={visibleServices}
+            onEdit={canManageModule('services') ? handleEditService : undefined}
+            onDelete={canDeleteModule('services') ? (id: string) => handleDeleteRecord('DELETE_SERVICE', id) : undefined}
+          />
+        )}
       </div>
     </div>
   );

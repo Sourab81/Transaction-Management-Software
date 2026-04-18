@@ -3,9 +3,12 @@
 import SectionHero from '../SectionHero';
 import DepartmentsTable from '../../tables/DepartmentsTable';
 import { FaPlusCircle } from 'react-icons/fa';
+import { getModuleUi } from '../../../lib/module-ui';
+import EmptyState from '../../ui/state/EmptyState';
+import type { DashboardTabContext } from './types';
 
 interface DepartmentsTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
@@ -28,6 +31,20 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
     handleEditDepartment,
     handleDeleteRecord,
   } = ctx;
+  const departmentsUi = getModuleUi('departments');
+  const hasActiveFilters = departmentSearchInput.trim().length > 0 || departmentAccountStatusFilter !== 'All';
+  const departmentEmptyAction = hasActiveFilters
+    ? {
+        label: 'Clear Filters',
+        onClick: clearDepartmentFilters,
+        variant: 'secondary' as const,
+      }
+    : canAddDepartmentRecords
+      ? {
+          label: 'Add Department',
+          onClick: () => handleQuickAction('add-department'),
+        }
+      : undefined;
 
   return (
     <div className="row g-4">
@@ -98,12 +115,23 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
       </div>
 
       <div className="col-12">
-        <DepartmentsTable
-          accounts={accounts}
-          counters={filteredDepartments.map((row: any) => row.counter)}
-          onEdit={canEditDepartmentRecords ? handleEditDepartment : undefined}
-          onDelete={canDeleteDepartmentRecords ? (id: string) => handleDeleteRecord('DELETE_COUNTER', id) : undefined}
-        />
+        {filteredDepartments.length === 0 ? (
+          <EmptyState
+            eyebrow={departmentsUi?.label}
+            title={hasActiveFilters ? 'No departments match these filters' : departmentsUi?.emptyTitle || 'No departments added yet'}
+            description={hasActiveFilters
+              ? 'Clear the current search or account-status filter to review more department records.'
+              : departmentsUi?.emptyDescription || 'Add a department to route services, counters, and account activity.'}
+            action={departmentEmptyAction}
+          />
+        ) : (
+          <DepartmentsTable
+            accounts={accounts}
+            counters={filteredDepartments.map((row) => row.counter)}
+            onEdit={canEditDepartmentRecords ? handleEditDepartment : undefined}
+            onDelete={canDeleteDepartmentRecords ? (id: string) => handleDeleteRecord('DELETE_COUNTER', id) : undefined}
+          />
+        )}
       </div>
     </div>
   );

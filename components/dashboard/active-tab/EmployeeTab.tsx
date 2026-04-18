@@ -3,9 +3,13 @@
 import SectionHero from '../SectionHero';
 import EmployeesTable from '../../tables/EmployeesTable';
 import { FaPlusCircle } from 'react-icons/fa';
+import { getModuleUi } from '../../../lib/module-ui';
+import EmptyState from '../../ui/state/EmptyState';
+import PermissionState from '../../ui/state/PermissionState';
+import type { DashboardTabContext } from './types';
 
 interface EmployeeTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function EmployeeTab({ ctx }: EmployeeTabProps) {
@@ -22,6 +26,13 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
     handleEditEmployee,
     handleDeleteRecord,
   } = ctx;
+  const employeeUi = getModuleUi('employee');
+  const addEmployeeAction = canAddEmployeeRecords
+    ? {
+        label: 'Add Employee',
+        onClick: () => handleQuickAction('add-employee'),
+      }
+    : undefined;
 
   return (
     <div className="row g-4">
@@ -42,20 +53,28 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
 
       <div className="col-12">
         {canViewEmployeeRecords ? (
-          <EmployeesTable
-            departments={counters}
-            employees={employees}
-            onEdit={canEditEmployeeRecords ? handleEditEmployee : undefined}
-            onDelete={canDeleteEmployeeRecords ? (id: string) => handleDeleteRecord('DELETE_EMPLOYEE', id) : undefined}
-          />
+          employees.length === 0 ? (
+            <EmptyState
+              eyebrow={employeeUi?.label}
+              title={employeeUi?.emptyTitle || 'No employees added yet'}
+              description={employeeUi?.emptyDescription || 'Add team members to assign permissions and departments.'}
+              action={addEmployeeAction}
+            />
+          ) : (
+            <EmployeesTable
+              departments={counters}
+              employees={employees}
+              onEdit={canEditEmployeeRecords ? handleEditEmployee : undefined}
+              onDelete={canDeleteEmployeeRecords ? (id: string) => handleDeleteRecord('DELETE_EMPLOYEE', id) : undefined}
+            />
+          )
         ) : (
-          <section className="panel p-4">
-            <p className="eyebrow mb-2">Employee Directory</p>
-            <h3 className="h5 fw-semibold mb-2">Employee list access is disabled</h3>
-            <p className="page-muted mb-0">
-              Add Employee can stay enabled on its own, but the directory list only appears when an employee list, salary, or outstanding permission is available.
-            </p>
-          </section>
+          <PermissionState
+            eyebrow={employeeUi?.label}
+            title={employeeUi?.permissionTitle || 'Employee access is restricted'}
+            description="Add Employee can stay enabled on its own, but the directory list only appears when an employee list, salary, or outstanding permission is available."
+            action={addEmployeeAction}
+          />
         )}
       </div>
     </div>

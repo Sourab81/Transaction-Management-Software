@@ -31,9 +31,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="app-body">
-        {process.env.NODE_ENV === "development" && (
-          <script src="https://unpkg.com/react-scan/dist/auto.global.js" crossOrigin="anonymous" />
-        )}
+      
         <AppProvider>
           {children}
         </AppProvider>

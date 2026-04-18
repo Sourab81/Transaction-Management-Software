@@ -3,9 +3,10 @@
 import SectionHero from '../SectionHero';
 import AdditionsTable from '../../tables/AdditionsTable';
 import { FaCog } from 'react-icons/fa';
+import type { DashboardTabContext } from './types';
 
 interface AdditionsTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function AdditionsTab({ ctx }: AdditionsTabProps) {

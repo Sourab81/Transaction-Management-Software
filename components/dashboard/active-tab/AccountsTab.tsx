@@ -3,9 +3,12 @@
 import SectionHero from '../SectionHero';
 import AccountsTable from '../../tables/AccountsTable';
 import { FaPlusCircle } from 'react-icons/fa';
+import { getModuleUi } from '../../../lib/module-ui';
+import EmptyState from '../../ui/state/EmptyState';
+import type { DashboardTabContext } from './types';
 
 interface AccountsTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function AccountsTab({ ctx }: AccountsTabProps) {
@@ -20,6 +23,13 @@ export default function AccountsTab({ ctx }: AccountsTabProps) {
     handleEditAccount,
     handleDeleteRecord,
   } = ctx;
+  const accountsUi = getModuleUi('accounts');
+  const addAccountAction = canAddAccountRecords
+    ? {
+        label: 'Add Account',
+        onClick: () => handleQuickAction('add-account'),
+      }
+    : undefined;
 
   return (
     <div className="row g-4">
@@ -39,11 +49,20 @@ export default function AccountsTab({ ctx }: AccountsTabProps) {
       {renderSummaryCards(accountSummary)}
 
       <div className="col-12">
-        <AccountsTable
-          accounts={accounts}
-          onEdit={canEditAccountRecords ? handleEditAccount : undefined}
-          onDelete={canDeleteAccountRecords ? (id: string) => handleDeleteRecord('DELETE_ACCOUNT', id) : undefined}
-        />
+        {accounts.length === 0 ? (
+          <EmptyState
+            eyebrow={accountsUi?.label}
+            title={accountsUi?.emptyTitle || 'No accounts available yet'}
+            description={accountsUi?.emptyDescription || 'Add a payment account to connect departments and track balances.'}
+            action={addAccountAction}
+          />
+        ) : (
+          <AccountsTable
+            accounts={accounts}
+            onEdit={canEditAccountRecords ? handleEditAccount : undefined}
+            onDelete={canDeleteAccountRecords ? (id: string) => handleDeleteRecord('DELETE_ACCOUNT', id) : undefined}
+          />
+        )}
       </div>
     </div>
   );

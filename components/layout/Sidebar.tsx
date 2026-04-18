@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { getModuleLabel } from '../../lib/module-ui';
 import {
   getModuleDisplay,
   getRoleLabel,
@@ -23,7 +24,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
   return (
     <aside className={`sidebar-shell sidebar-mobile ${isOpen ? 'sidebar-open' : 'sidebar-closed'} ${isCollapsed ? 'is-collapsed' : ''}`}>
       <div className="sidebar-brand">
-        <div className="sidebar-brand__mark">e</div>
+        <div className="sidebar-brand__mark">E</div>
         <div>
           <p className="sidebar-brand__title">eNest</p>
           <p className="sidebar-brand__subtitle">{roleLabel} workspace</p>
@@ -36,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
         {visibleModules.map((item) => {
           const displayItem = getModuleDisplay(item, accessContext.role);
           const Icon = displayItem.icon;
+          const sidebarLabel = getModuleLabel(displayItem.id) || displayItem.sidebarLabel;
 
           return (
             <Link
@@ -44,14 +46,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
                 if (onClose) onClose();
               }}
               href={getWorkspaceModulePath(displayItem.id)}
-              aria-label={displayItem.sidebarLabel}
-              title={isCollapsed ? displayItem.sidebarLabel : undefined}
+              aria-label={sidebarLabel}
+              title={isCollapsed ? sidebarLabel : undefined}
               className={`sidebar-link ${activeTab === displayItem.id ? 'is-active' : ''}`}
             >
               <span className="sidebar-link__icon">
                 <Icon />
               </span>
-              <span className="fw-semibold sidebar-link__label">{displayItem.sidebarLabel}</span>
+              <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
             </Link>
           );
         })}

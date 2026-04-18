@@ -1,85 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { getStoredUser, logoutUser, type SessionUser } from '../../lib/auth-session';
-import {
-  LOGIN_ROUTE,
-  getWorkspaceModulePath,
-  type CustomerWorkspaceView,
-} from '../../lib/workspace-routes';
-import AppLoadingScreen from '../layout/AppLoadingScreen';
-import Dashboard from './Dashboard';
+import type { ComponentType } from 'react';
+import type { CustomerWorkspaceView } from '../../lib/workspace-routes';
+import { useDashboardTabContext } from './DashboardTabContext';
+import type { DashboardTabContext } from './active-tab/types';
 
 interface WorkspaceModulePageProps {
   activeTab: string;
   customerPageView?: CustomerWorkspaceView;
+  ContentComponent: ComponentType<{ ctx: DashboardTabContext }>;
 }
 
 const WorkspaceModulePage = ({
-  activeTab,
-  customerPageView = 'list',
+  ContentComponent,
 }: WorkspaceModulePageProps) => {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const ctx = useDashboardTabContext();
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const user = getStoredUser();
-
-      if (!user) {
-        setCurrentUser(null);
-        setIsCheckingSession(false);
-        router.replace(LOGIN_ROUTE);
-        return;
-      }
-
-      setCurrentUser(user);
-      setIsCheckingSession(false);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [router]);
-
-  const handleLogout = () => {
-    logoutUser();
-    setCurrentUser(null);
-    router.replace(LOGIN_ROUTE);
-  };
-
-  const handleNavigate = (moduleId: string) => {
-    const nextPath = getWorkspaceModulePath(moduleId);
-
-    if (pathname !== nextPath) {
-      router.push(nextPath);
-    }
-  };
-
-  if (isCheckingSession) {
-    return <AppLoadingScreen />;
-  }
-
-  if (!currentUser) {
-    return (
-      <AppLoadingScreen
-        eyebrow="Redirecting"
-        title="Returning to Login"
-        copy="This workspace route requires an active session."
-      />
-    );
-  }
-
-  return (
-    <Dashboard
-      currentUser={currentUser}
-      onLogout={handleLogout}
-      activeTab={activeTab}
-      customerPageView={customerPageView}
-      onNavigate={handleNavigate}
-    />
-  );
+  return <ContentComponent ctx={ctx} />;
 };
 
 export default WorkspaceModulePage;

@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState } from 'react';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
-import { deriveTransactionStatus } from '../../lib/transaction-workflow';
 import {
   getDepartmentDefaultAccount,
   getDepartmentLinkedAccounts,
@@ -12,6 +11,10 @@ import {
   type Service,
   type Transaction,
 } from '../../lib/store';
+import {
+  validateTransactionAccountSelection,
+  validateTransactionAmounts,
+} from '../../lib/transaction-rules';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -98,8 +101,15 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
       return;
     }
 
-    if (parsedPaidAmount > parsedTotalAmount) {
-      setValidationError('Paid amount cannot be more than the total amount.');
+    const dueAmount = Math.max(parsedTotalAmount - parsedPaidAmount, 0);
+    const amountErrors = validateTransactionAmounts({
+      totalAmount: parsedTotalAmount,
+      paidAmount: parsedPaidAmount,
+      dueAmount,
+      status,
+    });
+    if (amountErrors.length > 0) {
+      setValidationError(amountErrors[0]);
       return;
     }
 
@@ -109,13 +119,24 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
         return;
       }
 
-      if (!selectedAccount) {
-        setValidationError('Select the bank account for this non-cash transaction.');
+      if (paymentMode !== initialValues.paymentMode) {
+        setValidationError('Changing to a new non-cash payment mode requires fresh payment reference details, which this editor does not capture yet.');
         return;
       }
     }
 
-    const normalizedStatus = deriveTransactionStatus(status, parsedTotalAmount, parsedPaidAmount);
+    const paymentDetails = paymentMode === initialValues.paymentMode ? initialValues.paymentDetails : undefined;
+    const accountErrors = validateTransactionAccountSelection({
+      paymentMode,
+      accountId: paymentMode === 'cash' ? undefined : selectedAccount?.id,
+      paymentDetails,
+      selectedAccount,
+      selectedDepartment,
+    });
+    if (accountErrors.length > 0) {
+      setValidationError(accountErrors[0]);
+      return;
+    }
 
     setValidationError('');
     onSubmit({
@@ -124,9 +145,9 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
       servicePrice: selectedService.price,
       totalAmount: parsedTotalAmount,
       paidAmount: parsedPaidAmount,
-      dueAmount: normalizedStatus.dueAmount,
+      dueAmount,
       paymentMode,
-      paymentDetails: paymentMode === initialValues.paymentMode ? initialValues.paymentDetails : undefined,
+      paymentDetails,
       departmentId: selectedDepartment?.id,
       departmentName: selectedDepartment?.name || '',
       accountId: paymentMode === 'cash' ? undefined : selectedAccount?.id,
@@ -136,7 +157,7 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
           ? `${selectedAccount.accountHolder} | ${selectedAccount.bankName}`
           : 'Not linked',
       note: note.trim(),
-      status: normalizedStatus.status,
+      status,
     });
   };
 

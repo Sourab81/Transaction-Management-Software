@@ -8,10 +8,11 @@ import WelcomeHero from '../WelcomeHero';
 import CountersTable from '../../tables/CountersTable';
 import RecentServicesTable from '../../tables/RecentServicesTable';
 import TransactionTable from '../../tables/TransactionTable';
-import { FaPlusCircle, FaDollarSign, FaHourglassHalf, FaUsers, FaChartLine } from 'react-icons/fa';
+import { FaPlusCircle, FaDollarSign, FaHourglassHalf, FaUsers, FaCog } from 'react-icons/fa';
+import type { DashboardTabContext } from './types';
 
 interface DashboardTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function DashboardTab({ ctx }: DashboardTabProps) {
@@ -21,6 +22,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
     visibleServices,
     recentServices,
     notifications,
+    customerDirectoryRecords,
     handleQuickAction,
     handleDismissNotification,
     handleViewTransaction,
@@ -28,7 +30,6 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
     renderTransactionFilters,
     isTransactionFiltersOpen,
     filteredTransactionRecords,
-    visibleTransactionHistory,
     canManageModule,
     canDeleteModule,
     canAccessModuleForSession,
@@ -42,6 +43,9 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   } = ctx;
 
   const isBusinessWorkspace = currentRole === 'Customer';
+  const collectedAmount = filteredTransactionRecords.reduce((total, transaction) => total + transaction.paidAmount, 0);
+  const pendingTransactions = filteredTransactionRecords.filter((transaction) => transaction.status === 'pending').length;
+  const activeServiceCount = visibleServices.filter((service) => service.status === 'Active').length;
 
   if (currentRole === 'Admin') {
     return renderAdminDashboard();
@@ -68,7 +72,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
           ) : null}
         </div>
         <div className="row g-4">
-          {visibleServices.slice(0, 3).map((service: any) => (
+          {visibleServices.slice(0, 3).map((service) => (
             <div key={service.id} className="col-12 col-md-6 col-xl-4">
               <div className="metric-card summary-card--blue">
                 <div className="d-flex justify-content-between gap-3">
@@ -140,49 +144,47 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
         />
       </div>
 
+      {isBusinessWorkspace ? renderBusinessPlanSection() : null}
       {isBusinessWorkspace ? null : serviceSnapshotSection}
 
       <div className="col-12">
         <div className="panel p-4 p-lg-5">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Today Overview</p>
+              <p className="eyebrow">Workspace Overview</p>
               <h2 className="panel-title">Operating pulse</h2>
             </div>
           </div>
           <div className="row g-4">
             <div className="col-12 col-sm-6 col-lg-3">
               <DashboardCard
-                title="Today Earnings"
-                value="Rs. 1,250"
+                title="Collected Amount"
+                value={`Rs. ${collectedAmount.toLocaleString('en-IN')}`}
                 icon={<FaDollarSign />}
-                trend={{ value: 12, isPositive: true }}
                 color="green"
               />
             </div>
             <div className="col-12 col-sm-6 col-lg-3">
               <DashboardCard
-                title="Pending Tasks"
-                value="8"
+                title="Pending Transactions"
+                value={pendingTransactions}
                 icon={<FaHourglassHalf />}
-                trend={{ value: 5, isPositive: false }}
                 color="orange"
               />
             </div>
             <div className="col-12 col-sm-6 col-lg-3">
               <DashboardCard
-                title="Active Users"
-                value="24"
+                title="Customers"
+                value={customerDirectoryRecords.length}
                 icon={<FaUsers />}
                 color="blue"
               />
             </div>
             <div className="col-12 col-sm-6 col-lg-3">
               <DashboardCard
-                title="Total Transactions"
-                value="156"
-                icon={<FaChartLine />}
-                trend={{ value: 8, isPositive: true }}
+                title="Active Services"
+                value={activeServiceCount}
+                icon={<FaCog />}
                 color="purple"
               />
             </div>
@@ -226,10 +228,13 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
           transactions={filteredTransactionRecords}
           onView={handleViewTransaction}
           onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-          onToggleFilters={() => ctx.setIsTransactionFiltersOpen((current: boolean) => !current)}
+          onToggleFilters={() => ctx.setIsTransactionFiltersOpen((current) => !current)}
           isFilterOpen={isTransactionFiltersOpen}
         />
       </div>
+
+      {isBusinessWorkspace ? serviceSnapshotSection : null}
+      {isBusinessWorkspace ? recentActivitySection : null}
     </div>
   );
 }

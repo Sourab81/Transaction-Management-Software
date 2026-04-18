@@ -5,8 +5,11 @@ import { FaPlusCircle, FaTrashAlt } from 'react-icons/fa';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
 import { deriveTransactionStatus } from '../../lib/transaction-workflow';
 import {
+  validateTransactionAccountSelection,
+  validateTransactionAmounts,
+} from '../../lib/transaction-rules';
+import {
   createRecordId,
-  getBusinessWorkspace,
   getDepartmentDefaultAccount,
   getDepartmentLinkedAccounts,
   getServicesForDepartment,
@@ -15,8 +18,12 @@ import {
   type Service,
   type Transaction,
   type TransactionPaymentDetails,
-  useApp,
+  useAppDispatch,
 } from '../../lib/store';
+import {
+  useBusinessWorkspaceData,
+  useCustomerSearchMatches,
+} from '../../lib/dashboard-selectors';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -196,7 +203,7 @@ const buildInitialState = (
 interface ServiceFormProps {
   availableDepartments: Counter[];
   businessId: string;
-  selectedDepartment?: Counter;
+  selectedDepartment?: Counter | null;
   actor: {
     id: string;
     name: string;
@@ -206,8 +213,8 @@ interface ServiceFormProps {
 }
 
 const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, businessId, selectedDepartment, actor, draft }) => {
-  const { state, dispatch } = useApp();
-  const workspace = getBusinessWorkspace(state, businessId);
+  const dispatch = useAppDispatch();
+  const workspace = useBusinessWorkspaceData(businessId);
   const services = useMemo(
     () => getServicesForDepartment(workspace.services, selectedDepartment?.id),
     [selectedDepartment?.id, workspace.services],
@@ -293,14 +300,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
     ? customers.find((customer) => customer.phone === phone) || null
     : null;
 
-  const customerMatches = (() => {
-    const normalizedQuery = customerSearch.trim().toLowerCase();
-    if (!normalizedQuery) return [];
-
-    return customers.filter((customer) =>
-      `${customer.name} ${customer.phone} ${customer.email || ''}`.toLowerCase().includes(normalizedQuery)
-    ).slice(0, 5);
-  })();
+  const customerMatches = useCustomerSearchMatches(customers, customerSearch);
 
   const serviceOptions = [
     {
@@ -700,7 +700,21 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
           service: selectedServiceRecord,
           totalAmount: parsedTotalAmount,
           paidAmount: parsedPaidAmount,
-          normalizedStatus: deriveTransactionStatus(requestedStatus, parsedTotalAmount, parsedPaidAmount),
+          normalizedStatus: (() => {
+            const normalizedStatus = deriveTransactionStatus(requestedStatus, parsedTotalAmount, parsedPaidAmount);
+            const amountErrors = validateTransactionAmounts({
+              totalAmount: parsedTotalAmount,
+              paidAmount: parsedPaidAmount,
+              dueAmount: normalizedStatus.dueAmount,
+              status: normalizedStatus.status,
+            });
+
+            if (amountErrors.length > 0) {
+              throw new Error(amountErrors[0]);
+            }
+
+            return normalizedStatus;
+          })(),
         };
       });
 
@@ -720,6 +734,16 @@ const ServiceForm: React.FC<ServiceFormProps> = ({ availableDepartments, busines
         }
 
         paymentDetails = buildPaymentDetailsPayload(paymentMode);
+        const accountErrors = validateTransactionAccountSelection({
+          paymentMode,
+          accountId: selectedTransactionAccount.id,
+          paymentDetails,
+          selectedAccount: selectedTransactionAccount,
+          selectedDepartment,
+        });
+        if (accountErrors.length > 0) {
+          throw new Error(accountErrors[0]);
+        }
       }
 
       setValidationError('');

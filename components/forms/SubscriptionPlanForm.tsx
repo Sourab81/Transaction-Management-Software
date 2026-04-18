@@ -44,7 +44,7 @@ const SubscriptionPlanForm: React.FC<SubscriptionPlanFormProps> = ({
         <div>
           <p className="eyebrow mb-2">Your Plan</p>
           <h3 className="h5 fw-semibold mb-1">Manage subscription access</h3>
-          <p className="page-muted small mb-0">Switch, renew, or restart the dummy plan used by this business workspace.</p>
+          <p className="page-muted small mb-0">Switch, renew, or restart the subscription plan used by this business workspace.</p>
         </div>
         <span className="status-chip status-chip--info">{statusLabel || selectedPlan.label}</span>
       </div>

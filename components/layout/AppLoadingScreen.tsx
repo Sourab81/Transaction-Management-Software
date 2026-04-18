@@ -1,5 +1,7 @@
 'use client';
 
+import LoadingState from '../ui/state/LoadingState';
+
 interface AppLoadingScreenProps {
   eyebrow?: string;
   title?: string;
@@ -12,12 +14,12 @@ const AppLoadingScreen = ({
   copy = 'Restoring your dashboard session and workspace data.',
 }: AppLoadingScreenProps) => (
   <main className="loading-screen">
-    <div className="loading-card">
-      <div className="loading-spinner" aria-hidden="true" />
-      <p className="eyebrow mb-2">{eyebrow}</p>
-      <h1 className="h4 fw-semibold mb-2">{title}</h1>
-      <p className="page-muted mb-0">{copy}</p>
-    </div>
+    <LoadingState
+      eyebrow={eyebrow}
+      title={title}
+      description={copy}
+      className="loading-card"
+    />
   </main>
 );
 

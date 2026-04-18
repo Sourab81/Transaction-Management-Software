@@ -3,9 +3,10 @@
 import SectionHero from '../SectionHero';
 import HistoryTable from '../../tables/HistoryTable';
 import { FaHistory } from 'react-icons/fa';
+import type { DashboardTabContext } from './types';
 
 interface HistoryTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function HistoryTab({ ctx }: HistoryTabProps) {
@@ -17,6 +18,9 @@ export default function HistoryTab({ ctx }: HistoryTabProps) {
     handleViewHistory,
     handleDeleteRecord,
     canDeleteModule,
+    historyStatusFilter,
+    canAccessModuleForSession,
+    accessContext,
   } = ctx;
 
   return (
@@ -26,11 +30,11 @@ export default function HistoryTab({ ctx }: HistoryTabProps) {
           eyebrow="System History"
           title="Track past activity"
           description="Review audit logs, events, and history details for every important change."
-          action={{
-            label: 'Show Failed',
+          action={canAccessModuleForSession(accessContext, 'history') ? {
+            label: historyStatusFilter === 'All' ? 'Show Failed' : 'Show All',
             icon: <FaHistory />,
             onClick: () => handleQuickAction('filter-history'),
-          }}
+          } : undefined}
         />
       </div>
 

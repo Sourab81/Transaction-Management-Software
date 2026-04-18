@@ -4,9 +4,10 @@ import SectionHero from '../SectionHero';
 import NotificationCenter from '../NotificationCenter';
 import HistoryTable from '../../tables/HistoryTable';
 import { FaHistory } from 'react-icons/fa';
+import type { DashboardTabContext } from './types';
 
 interface ReminderTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function ReminderTab({ ctx }: ReminderTabProps) {
@@ -20,7 +21,7 @@ export default function ReminderTab({ ctx }: ReminderTabProps) {
     handleViewHistory,
     handleDeleteRecord,
     canDeleteModule,
-    canAccessModuleForSession,
+    historyStatusFilter,
   } = ctx;
 
   return (
@@ -31,7 +32,7 @@ export default function ReminderTab({ ctx }: ReminderTabProps) {
           title="Track alerts and follow-ups"
           description="Review notifications, failed events, and pending updates without leaving the main workflow."
           action={{
-            label: 'Show Failed',
+            label: historyStatusFilter === 'All' ? 'Show Failed' : 'Show All',
             icon: <FaHistory />,
             onClick: () => handleQuickAction('filter-history'),
           }}

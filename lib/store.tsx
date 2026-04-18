@@ -9,9 +9,9 @@ import {
 } from './platform-structure';
 import {
   deriveTransactionStatus,
-  getPostedTransactionAmount,
   type DailyClosingSummary,
 } from './transaction-workflow';
+import { getTransactionUpdateDelta, type BalanceDelta } from './transaction-accounting';
 import {
   createBusinessSubscription,
   getBusinessAccessState,
@@ -56,6 +56,7 @@ export interface BusinessCustomer {
 
 export type TransactionPaymentMode = 'cash' | 'upi' | 'bank' | 'card';
 export type TransactionStatus = 'completed' | 'pending' | 'cancelled' | 'refunded';
+export type TransactionAuditAction = 'created' | 'updated' | 'cancelled' | 'refunded' | 'deleted';
 
 export interface TransactionUpiPaymentDetails {
   kind: 'upi';
@@ -122,6 +123,19 @@ export interface Transaction {
   status: TransactionStatus;
   date: string;
   createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  refundedAt?: string;
+  refundedBy?: string;
+  refundReason?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+  deleteReason?: string;
+  lastAuditAction?: TransactionAuditAction;
+  isDeleted?: boolean;
 }
 
 export interface Counter {
@@ -263,7 +277,7 @@ type WorkspaceScopedAction =
   | { type: 'DELETE_EMPLOYEE'; businessId: string; payload: string }
   | { type: 'DELETE_COUNTER'; businessId: string; payload: string }
   | { type: 'DELETE_EXPENSE'; businessId: string; payload: string }
-  | { type: 'DELETE_TRANSACTION'; businessId: string; payload: string }
+  | { type: 'DELETE_TRANSACTION'; businessId: string; payload: string | { id: string; deletedBy?: string; deleteReason?: string } }
   | { type: 'DELETE_HISTORY_EVENT'; businessId?: string; payload: string }
   | { type: 'DELETE_REPORT'; businessId?: string; payload: string };
 
@@ -712,6 +726,32 @@ const normalizeTransaction = (
   const dueAmount = typeof transaction.dueAmount === 'number'
     ? transaction.dueAmount
     : deriveTransactionStatus(status, legacyAmount, paidAmount).dueAmount;
+  const isDeleted = Boolean(transaction.isDeleted);
+  const createdAt = transaction.createdAt || nowIso();
+  const normalizeOptionalText = (value?: string) => value?.trim() || undefined;
+  const lastAuditAction = (() => {
+    if (transaction.lastAuditAction) {
+      return transaction.lastAuditAction;
+    }
+
+    if (isDeleted) {
+      return 'deleted' as const;
+    }
+
+    if (status === 'refunded') {
+      return 'refunded' as const;
+    }
+
+    if (status === 'cancelled') {
+      return 'cancelled' as const;
+    }
+
+    if (transaction.updatedAt || transaction.updatedBy) {
+      return 'updated' as const;
+    }
+
+    return 'created' as const;
+  })();
 
   return {
     id: transaction.id,
@@ -737,7 +777,20 @@ const normalizeTransaction = (
     note: transaction.note || '',
     status,
     date: transaction.date || today(),
-    createdAt: transaction.createdAt || nowIso(),
+    createdAt,
+    createdBy: normalizeOptionalText(transaction.createdBy) || normalizeOptionalText(transaction.handledByName),
+    updatedAt: normalizeOptionalText(transaction.updatedAt),
+    updatedBy: normalizeOptionalText(transaction.updatedBy),
+    cancelledAt: normalizeOptionalText(transaction.cancelledAt),
+    cancelledBy: normalizeOptionalText(transaction.cancelledBy),
+    refundedAt: normalizeOptionalText(transaction.refundedAt),
+    refundedBy: normalizeOptionalText(transaction.refundedBy),
+    refundReason: normalizeOptionalText(transaction.refundReason),
+    deletedAt: normalizeOptionalText(transaction.deletedAt),
+    deletedBy: normalizeOptionalText(transaction.deletedBy),
+    deleteReason: normalizeOptionalText(transaction.deleteReason),
+    lastAuditAction,
+    isDeleted,
   };
 };
 
@@ -781,23 +834,26 @@ export const getRecentServicesFromTransactions = (
   limit = 8,
 ): RecentService[] =>
   transactions
+    .filter((transaction) => !transaction.isDeleted)
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, limit)
     .map(createRecentServiceFromTransaction);
 
-const applyBalanceDelta = <
+const applyBalanceDeltas = <
   TRecord extends Account | Counter,
->(records: TRecord[], recordId: string | undefined, delta: number): TRecord[] => {
-  if (!recordId || delta === 0) {
+>(records: TRecord[], deltas: BalanceDelta[]): TRecord[] => {
+  if (deltas.length === 0) {
     return records;
   }
 
+  const deltaByRecordId = new Map(deltas.map((delta) => [delta.recordId, delta.delta]));
+
   return records.map((record) =>
-    record.id === recordId
+    deltaByRecordId.has(record.id)
       ? ({
           ...record,
-          currentBalance: record.currentBalance + delta,
+          currentBalance: record.currentBalance + (deltaByRecordId.get(record.id) || 0),
         } as TRecord)
       : record
   );
@@ -1019,13 +1075,16 @@ function appReducer(state: AppState, action: AppAction): AppState {
           transactionNumber: createTransactionNumber(),
           date: today(),
           createdAt: nowIso(),
+          createdBy: action.payload.createdBy || action.payload.handledByName,
+          lastAuditAction: 'created',
+          isDeleted: false,
         });
-        const postedAmount = getPostedTransactionAmount(newTransaction.status, newTransaction.paidAmount);
+        const balanceDelta = getTransactionUpdateDelta(undefined, newTransaction);
 
         return {
           ...workspace,
-          accounts: applyBalanceDelta(workspace.accounts, newTransaction.accountId, postedAmount),
-          counters: applyBalanceDelta(workspace.counters, newTransaction.departmentId, postedAmount),
+          accounts: applyBalanceDeltas(workspace.accounts, balanceDelta.accountDeltas),
+          counters: applyBalanceDeltas(workspace.counters, balanceDelta.departmentDeltas),
           transactions: [newTransaction, ...workspace.transactions],
         };
       });
@@ -1037,23 +1096,12 @@ function appReducer(state: AppState, action: AppAction): AppState {
         }
 
         const normalizedTransaction = normalizeTransaction(action.payload);
-        const previousPostedAmount = getPostedTransactionAmount(previousTransaction.status, previousTransaction.paidAmount);
-        const nextPostedAmount = getPostedTransactionAmount(normalizedTransaction.status, normalizedTransaction.paidAmount);
-        const nextAccounts = applyBalanceDelta(
-          applyBalanceDelta(workspace.accounts, previousTransaction.accountId, -previousPostedAmount),
-          normalizedTransaction.accountId,
-          nextPostedAmount,
-        );
-        const nextCounters = applyBalanceDelta(
-          applyBalanceDelta(workspace.counters, previousTransaction.departmentId, -previousPostedAmount),
-          normalizedTransaction.departmentId,
-          nextPostedAmount,
-        );
+        const balanceDelta = getTransactionUpdateDelta(previousTransaction, normalizedTransaction);
 
         return {
           ...workspace,
-          accounts: nextAccounts,
-          counters: nextCounters,
+          accounts: applyBalanceDeltas(workspace.accounts, balanceDelta.accountDeltas),
+          counters: applyBalanceDeltas(workspace.counters, balanceDelta.departmentDeltas),
           transactions: workspace.transactions.map((transaction) =>
             transaction.id === normalizedTransaction.id ? normalizedTransaction : transaction
           ),
@@ -1320,18 +1368,34 @@ function appReducer(state: AppState, action: AppAction): AppState {
       }));
     case 'DELETE_TRANSACTION':
       return withBusinessWorkspace(state, action.businessId, (workspace) => {
-        const deletedTransaction = workspace.transactions.find((transaction) => transaction.id === action.payload);
-        if (!deletedTransaction) {
+        const deletePayload = typeof action.payload === 'string'
+          ? { id: action.payload }
+          : action.payload;
+        const previousTransaction = workspace.transactions.find((transaction) => transaction.id === deletePayload.id);
+        if (!previousTransaction) {
           return workspace;
         }
 
-        const postedAmount = getPostedTransactionAmount(deletedTransaction.status, deletedTransaction.paidAmount);
+        const now = nowIso();
+        const deletedTransaction = normalizeTransaction({
+          ...previousTransaction,
+          deletedAt: previousTransaction.deletedAt || now,
+          deletedBy: deletePayload.deletedBy || previousTransaction.deletedBy,
+          deleteReason: deletePayload.deleteReason || previousTransaction.deleteReason,
+          updatedAt: now,
+          updatedBy: deletePayload.deletedBy || previousTransaction.updatedBy,
+          lastAuditAction: 'deleted',
+          isDeleted: true,
+        });
+        const balanceDelta = getTransactionUpdateDelta(previousTransaction, deletedTransaction);
 
         return {
           ...workspace,
-          accounts: applyBalanceDelta(workspace.accounts, deletedTransaction.accountId, -postedAmount),
-          counters: applyBalanceDelta(workspace.counters, deletedTransaction.departmentId, -postedAmount),
-          transactions: workspace.transactions.filter((transaction) => transaction.id !== action.payload),
+          accounts: applyBalanceDeltas(workspace.accounts, balanceDelta.accountDeltas),
+          counters: applyBalanceDeltas(workspace.counters, balanceDelta.departmentDeltas),
+          transactions: workspace.transactions.map((transaction) =>
+            transaction.id === deletedTransaction.id ? deletedTransaction : transaction
+          ),
         };
       });
     case 'DELETE_HISTORY_EVENT':
@@ -1378,7 +1442,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
 const toPersistedWorkspace = (workspace: BusinessWorkspace): BusinessWorkspace => ({
   ...workspace,
   notifications: [],
-  recentServices: [],
 });
 
 const toPersistedAdminWorkspace = (workspace: AdminWorkspace): AdminWorkspace => ({

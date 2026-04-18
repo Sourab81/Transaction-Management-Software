@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar } from 'react-icons/fa';
 import { type SessionUser } from '../../lib/auth-session';
@@ -10,24 +10,44 @@ import {
   canDeleteModuleForSession,
   canManageModuleForSession,
   canViewModuleRecordsForSession,
-  getSearchMatches,
-  getTransactionSummary,
-  getVisibleCustomers,
-  getVisibleServices,
-  getVisibleTransactions,
 } from '../../lib/dashboard-controller';
 import {
-  createEmptyBusinessWorkspace,
   createRecordId,
-  getBusinessWorkspace,
   getDepartmentDefaultAccount,
   getDepartmentLinkedAccountIds,
   getDepartmentLinkedAccounts,
   getServicesForDepartment,
-  useApp,
+  useAppDispatch,
 } from '../../lib/store';
 import type { Account, AdditionOption, Business, BusinessCustomer, BusinessOnboardingStep, Counter, Employee, Expense, HistoryEvent, ReportItem, Service, Transaction } from '../../lib/store';
 import { buildDailyClosingSummary, buildTransactionReceiptText } from '../../lib/transaction-workflow';
+import {
+  canTransitionTransactionStatus,
+  validateTransactionAccountSelection,
+  validateTransactionAmounts,
+} from '../../lib/transaction-rules';
+import {
+  useAdminWorkspaceData,
+  useBusinesses,
+  useBusinessRecord,
+  useBusinessWorkspacesById,
+  useFilteredBusinesses,
+  useFilteredTransactionRecords,
+  useRecentServices,
+  useRoleScopedWorkspace,
+  useSearchResults,
+  useSortedTransactionRecords,
+  useTransactionFilterOptions,
+  useTransactionStats,
+  useVisibleCustomerRecords,
+  useVisibleServiceRecords,
+  useVisibleTransactionRecords,
+} from '../../lib/dashboard-selectors';
+import {
+  getCustomerWorkspaceViewUi,
+  getModuleLabel as getModuleUiLabel,
+  getModuleUi,
+} from '../../lib/module-ui';
 import {
   buildDefaultCustomerPermissions,
   canAccessModuleForSession,
@@ -39,8 +59,7 @@ import {
 } from '../../lib/platform-structure';
 import Header from '../layout/Header';
 import Sidebar from '../layout/Sidebar';
-import DashboardCard from '../dashboard/DashboardCard';
-import ServiceForm, { type ServiceWorkflowDraft } from '../forms/ServiceForm';
+import { type ServiceWorkflowDraft } from '../forms/ServiceForm';
 import AccountForm, { type AccountFormValues } from '../forms/AccountForm';
 import BusinessForm, { type BusinessFormValues } from '../forms/BusinessForm';
 import CustomerForm, { type CustomerFormValues } from '../forms/CustomerForm';
@@ -50,28 +69,21 @@ import ExpenseForm, { type ExpenseFormValues } from '../forms/ExpenseForm';
 import ServiceEditorForm, { type ServiceFormValues } from '../forms/ServiceEditorForm';
 import SubscriptionPlanForm from '../forms/SubscriptionPlanForm';
 import TransactionEditForm, { type TransactionEditorValues } from '../forms/TransactionEditForm';
-import TransactionTable from '../tables/TransactionTable';
-import CountersTable from '../tables/CountersTable';
-import RecentServicesTable from '../tables/RecentServicesTable';
-// import SectionHero from './SectionHero';
-import AccountsTable from '../tables/AccountsTable';
-import ServicesTable from '../tables/ServicesTable';
-import CustomersTable from '../tables/CustomersTable';
-import CustomerPaymentsTable from '../tables/CustomerPaymentsTable';
-import CustomerOutstandingTable, { type CustomerOutstandingRow } from '../tables/CustomerOutstandingTable';
-import DepartmentsTable from '../tables/DepartmentsTable';
-import EmployeesTable from '../tables/EmployeesTable';
-import ExpensesTable from '../tables/ExpensesTable';
-import HistoryTable from '../tables/HistoryTable';
-import ReportsTable from '../tables/ReportsTable';
-import AdditionsTable from '../tables/AdditionsTable';
+import { type SummaryCardProps } from './SummaryCard';
+import SummaryGrid from './SummaryGrid';
+import type { CustomerOutstandingRow } from '../tables/CustomerOutstandingTable';
 import SubscriptionTransactionsTable from '../tables/SubscriptionTransactionsTable';
 import ActionModal from '../ui/ActionModal';
-import QuickActions from './QuickActions';
+import DetailList from '../ui/DetailList';
+import ConfirmActionModal from '../ui/state/ConfirmActionModal';
+import EmptyState from '../ui/state/EmptyState';
+import ErrorState from '../ui/state/ErrorState';
+import PermissionState from '../ui/state/PermissionState';
 import NotificationCenter from './NotificationCenter';
-import WelcomeHero from './WelcomeHero';
 import BusinessOnboarding from './BusinessOnboarding';
+import type { DashboardTabContext } from './active-tab/types';
 import Footer from '../layout/Footer';
+import { DashboardTabContextProvider } from './DashboardTabContext';
 import {
   businessSubscriptionPlans,
   getBusinessAccessState,
@@ -79,90 +91,6 @@ import {
   type BusinessSubscription,
 } from '../../lib/subscription';
 import { getCustomerWorkspacePath, type CustomerWorkspaceView } from '../../lib/workspace-routes';
-
-interface SummaryCardProps {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  detail: string;
-  colorClass: string;
-}
-
-const summaryColorMap: Record<string, string> = {
-  'bg-primary': 'blue',
-  'bg-success': 'green',
-  'bg-warning': 'orange',
-  'bg-info': 'purple',
-  'bg-danger': 'red',
-};
-
-const customerPageCopyMap: Record<CustomerWorkspaceView, { label: string; title: string; description: string }> = {
-  list: {
-    label: 'Customer List',
-    title: 'Keep your customer base engaged',
-    description: 'View and manage customer directory records.',
-  },
-  payments: {
-    label: 'Customer Payment List',
-    title: 'Review customer payment activity',
-    description: 'Review customer payment records and statuses.',
-  },
-  outstanding: {
-    label: 'Customer Outstanding',
-    title: 'Track customer outstanding balances',
-    description: 'Track pending customer balances.',
-  },
-};
-
-const SummaryCard: React.FC<SummaryCardProps> = ({ icon, title, value, detail, colorClass }) => {
-  const tone = summaryColorMap[colorClass] || 'blue';
-
-  return (
-    <div className={`metric-card summary-card--${tone}`}>
-      <div className="metric-card__top">
-        <div>
-          <p className="metric-card__label">{title}</p>
-          <p className="metric-card__value">{value}</p>
-        </div>
-        <div className="metric-card__icon">{icon}</div>
-      </div>
-      <p className="metric-card__detail">{detail}</p>
-    </div>
-  );
-};
-
-interface SectionHeroProps {
-  eyebrow: string;
-  title: string;
-  description: string;
-  action?: {
-    label: string;
-    icon: React.ReactNode;
-    onClick: () => void;
-  };
-}
-
-const SectionHero: React.FC<SectionHeroProps> = ({ eyebrow, title, description, action }) => (
-  <section className="panel section-hero">
-    <div className="section-hero__content">
-      <div className="panel-header mb-0">
-        <div>
-          <p className="eyebrow">{eyebrow}</p>
-          <h2 className="panel-title">{title}</h2>
-          <p className="panel-copy">{description}</p>
-        </div>
-        {action ? (
-          <div className="section-hero__actions mt-0">
-            <button type="button" className="btn-app btn-app-primary" onClick={action.onClick}>
-              {action.icon}
-              {action.label}
-            </button>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  </section>
-);
 
 const getSubscriptionStatusLabel = (status?: BusinessSubscription['status']) => {
   if (status === 'trial') return 'Trial';
@@ -238,6 +166,8 @@ type ModalMode =
   | 'configure-option'
   | 'manage-options'
   | 'confirm-delete'
+  | 'confirm-plan-cancel'
+  | 'confirm-option-change'
   | null;
 
 type DeleteActionType =
@@ -267,11 +197,74 @@ const deleteActionModuleIds: Record<DeleteActionType, string> = {
   DELETE_ADDITION_OPTION: 'additions',
 };
 
+type HistoryStatusFilter = 'All' | 'Failed';
+type TransactionStatusFilter = 'All' | Transaction['status'];
+type TransactionPaymentModeFilter = 'All' | Transaction['paymentMode'];
+type DepartmentAccountStatusFilter = 'All' | 'Active' | 'Inactive' | 'Unassigned';
+type AdminPlanWorkspaceFilter = 'All' | 'Active' | 'Locked';
+type AdminPlanExpiryFilter = 'All' | 'Expiring Soon' | 'Expired' | 'Cancelled';
+
 interface PendingDelete {
   actionType: DeleteActionType;
   id: string;
   label: string;
   module: string;
+}
+
+interface TransactionFilterState {
+  query: string;
+  status: TransactionStatusFilter;
+  paymentMode: TransactionPaymentModeFilter;
+  department: string;
+  handler: string;
+  dateFrom: string;
+  dateTo: string;
+  isOpen: boolean;
+}
+
+interface DepartmentFilterState {
+  searchInput: string;
+  searchQuery: string;
+  accountStatus: DepartmentAccountStatusFilter;
+}
+
+interface AdminPlanFilterState {
+  searchQuery: string;
+  planId: string;
+  status: 'All' | BusinessSubscription['status'];
+  workspace: AdminPlanWorkspaceFilter;
+  expiry: AdminPlanExpiryFilter;
+  isOpen: boolean;
+}
+
+interface DashboardFilterState {
+  historyStatus: HistoryStatusFilter;
+  businessPermission: string;
+  transaction: TransactionFilterState;
+  department: DepartmentFilterState;
+  adminPlan: AdminPlanFilterState;
+}
+
+interface DashboardUiState {
+  activeModal: ModalMode;
+  editingService: Service | null;
+  editingBusiness: Business | null;
+  selectedPlanBusiness: Business | null;
+  editingCustomer: BusinessCustomer | null;
+  editingEmployee: Employee | null;
+  editingDepartment: Counter | null;
+  editingAccount: Account | null;
+  editingExpense: Expense | null;
+  editingTransaction: Transaction | null;
+  selectedTransaction: Transaction | null;
+  selectedCustomerHistory: BusinessCustomer | null;
+  selectedHistoryEvent: HistoryEvent | null;
+  selectedReport: ReportItem | null;
+  selectedOption: AdditionOption | null;
+  pendingDelete: PendingDelete | null;
+  transactionDeleteReason: string;
+  workflowDraft: ServiceWorkflowDraft | null;
+  favoriteServiceIds: string[];
 }
 
 interface DashboardProps {
@@ -280,75 +273,227 @@ interface DashboardProps {
   activeTab: string;
   customerPageView: CustomerWorkspaceView;
   onNavigate: (moduleId: string) => void;
+  children: React.ReactNode;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab, customerPageView, onNavigate }) => {
+const resolveStateValue = <T,>(current: T, value: T | ((previous: T) => T)) => (
+  typeof value === 'function'
+    ? (value as (previous: T) => T)(current)
+    : value
+);
+
+const initialTransactionFilterState: TransactionFilterState = {
+  query: '',
+  status: 'All',
+  paymentMode: 'All',
+  department: 'All',
+  handler: 'All',
+  dateFrom: '',
+  dateTo: '',
+  isOpen: false,
+};
+
+const initialDepartmentFilterState: DepartmentFilterState = {
+  searchInput: '',
+  searchQuery: '',
+  accountStatus: 'All',
+};
+
+const initialAdminPlanFilterState: AdminPlanFilterState = {
+  searchQuery: '',
+  planId: 'All',
+  status: 'All',
+  workspace: 'All',
+  expiry: 'All',
+  isOpen: false,
+};
+
+const initialDashboardFilterState: DashboardFilterState = {
+  historyStatus: 'All',
+  businessPermission: 'all',
+  transaction: initialTransactionFilterState,
+  department: initialDepartmentFilterState,
+  adminPlan: initialAdminPlanFilterState,
+};
+
+const emptyTransactionRecords: Transaction[] = [];
+
+const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab, customerPageView, onNavigate, children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const { state, dispatch } = useApp();
+  const dispatch = useAppDispatch();
   const currentRole = currentUser.role;
-  const currentBusiness = currentUser.businessId
-    ? state.businesses.find((business) => business.id === currentUser.businessId) || null
-    : null;
-  const workspace = useMemo(
-    () => currentRole === 'Admin'
-      ? createEmptyBusinessWorkspace()
-      : getBusinessWorkspace(state, currentUser.businessId),
-    [currentRole, currentUser.businessId, state],
-  );
-  const businesses = state.businesses;
+  const businesses = useBusinesses();
+  const currentBusiness = useBusinessRecord(currentUser.businessId);
+  const workspace = useRoleScopedWorkspace(currentRole, currentUser.businessId);
+  const adminWorkspace = useAdminWorkspaceData();
+  const businessWorkspacesById = useBusinessWorkspacesById();
   const accounts = workspace.accounts;
   const services = workspace.services;
-  const recentServices = workspace.recentServices;
   const customers: Array<Business | BusinessCustomer> = currentRole === 'Admin' ? businesses : workspace.customers;
   const employees = workspace.employees;
   const expenses = workspace.expenses;
-  const transactionHistory = workspace.transactions;
-  const baseNotifications = currentRole === 'Admin' ? state.adminWorkspace.notifications : workspace.notifications;
-  const historyEvents = currentRole === 'Admin' ? state.adminWorkspace.historyEvents : workspace.historyEvents;
-  const reports = currentRole === 'Admin' ? state.adminWorkspace.reports : workspace.reports;
-  const additionOptions = state.adminWorkspace.additionOptions;
+  const transactionHistory = useMemo(
+    () => workspace.transactions.filter((transaction) => !transaction.isDeleted),
+    [workspace.transactions],
+  );
+  const recentServices = useRecentServices(transactionHistory);
+  const baseNotifications = currentRole === 'Admin' ? adminWorkspace.notifications : workspace.notifications;
+  const historyEvents = currentRole === 'Admin' ? adminWorkspace.historyEvents : workspace.historyEvents;
+  const reports = currentRole === 'Admin' ? adminWorkspace.reports : workspace.reports;
+  const additionOptions = adminWorkspace.additionOptions;
   const counters = workspace.counters;
   const [selectedCounterId, setSelectedCounterId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeModal, setActiveModal] = useState<ModalMode>(null);
-  const [editingService, setEditingService] = useState<Service | null>(null);
-  const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
-  const [selectedPlanBusiness, setSelectedPlanBusiness] = useState<Business | null>(null);
-  const [editingCustomer, setEditingCustomer] = useState<BusinessCustomer | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [editingDepartment, setEditingDepartment] = useState<Counter | null>(null);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [selectedCustomerHistory, setSelectedCustomerHistory] = useState<BusinessCustomer | null>(null);
-  const [selectedHistoryEvent, setSelectedHistoryEvent] = useState<HistoryEvent | null>(null);
-  const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
-  const [selectedOption, setSelectedOption] = useState<AdditionOption | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
-  const [workflowDraft, setWorkflowDraft] = useState<ServiceWorkflowDraft | null>(null);
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<'All' | 'Failed'>('All');
-  const [favoriteServiceIds, setFavoriteServiceIds] = useState<string[]>(['service-1', 'service-3']);
-  const [businessPermissionFilter, setBusinessPermissionFilter] = useState('all');
-  const [transactionFilterQuery, setTransactionFilterQuery] = useState('');
-  const [transactionStatusFilter, setTransactionStatusFilter] = useState<'All' | 'completed' | 'pending' | 'cancelled' | 'refunded'>('All');
-  const [transactionPaymentModeFilter, setTransactionPaymentModeFilter] = useState<'All' | 'cash' | 'upi' | 'bank' | 'card'>('All');
-  const [transactionDepartmentFilter, setTransactionDepartmentFilter] = useState('All');
-  const [transactionHandlerFilter, setTransactionHandlerFilter] = useState('All');
-  const [transactionDateFrom, setTransactionDateFrom] = useState('');
-  const [transactionDateTo, setTransactionDateTo] = useState('');
-  const [isTransactionFiltersOpen, setIsTransactionFiltersOpen] = useState(false);
-  const [departmentSearchInput, setDepartmentSearchInput] = useState('');
-  const [departmentSearchQuery, setDepartmentSearchQuery] = useState('');
-  const [departmentAccountStatusFilter, setDepartmentAccountStatusFilter] = useState<'All' | 'Active' | 'Inactive' | 'Unassigned'>('All');
-  const [adminPlanSearchQuery, setAdminPlanSearchQuery] = useState('');
-  const [adminPlanIdFilter, setAdminPlanIdFilter] = useState('All');
-  const [adminPlanStatusFilter, setAdminPlanStatusFilter] = useState<'All' | BusinessSubscription['status']>('All');
-  const [adminPlanWorkspaceFilter, setAdminPlanWorkspaceFilter] = useState<'All' | 'Active' | 'Locked'>('All');
-  const [adminPlanExpiryFilter, setAdminPlanExpiryFilter] = useState<'All' | 'Expiring Soon' | 'Expired' | 'Cancelled'>('All');
-  const [isAdminPlanFiltersOpen, setIsAdminPlanFiltersOpen] = useState(false);
+  const [filterState, setFilterState] = useState<DashboardFilterState>(initialDashboardFilterState);
+  const [uiState, setUiState] = useState<DashboardUiState>({
+    activeModal: null,
+    editingService: null,
+    editingBusiness: null,
+    selectedPlanBusiness: null,
+    editingCustomer: null,
+    editingEmployee: null,
+    editingDepartment: null,
+    editingAccount: null,
+    editingExpense: null,
+    editingTransaction: null,
+    selectedTransaction: null,
+    selectedCustomerHistory: null,
+    selectedHistoryEvent: null,
+    selectedReport: null,
+    selectedOption: null,
+    pendingDelete: null,
+    transactionDeleteReason: '',
+    workflowDraft: null,
+    favoriteServiceIds: ['service-1', 'service-3'],
+  });
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
+  const {
+    historyStatus: historyStatusFilter,
+    businessPermission: businessPermissionFilter,
+    transaction: transactionFilters,
+    department: departmentFilters,
+    adminPlan: adminPlanFilters,
+  } = filterState;
+  const {
+    query: transactionFilterQuery,
+    status: transactionStatusFilter,
+    paymentMode: transactionPaymentModeFilter,
+    department: transactionDepartmentFilter,
+    handler: transactionHandlerFilter,
+    dateFrom: transactionDateFrom,
+    dateTo: transactionDateTo,
+    isOpen: isTransactionFiltersOpen,
+  } = transactionFilters;
+  const {
+    searchInput: departmentSearchInput,
+    searchQuery: departmentSearchQuery,
+    accountStatus: departmentAccountStatusFilter,
+  } = departmentFilters;
+  const {
+    searchQuery: adminPlanSearchQuery,
+    planId: adminPlanIdFilter,
+    status: adminPlanStatusFilter,
+    workspace: adminPlanWorkspaceFilter,
+    expiry: adminPlanExpiryFilter,
+    isOpen: isAdminPlanFiltersOpen,
+  } = adminPlanFilters;
+  const {
+    activeModal,
+    editingService,
+    editingBusiness,
+    selectedPlanBusiness,
+    editingCustomer,
+    editingEmployee,
+    editingDepartment,
+    editingAccount,
+    editingExpense,
+    editingTransaction,
+    selectedTransaction,
+    selectedCustomerHistory,
+    selectedHistoryEvent,
+    selectedReport,
+    selectedOption,
+    pendingDelete,
+    transactionDeleteReason,
+    workflowDraft,
+    favoriteServiceIds,
+  } = uiState;
+
+  const updateUiState = <K extends keyof DashboardUiState>(
+    key: K,
+    value: DashboardUiState[K] | ((previous: DashboardUiState[K]) => DashboardUiState[K]),
+  ) => {
+    setUiState((current) => ({
+      ...current,
+      [key]: resolveStateValue(current[key], value),
+    }));
+  };
+
+  const updateFilterState = <K extends keyof DashboardFilterState>(
+    key: K,
+    value: DashboardFilterState[K] | ((previous: DashboardFilterState[K]) => DashboardFilterState[K]),
+  ) => {
+    setFilterState((current) => ({
+      ...current,
+      [key]: resolveStateValue(current[key], value),
+    }));
+  };
+
+  const updateTransactionFilters = <K extends keyof TransactionFilterState>(
+    key: K,
+    value: TransactionFilterState[K] | ((previous: TransactionFilterState[K]) => TransactionFilterState[K]),
+  ) => {
+    updateFilterState('transaction', (current) => ({
+      ...current,
+      [key]: resolveStateValue(current[key], value),
+    }));
+  };
+
+  const updateDepartmentFilters = <K extends keyof DepartmentFilterState>(
+    key: K,
+    value: DepartmentFilterState[K] | ((previous: DepartmentFilterState[K]) => DepartmentFilterState[K]),
+  ) => {
+    updateFilterState('department', (current) => ({
+      ...current,
+      [key]: resolveStateValue(current[key], value),
+    }));
+  };
+
+  const updateAdminPlanFilters = <K extends keyof AdminPlanFilterState>(
+    key: K,
+    value: AdminPlanFilterState[K] | ((previous: AdminPlanFilterState[K]) => AdminPlanFilterState[K]),
+  ) => {
+    updateFilterState('adminPlan', (current) => ({
+      ...current,
+      [key]: resolveStateValue(current[key], value),
+    }));
+  };
+
+  const setHistoryStatusFilter: React.Dispatch<React.SetStateAction<HistoryStatusFilter>> = (value) => {
+    updateFilterState('historyStatus', value);
+  };
+
+  const setBusinessPermissionFilter: React.Dispatch<React.SetStateAction<string>> = (value) => {
+    updateFilterState('businessPermission', value);
+  };
+
+  const setIsTransactionFiltersOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+    updateTransactionFilters('isOpen', value);
+  };
+
+  const setIsAdminPlanFiltersOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+    updateAdminPlanFilters('isOpen', value);
+  };
+
+  const setDepartmentSearchInput: React.Dispatch<React.SetStateAction<string>> = (value) => {
+    updateDepartmentFilters('searchInput', value);
+  };
+
+  const setDepartmentAccountStatusFilter: React.Dispatch<React.SetStateAction<DepartmentAccountStatusFilter>> = (value) => {
+    updateDepartmentFilters('accountStatus', value);
+  };
+
   const currentEmployee = currentRole === 'Employee'
     ? employees.find((employee) => employee.id === currentUser.id) || null
     : null;
@@ -401,19 +546,10 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     : availableCounters[0]?.id || '';
   const selectedCounter = availableCounters.find((counter) => counter.id === safeSelectedCounterId) || availableCounters[0];
   const selectedDepartmentName = selectedCounter?.name || '';
-  const departmentScopedServices = getServicesForDepartment(services, selectedCounter?.id);
-  const visibleServices = getVisibleServices(accessContext, departmentScopedServices);
-  const visibleCustomers = useMemo(
-    () => getVisibleCustomers(accessContext, customers),
-    [accessContext, customers],
-  );
-  const visibleTransactionHistory = useMemo(
-    () => getVisibleTransactions(
-      accessContext,
-      transactionHistory,
-    ),
-    [accessContext, transactionHistory],
-  );
+  const departmentScopedServices = getServicesForDepartment(services, safeSelectedCounterId || undefined);
+  const visibleServices = useVisibleServiceRecords(accessContext, departmentScopedServices);
+  const visibleCustomers = useVisibleCustomerRecords(accessContext, customers);
+  const visibleTransactionHistory = useVisibleTransactionRecords(accessContext, transactionHistory);
   const activeAccounts = useMemo(
     () => accounts.filter((account) => account.status === 'Active').length,
     [accounts],
@@ -428,50 +564,48 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       : historyEvents.filter((event) => event.status === historyStatusFilter),
     [historyEvents, historyStatusFilter],
   );
-  const favoriteServices = visibleServices.filter((service) => favoriteServiceIds.includes(service.id));
+  const favoriteServices = useMemo(
+    () => visibleServices.filter((service) => favoriteServiceIds.includes(service.id)),
+    [favoriteServiceIds, visibleServices],
+  );
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-
-  const searchMatches = getSearchMatches({
+  const isSearchActive = !isBusinessSubscriptionLocked && normalizedSearchQuery.length > 0;
+  const searchMatches = useSearchResults({
     context: accessContext,
-    query: normalizedSearchQuery,
-    services: getServicesForDepartment(services, selectedCounter?.id),
+    query: isSearchActive ? normalizedSearchQuery : '',
+    services: departmentScopedServices,
     customers,
     transactions: transactionHistory,
   });
 
-  const filteredBusinesses = useMemo(() => {
-    if (businessPermissionFilter === 'all') {
-      return businesses;
-    }
-
-    return businesses.filter((business) =>
-      isPermissionEnabled(business.permissions, businessPermissionFilter)
-    );
-  }, [businessPermissionFilter, businesses]);
+  const filteredBusinesses = useFilteredBusinesses(businesses, businessPermissionFilter);
   const businessPermissionFilterLabel = businessPermissionFilter === 'all'
     ? 'All permissions'
     : customerPermissionOptions.find((option) => option.id === businessPermissionFilter)?.label || 'Selected permission';
+  const customerListPageUi = getCustomerWorkspaceViewUi('list');
+  const customerPaymentsPageUi = getCustomerWorkspaceViewUi('payments');
+  const customerOutstandingPageUi = getCustomerWorkspaceViewUi('outstanding');
   const customerPageOptions = currentRole === 'Admin'
-    ? [{ id: 'list' as const, label: 'Business List', description: 'Manage business directory records.' }]
+    ? [{ id: 'list' as const, label: customerListPageUi.label, description: 'Manage business directory records.' }]
     : ([
         isPermissionEnabled(accessContext.permissions, 'customers.list')
-          ? { id: 'list' as const, label: 'Customer List', description: 'View and manage customer directory records.' }
+          ? { id: 'list' as const, label: customerListPageUi.label, description: customerListPageUi.emptyDescription }
           : null,
         isPermissionEnabled(accessContext.permissions, 'customers.payment_list')
-          ? { id: 'payments' as const, label: 'Customer Payment List', description: 'Review customer payment records and statuses.' }
+          ? { id: 'payments' as const, label: customerPaymentsPageUi.label, description: customerPaymentsPageUi.emptyDescription }
           : null,
         isPermissionEnabled(accessContext.permissions, 'customers.outstanding')
-          ? { id: 'outstanding' as const, label: 'Customer Outstanding', description: 'Track pending customer balances.' }
+          ? { id: 'outstanding' as const, label: customerOutstandingPageUi.label, description: customerOutstandingPageUi.emptyDescription }
           : null,
       ].filter((option): option is { id: CustomerWorkspaceView; label: string; description: string } => Boolean(option)));
-  const requestedCustomerPageCopy = customerPageCopyMap[customerPageView];
+  const requestedCustomerPageCopy = getCustomerWorkspaceViewUi(customerPageView);
   const requestedCustomerPageOption = customerPageOptions.find((option) => option.id === customerPageView) || null;
   const hasRequestedCustomerPageAccess = currentRole === 'Admin'
     ? customerPageView === 'list'
     : Boolean(requestedCustomerPageOption);
-  const customerPaymentTransactions = currentRole === 'Admin'
-    ? []
-    : [...transactionHistory].sort((left, right) => right.date.localeCompare(left.date));
+  const customerPaymentTransactions = useSortedTransactionRecords(
+    currentRole === 'Admin' ? emptyTransactionRecords : transactionHistory,
+  );
   const customerDirectoryRecords = currentRole === 'Admin' ? filteredBusinesses : visibleCustomers;
   const customerOutstandingRows: CustomerOutstandingRow[] = currentRole === 'Admin'
     ? []
@@ -557,25 +691,37 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const customerSectionTitle = currentRole === 'Admin'
     ? customerPageView === 'list'
       ? 'Manage the business directory'
-      : requestedCustomerPageCopy.title
-    : requestedCustomerPageCopy.title;
+      : requestedCustomerPageCopy.label
+    : requestedCustomerPageCopy.label;
   const customerSectionDescription = currentRole === 'Admin'
     ? customerPageView === 'list'
       ? 'Monitor the businesses managed in the platform from one place.'
       : 'The admin workspace only supports the business directory on customer routes.'
-    : requestedCustomerPageCopy.description;
+    : requestedCustomerPageCopy.emptyDescription;
+  const activeVisibleServiceCount = visibleServices.filter((service) => service.status === 'Active').length;
+  const serviceCategoryCount = new Set(visibleServices.map((service) => service.category)).size;
+  const scopedTransactionRecords = selectedCounter?.id
+    ? visibleTransactionHistory.filter((transaction) => transaction.departmentId === selectedCounter.id)
+    : visibleTransactionHistory;
+  const scopedCollectedAmount = scopedTransactionRecords.reduce((total, transaction) => total + transaction.paidAmount, 0);
 
   const serviceSummary = [
     {
       title: 'Total Services',
       value: `${visibleServices.length}`,
-      detail: selectedDepartmentName ? `${selectedDepartmentName} catalog` : 'Active service items',
+      detail: selectedDepartmentName ? `${selectedDepartmentName} catalog` : 'Visible service catalog',
       icon: <FaCog />,
       colorClass: 'bg-primary',
     },
-    { title: 'Revenue Streams', value: 'Rs. 18.2K', detail: 'Last 30 days', icon: <FaDollarSign />, colorClass: 'bg-success' },
-    { title: 'Pending Updates', value: '6', detail: 'Service rules to review', icon: <FaHourglassHalf />, colorClass: 'bg-warning' },
-    { title: 'New Requests', value: '13', detail: 'Customer submitted tasks', icon: <FaPlusCircle />, colorClass: 'bg-info' },
+    { title: 'Active Services', value: `${activeVisibleServiceCount}`, detail: 'Ready for new transactions', icon: <FaChartLine />, colorClass: 'bg-success' },
+    {
+      title: 'Collected Amount',
+      value: `Rs. ${scopedCollectedAmount.toLocaleString('en-IN')}`,
+      detail: selectedDepartmentName ? `${selectedDepartmentName} collections` : 'Across visible transactions',
+      icon: <FaDollarSign />,
+      colorClass: 'bg-info',
+    },
+    { title: 'Categories', value: `${serviceCategoryCount}`, detail: 'Distinct service groups on record', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
   ];
 
   const customerSummary = useMemo(() => {
@@ -591,13 +737,25 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       ];
     }
 
+    const activeCustomers = visibleCustomers.filter((customer) => customer.status !== 'Inactive').length;
+    const customersWithEmail = visibleCustomers.filter((customer) => customer.email).length;
+
     return [
       { title: `Total ${customerEntityPlural}`, value: `${customerDirectoryCount}`, detail: 'All registered customers', icon: <FaUsers />, colorClass: 'bg-primary' },
-      { title: 'Active Users', value: '834', detail: 'Logged in last 7 days', icon: <FaUsersCog />, colorClass: 'bg-success' },
-      { title: 'New Leads', value: '47', detail: 'Captured this week', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
-      { title: 'Response Rate', value: '92%', detail: 'Customer interactions', icon: <FaChartLine />, colorClass: 'bg-info' },
+      { title: 'Active Customers', value: `${activeCustomers}`, detail: 'Available for new transactions', icon: <FaUsersCog />, colorClass: 'bg-success' },
+      { title: 'With Email', value: `${customersWithEmail}`, detail: 'Contactable customer records', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
+      { title: 'Outstanding', value: `${customerOutstandingRows.length}`, detail: 'Customers with pending balances', icon: <FaHourglassHalf />, colorClass: 'bg-info' },
     ];
-  }, [businessPermissionFilterLabel, businesses, currentRole, customerDirectoryCount, customerEntityPlural, filteredBusinesses.length]);
+  }, [
+    businessPermissionFilterLabel,
+    businesses,
+    currentRole,
+    customerDirectoryCount,
+    customerEntityPlural,
+    customerOutstandingRows.length,
+    filteredBusinesses.length,
+    visibleCustomers,
+  ]);
 
   const accountSummary = useMemo(() => [
     { title: 'Total Accounts', value: `${accounts.length}`, detail: 'Bank accounts on record', icon: <FaUniversity />, colorClass: 'bg-primary' },
@@ -606,53 +764,20 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     { title: 'Review Needed', value: `${accounts.length - activeAccounts}`, detail: 'Inactive or paused accounts', icon: <FaHourglassHalf />, colorClass: 'bg-warning' },
   ], [accounts.length, activeAccounts, totalAccountBalance]);
 
-  const transactionStats = useMemo(
-    () => getTransactionSummary(visibleTransactionHistory),
-    [visibleTransactionHistory],
-  );
-  const transactionDepartmentOptions = useMemo(
-    () => Array.from(new Set(visibleTransactionHistory.map((transaction) => transaction.departmentName).filter(Boolean))),
-    [visibleTransactionHistory],
-  );
-  const transactionHandlerOptions = useMemo(
-    () => Array.from(new Set(visibleTransactionHistory.map((transaction) => transaction.handledByName).filter(Boolean))),
-    [visibleTransactionHistory],
-  );
-  const filteredTransactionRecords = useMemo(() => {
-    const normalizedQuery = transactionFilterQuery.trim().toLowerCase();
-
-    return visibleTransactionHistory.filter((transaction) => {
-      const matchesQuery = !normalizedQuery || [
-        transaction.transactionNumber,
-        transaction.customerName,
-        transaction.customerPhone,
-        transaction.service,
-        transaction.paymentMode,
-        transaction.departmentName,
-        transaction.handledByName,
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(normalizedQuery);
-      const matchesStatus = transactionStatusFilter === 'All' || transaction.status === transactionStatusFilter;
-      const matchesPaymentMode = transactionPaymentModeFilter === 'All' || transaction.paymentMode === transactionPaymentModeFilter;
-      const matchesDepartment = transactionDepartmentFilter === 'All' || transaction.departmentName === transactionDepartmentFilter;
-      const matchesHandler = transactionHandlerFilter === 'All' || transaction.handledByName === transactionHandlerFilter;
-      const matchesFromDate = !transactionDateFrom || transaction.date >= transactionDateFrom;
-      const matchesToDate = !transactionDateTo || transaction.date <= transactionDateTo;
-
-      return matchesQuery && matchesStatus && matchesPaymentMode && matchesDepartment && matchesHandler && matchesFromDate && matchesToDate;
-    });
-  }, [
-    transactionDateFrom,
-    transactionDateTo,
-    transactionDepartmentFilter,
-    transactionFilterQuery,
-    transactionHandlerFilter,
-    transactionPaymentModeFilter,
-    transactionStatusFilter,
-    visibleTransactionHistory,
-  ]);
+  const transactionStats = useTransactionStats(visibleTransactionHistory);
+  const {
+    departments: transactionDepartmentOptions,
+    handlers: transactionHandlerOptions,
+  } = useTransactionFilterOptions(visibleTransactionHistory);
+  const filteredTransactionRecords = useFilteredTransactionRecords(visibleTransactionHistory, {
+    query: transactionFilterQuery,
+    status: transactionStatusFilter,
+    paymentMode: transactionPaymentModeFilter,
+    department: transactionDepartmentFilter,
+    handler: transactionHandlerFilter,
+    dateFrom: transactionDateFrom,
+    dateTo: transactionDateTo,
+  });
 
   const transactionSummary = useMemo(() => [
     { title: 'Total Volume', value: `Rs. ${transactionStats.totalVolume.toLocaleString('en-IN')}`, detail: 'Transactions this month', icon: <FaReceipt />, colorClass: 'bg-primary' },
@@ -664,7 +789,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const adminBusinessPlanRows = useMemo(() => (
     businesses.map((business) => {
       const accessState = getBusinessAccessState(business);
-      const businessWorkspace = state.businessWorkspacesById[business.id];
+      const businessWorkspace = businessWorkspacesById[business.id];
 
       return {
         businessId: business.id,
@@ -689,7 +814,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         isLocked: accessState.status === 'Inactive',
       };
     })
-  ), [businesses, state.businessWorkspacesById]);
+  ), [businessWorkspacesById, businesses]);
 
   const adminExpiringBusinessRows = useMemo(
     () => adminBusinessPlanRows
@@ -727,17 +852,16 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const notifications = currentRole === 'Admin'
     ? [...adminGeneratedNotifications, ...baseNotifications]
     : baseNotifications;
+  const deferredAdminPlanSearchQuery = useDeferredValue(adminPlanSearchQuery.trim().toLowerCase());
 
   const filteredAdminPlanRows = useMemo(() => {
-    const normalizedQuery = adminPlanSearchQuery.trim().toLowerCase();
-
     return adminBusinessPlanRows.filter((row) => {
-      const matchesQuery = !normalizedQuery || [
+      const matchesQuery = !deferredAdminPlanSearchQuery || [
         row.businessName,
         row.businessPhone,
         row.businessEmail,
         row.planLabel,
-      ].join(' ').toLowerCase().includes(normalizedQuery);
+      ].join(' ').toLowerCase().includes(deferredAdminPlanSearchQuery);
       const matchesPlan = adminPlanIdFilter === 'All' || row.planId === adminPlanIdFilter;
       const matchesPlanStatus = adminPlanStatusFilter === 'All' || row.planStatus === adminPlanStatusFilter;
       const matchesWorkspace = adminPlanWorkspaceFilter === 'All'
@@ -751,9 +875,9 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     });
   }, [
     adminBusinessPlanRows,
+    deferredAdminPlanSearchQuery,
     adminPlanExpiryFilter,
     adminPlanIdFilter,
-    adminPlanSearchQuery,
     adminPlanStatusFilter,
     adminPlanWorkspaceFilter,
   ]);
@@ -836,7 +960,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     () => counters.map((counter) => ({
       counter,
       linkedAccounts: getDepartmentLinkedAccounts(counter, accounts),
-      defaultAccount: getDepartmentDefaultAccount(counter, accounts),
+      defaultAccount: getDepartmentDefaultAccount(counter, accounts) || null,
     })),
     [accounts, counters],
   );
@@ -894,31 +1018,25 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   };
 
   const handleDepartmentSearch = () => {
-    setDepartmentSearchQuery(departmentSearchInput.trim().toLowerCase());
+    updateDepartmentFilters('searchQuery', departmentSearchInput.trim().toLowerCase());
   };
 
   const clearDepartmentFilters = () => {
-    setDepartmentSearchInput('');
-    setDepartmentSearchQuery('');
-    setDepartmentAccountStatusFilter('All');
+    updateFilterState('department', initialDepartmentFilterState);
   };
 
   const clearTransactionFilters = () => {
-    setTransactionFilterQuery('');
-    setTransactionStatusFilter('All');
-    setTransactionPaymentModeFilter('All');
-    setTransactionDepartmentFilter('All');
-    setTransactionHandlerFilter('All');
-    setTransactionDateFrom('');
-    setTransactionDateTo('');
+    updateFilterState('transaction', (current) => ({
+      ...initialTransactionFilterState,
+      isOpen: current.isOpen,
+    }));
   };
 
   const clearAdminPlanFilters = () => {
-    setAdminPlanSearchQuery('');
-    setAdminPlanIdFilter('All');
-    setAdminPlanStatusFilter('All');
-    setAdminPlanWorkspaceFilter('All');
-    setAdminPlanExpiryFilter('All');
+    updateFilterState('adminPlan', (current) => ({
+      ...initialAdminPlanFilterState,
+      isOpen: current.isOpen,
+    }));
   };
 
   const renderTransactionFilters = () => (
@@ -943,7 +1061,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
               className="form-control"
               placeholder="Search transaction number, customer, service, department, or employee"
               value={transactionFilterQuery}
-              onChange={(event) => setTransactionFilterQuery(event.target.value)}
+              onChange={(event) => updateTransactionFilters('query', event.target.value)}
             />
           </div>
           <div className="app-field mb-0">
@@ -951,7 +1069,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={transactionStatusFilter}
-              onChange={(event) => setTransactionStatusFilter(event.target.value as 'All' | 'completed' | 'pending' | 'cancelled' | 'refunded')}
+              onChange={(event) => updateTransactionFilters('status', event.target.value as TransactionStatusFilter)}
             >
               <option value="All">All</option>
               <option value="completed">Completed</option>
@@ -965,7 +1083,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={transactionPaymentModeFilter}
-              onChange={(event) => setTransactionPaymentModeFilter(event.target.value as 'All' | 'cash' | 'upi' | 'bank' | 'card')}
+              onChange={(event) => updateTransactionFilters('paymentMode', event.target.value as TransactionPaymentModeFilter)}
             >
               <option value="All">All</option>
               <option value="cash">Cash</option>
@@ -979,7 +1097,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={transactionDepartmentFilter}
-              onChange={(event) => setTransactionDepartmentFilter(event.target.value)}
+              onChange={(event) => updateTransactionFilters('department', event.target.value)}
             >
               <option value="All">All</option>
               {transactionDepartmentOptions.map((department) => (
@@ -994,7 +1112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={transactionHandlerFilter}
-              onChange={(event) => setTransactionHandlerFilter(event.target.value)}
+              onChange={(event) => updateTransactionFilters('handler', event.target.value)}
             >
               <option value="All">All</option>
               {transactionHandlerOptions.map((handler) => (
@@ -1010,7 +1128,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
               type="date"
               className="form-control"
               value={transactionDateFrom}
-              onChange={(event) => setTransactionDateFrom(event.target.value)}
+              onChange={(event) => updateTransactionFilters('dateFrom', event.target.value)}
             />
           </div>
           <div className="app-field mb-0">
@@ -1019,7 +1137,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
               type="date"
               className="form-control"
               value={transactionDateTo}
-              onChange={(event) => setTransactionDateTo(event.target.value)}
+              onChange={(event) => updateTransactionFilters('dateTo', event.target.value)}
             />
           </div>
           <div className="department-toolbar__actions">
@@ -1064,7 +1182,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
               className="form-control"
               placeholder="Search business name, phone, email, or plan"
               value={adminPlanSearchQuery}
-              onChange={(event) => setAdminPlanSearchQuery(event.target.value)}
+              onChange={(event) => updateAdminPlanFilters('searchQuery', event.target.value)}
             />
           </div>
           <div className="app-field mb-0">
@@ -1072,7 +1190,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={adminPlanIdFilter}
-              onChange={(event) => setAdminPlanIdFilter(event.target.value)}
+              onChange={(event) => updateAdminPlanFilters('planId', event.target.value)}
             >
               <option value="All">All</option>
               {businessSubscriptionPlans.map((plan) => (
@@ -1087,7 +1205,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={adminPlanStatusFilter}
-              onChange={(event) => setAdminPlanStatusFilter(event.target.value as 'All' | BusinessSubscription['status'])}
+              onChange={(event) => updateAdminPlanFilters('status', event.target.value as 'All' | BusinessSubscription['status'])}
             >
               <option value="All">All</option>
               <option value="trial">Trial</option>
@@ -1101,7 +1219,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={adminPlanWorkspaceFilter}
-              onChange={(event) => setAdminPlanWorkspaceFilter(event.target.value as 'All' | 'Active' | 'Locked')}
+              onChange={(event) => updateAdminPlanFilters('workspace', event.target.value as AdminPlanWorkspaceFilter)}
             >
               <option value="All">All</option>
               <option value="Active">Active</option>
@@ -1113,7 +1231,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             <select
               className="form-select"
               value={adminPlanExpiryFilter}
-              onChange={(event) => setAdminPlanExpiryFilter(event.target.value as 'All' | 'Expiring Soon' | 'Expired' | 'Cancelled')}
+              onChange={(event) => updateAdminPlanFilters('expiry', event.target.value as AdminPlanExpiryFilter)}
             >
               <option value="All">All</option>
               <option value="Expiring Soon">Expiring Soon</option>
@@ -1139,7 +1257,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       setSelectedCounterId(options.departmentId);
     }
 
-    setWorkflowDraft({
+    updateUiState('workflowDraft', {
       token: createRecordId(),
       ...draft,
     });
@@ -1153,22 +1271,23 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   }
 
   const closeModal = () => {
-    setActiveModal(null);
-    setEditingBusiness(null);
-    setSelectedPlanBusiness(null);
-    setEditingService(null);
-    setEditingCustomer(null);
-    setEditingEmployee(null);
-    setEditingDepartment(null);
-    setEditingAccount(null);
-    setEditingExpense(null);
-    setEditingTransaction(null);
-    setSelectedTransaction(null);
-    setSelectedCustomerHistory(null);
-    setSelectedHistoryEvent(null);
-    setSelectedReport(null);
-    setSelectedOption(null);
-    setPendingDelete(null);
+    updateUiState('activeModal', null);
+    updateUiState('editingBusiness', null);
+    updateUiState('selectedPlanBusiness', null);
+    updateUiState('editingService', null);
+    updateUiState('editingCustomer', null);
+    updateUiState('editingEmployee', null);
+    updateUiState('editingDepartment', null);
+    updateUiState('editingAccount', null);
+    updateUiState('editingExpense', null);
+    updateUiState('editingTransaction', null);
+    updateUiState('selectedTransaction', null);
+    updateUiState('selectedCustomerHistory', null);
+    updateUiState('selectedHistoryEvent', null);
+    updateUiState('selectedReport', null);
+    updateUiState('selectedOption', null);
+    updateUiState('pendingDelete', null);
+    updateUiState('transactionDeleteReason', '');
   };
 
   const addNotification = (type: 'success' | 'warning' | 'error' | 'info', message: string) => {
@@ -1179,7 +1298,8 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     });
   };
 
-  const getModuleLabel = (moduleId: string) => getModuleDisplayById(moduleId, currentRole)?.label || 'this module';
+  const getModuleLabel = (moduleId: string) =>
+    getModuleUiLabel(moduleId) || getModuleDisplayById(moduleId, currentRole)?.label || 'this module';
 
   function canPerformModuleAction(moduleId: string, action: 'add' | 'edit' | 'delete') {
     return canPerformModuleActionForSession(accessContext, moduleId, action);
@@ -1213,7 +1333,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     if (!normalizedEmail) return false;
     if (normalizedEmail === 'admin@enest.com') return true;
 
-    const businessConflict = state.businesses.some((business) =>
+    const businessConflict = businesses.some((business) =>
       normalizeEmail(business.email) === normalizedEmail && business.id !== excludedBusinessId
     );
 
@@ -1221,7 +1341,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       return true;
     }
 
-    return Object.values(state.businessWorkspacesById).some((tenantWorkspace) =>
+    return Object.values(businessWorkspacesById).some((tenantWorkspace) =>
       tenantWorkspace.employees.some((employee) => normalizeEmail(employee.email) === normalizedEmail)
     );
   };
@@ -1231,12 +1351,12 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     if (!normalizedEmail) return false;
     if (normalizedEmail === 'admin@enest.com') return true;
 
-    const businessConflict = state.businesses.some((business) => normalizeEmail(business.email) === normalizedEmail);
+    const businessConflict = businesses.some((business) => normalizeEmail(business.email) === normalizedEmail);
     if (businessConflict) {
       return true;
     }
 
-    return Object.values(state.businessWorkspacesById).some((tenantWorkspace) =>
+    return Object.values(businessWorkspacesById).some((tenantWorkspace) =>
       tenantWorkspace.employees.some((employee) =>
         normalizeEmail(employee.email) === normalizedEmail && employee.id !== excludedEmployeeId
       )
@@ -1319,13 +1439,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   };
 
   const renderSummaryCards = (cards: SummaryCardProps[]) => (
-    <div className="row g-4 mb-4 summary-grid">
-      {cards.map((item) => (
-        <div key={item.title} className="col-12 col-md-6 col-xl-3">
-          <SummaryCard {...item} />
-        </div>
-      ))}
-    </div>
+    <SummaryGrid cards={cards} />
   );
 
   const renderBusinessPlanSection = (lockedMode = false) => {
@@ -1381,7 +1495,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
           </div>
 
           <div className="business-plan-card__actions">
-            <button type="button" className="btn-app btn-app-primary" onClick={() => setActiveModal('manage-plan')}>
+            <button type="button" className="btn-app btn-app-primary" onClick={() => updateUiState('activeModal', 'manage-plan')}>
               {lockedMode ? 'Renew Or Update Plan' : 'Update Plan'}
             </button>
             {!lockedMode ? (
@@ -1434,7 +1548,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         </section>
       </div>
 
-      {renderSummaryCards(adminDashboardSummary)}
+      <SummaryGrid cards={adminDashboardSummary} />
 
       <div className="col-12 col-xl-6 dashboard-balance-col">
         <section className="panel p-4 dashboard-balance-panel">
@@ -1561,16 +1675,16 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const handleEditAccount = (account: Account) => {
     if (!requireModuleAction('accounts', 'edit')) return;
 
-    setEditingAccount(account);
-    setActiveModal('edit-account');
+    updateUiState('editingAccount', account);
+    updateUiState('activeModal', 'edit-account');
   };
 
   const handleEditService = (service: Service) => {
     if (!requireModuleAction('services', 'edit')) return;
     if (!ensureEmployeeDepartmentAccess('update services')) return;
 
-    setEditingService(service);
-    setActiveModal('edit-service');
+    updateUiState('editingService', service);
+    updateUiState('activeModal', 'edit-service');
   };
 
   const handleEditCustomer = (recordId: string) => {
@@ -1580,36 +1694,36 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       const business = businesses.find((item) => item.id === recordId);
       if (!business) return;
 
-      setEditingBusiness(business);
+      updateUiState('editingBusiness', business);
     } else {
       const customer = workspace.customers.find((item) => item.id === recordId);
       if (!customer) return;
 
-      setEditingCustomer(customer);
+      updateUiState('editingCustomer', customer);
     }
-    setActiveModal('edit-customer');
+    updateUiState('activeModal', 'edit-customer');
   };
 
   const handleEditEmployee = (employee: Employee) => {
     if (!requireModuleAction('employee', 'edit')) return;
 
-    setEditingEmployee(employee);
-    setActiveModal('edit-employee');
+    updateUiState('editingEmployee', employee);
+    updateUiState('activeModal', 'edit-employee');
   };
 
   const handleEditDepartment = (counter: Counter) => {
     if (!requireModuleAction('departments', 'edit')) return;
 
-    setEditingDepartment(counter);
-    setActiveModal('edit-department');
+    updateUiState('editingDepartment', counter);
+    updateUiState('activeModal', 'edit-department');
   };
 
   const handleEditTransaction = (transaction: Transaction) => {
     if (!requireModuleAction('transactions', 'edit')) return;
     if (!ensureEmployeeDepartmentAccess('edit transactions')) return;
 
-    setEditingTransaction(transaction);
-    setActiveModal('edit-transaction');
+    updateUiState('editingTransaction', transaction);
+    updateUiState('activeModal', 'edit-transaction');
   };
 
   const handleViewCustomerHistory = (recordId: string) => {
@@ -1619,15 +1733,15 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     const customer = workspace.customers.find((item) => item.id === recordId);
     if (!customer) return;
 
-    setSelectedCustomerHistory(customer);
-    setActiveModal('view-customer-history');
+    updateUiState('selectedCustomerHistory', customer);
+    updateUiState('activeModal', 'view-customer-history');
   };
 
   const handleViewTransaction = (transaction: Transaction) => {
     if (!requireModuleAccess('transactions', 'view')) return;
 
-    setSelectedTransaction(transaction);
-    setActiveModal('view-transaction');
+    updateUiState('selectedTransaction', transaction);
+    updateUiState('activeModal', 'view-transaction');
   };
 
   const handleDownloadReceipt = (transaction: Transaction) => {
@@ -1689,25 +1803,32 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
-    if (transaction.status === 'cancelled') {
-      addNotification('info', `${transaction.transactionNumber} is already cancelled.`);
+    const transition = canTransitionTransactionStatus(transaction.status, 'cancelled');
+    if (!transition.allowed) {
+      addNotification('warning', transition.error);
       return;
     }
 
     const confirmed = window.confirm(`Cancel transaction ${transaction.transactionNumber} for ${transaction.customerName}?`);
     if (!confirmed) return;
 
+    const now = new Date().toISOString();
+    const auditNote = `Cancelled by ${displayUserName} on ${now.split('T')[0]}`;
+
     dispatch({
       type: 'UPDATE_TRANSACTION',
       businessId,
       payload: {
         ...transaction,
-        paidAmount: 0,
-        dueAmount: 0,
         status: 'cancelled',
         note: transaction.note
-          ? `${transaction.note} | Cancelled by ${displayUserName}`
-          : `Cancelled by ${displayUserName}`,
+          ? `${transaction.note} | ${auditNote}`
+          : auditNote,
+        cancelledAt: now,
+        cancelledBy: displayUserName,
+        updatedAt: now,
+        updatedBy: displayUserName,
+        lastAuditAction: 'cancelled',
       },
     });
     addHistoryEvent(`Transaction ${transaction.transactionNumber} cancelled for ${transaction.customerName}`, 'Transactions', 'Failed');
@@ -1718,29 +1839,29 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const handleViewHistory = (event: HistoryEvent) => {
     if (!requireModuleAccess('history', 'view')) return;
 
-    setSelectedHistoryEvent(event);
-    setActiveModal('view-history');
+    updateUiState('selectedHistoryEvent', event);
+    updateUiState('activeModal', 'view-history');
   };
 
   const handleViewReport = (report: ReportItem) => {
     if (!requireModuleAccess('reports', 'view')) return;
 
-    setSelectedReport(report);
-    setActiveModal('view-report');
+    updateUiState('selectedReport', report);
+    updateUiState('activeModal', 'view-report');
   };
 
   const handleConfigureOption = (option: AdditionOption) => {
     if (!requireModuleManagement('additions', 'configure')) return;
 
-    setSelectedOption(option);
-    setActiveModal('configure-option');
+    updateUiState('selectedOption', option);
+    updateUiState('activeModal', 'configure-option');
   };
 
   const handleEditExpense = (expense: Expense) => {
     if (!requireModuleAction('expense', 'edit')) return;
 
-    setEditingExpense(expense);
-    setActiveModal('edit-expense');
+    updateUiState('editingExpense', expense);
+    updateUiState('activeModal', 'edit-expense');
   };
 
   const handleDeleteRecord = (
@@ -1755,19 +1876,19 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         actionType,
         id,
         label: businesses.find((business) => business.id === id)?.name || 'this business',
-        module: 'Businesses',
+        module: getModuleLabel('customers'),
       },
       DELETE_ACCOUNT: {
         actionType,
         id,
         label: accounts.find((account) => account.id === id)?.accountHolder || 'this account',
-        module: 'Accounts',
+        module: getModuleLabel('accounts'),
       },
       DELETE_SERVICE: {
         actionType,
         id,
         label: services.find((service) => service.id === id)?.name || 'this service',
-        module: 'Services',
+        module: getModuleLabel('services'),
       },
       DELETE_CUSTOMER: {
         actionType,
@@ -1779,48 +1900,49 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         actionType,
         id,
         label: employees.find((employee) => employee.id === id)?.name || 'this employee',
-        module: 'Employees',
+        module: getModuleLabel('employee'),
       },
       DELETE_COUNTER: {
         actionType,
         id,
         label: counters.find((counter) => counter.id === id)?.name || 'this department',
-        module: 'Department',
+        module: getModuleLabel('departments'),
       },
       DELETE_EXPENSE: {
         actionType,
         id,
         label: expenses.find((expense) => expense.id === id)?.title || 'this expense',
-        module: 'Expense',
+        module: getModuleLabel('expense'),
       },
       DELETE_TRANSACTION: {
         actionType,
         id,
-        label: transactionHistory.find((transaction) => transaction.id === id)?.customerName || 'this transaction',
-        module: 'Transactions',
+        label: transactionHistory.find((transaction) => transaction.id === id)?.transactionNumber || 'this transaction',
+        module: getModuleLabel('transactions'),
       },
       DELETE_HISTORY_EVENT: {
         actionType,
         id,
         label: historyEvents.find((event) => event.id === id)?.title || 'this history record',
-        module: 'History',
+        module: getModuleLabel('history'),
       },
       DELETE_REPORT: {
         actionType,
         id,
         label: reports.find((report) => report.id === id)?.name || 'this report',
-        module: 'Reports',
+        module: getModuleLabel('reports'),
       },
       DELETE_ADDITION_OPTION: {
         actionType,
         id,
         label: additionOptions.find((option) => option.id === id)?.title || 'this setting',
-        module: 'System Settings',
+        module: getModuleLabel('additions'),
       },
     };
 
-    setPendingDelete(deleteDetails[actionType]);
-    setActiveModal('confirm-delete');
+    updateUiState('pendingDelete', deleteDetails[actionType]);
+    updateUiState('transactionDeleteReason', '');
+    updateUiState('activeModal', 'confirm-delete');
   };
 
   const handleDeleteService = (id: string) => {
@@ -1839,6 +1961,29 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       dispatch({ type: 'DELETE_REPORT', businessId: currentRole === 'Admin' ? undefined : currentUser.businessId, payload: pendingDelete.id });
     } else if (pendingDelete.actionType === 'DELETE_ADDITION_OPTION') {
       dispatch({ type: 'DELETE_ADDITION_OPTION', payload: pendingDelete.id });
+    } else if (pendingDelete.actionType === 'DELETE_TRANSACTION') {
+      const businessId = requireBusinessWorkspaceId();
+      if (!businessId) return;
+
+      const deleteReason = transactionDeleteReason.trim();
+      if (!deleteReason) {
+        addNotification('warning', 'Enter a reason before archiving this transaction.');
+        return;
+      }
+
+      dispatch({
+        type: 'DELETE_TRANSACTION',
+        businessId,
+        payload: {
+          id: pendingDelete.id,
+          deletedBy: displayUserName,
+          deleteReason,
+        },
+      });
+      addNotification('success', `${pendingDelete.label} archived successfully.`);
+      addHistoryEvent(`${pendingDelete.label} archived`, pendingDelete.module);
+      closeModal();
+      return;
     } else {
       const businessId = requireBusinessWorkspaceId();
       if (!businessId) return;
@@ -1930,44 +2075,44 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       case 'favorites':
         if (!requireModuleAccess('services', 'view')) return;
 
-        setActiveModal('favorites');
+        updateUiState('activeModal', 'favorites');
         break;
       case 'add-service':
         if (!requireModuleAction('services', 'add')) return;
         if (!ensureEmployeeDepartmentAccess('create services')) return;
 
         openModule('services');
-        setActiveModal('add-service');
+        updateUiState('activeModal', 'add-service');
         break;
       case 'add-customer':
         if (!requireModuleAction('customers', 'add')) return;
 
         openModule('customers');
-        setActiveModal('add-customer');
+        updateUiState('activeModal', 'add-customer');
         break;
       case 'add-account':
         if (!requireModuleAction('accounts', 'add')) return;
 
         openModule('accounts');
-        setActiveModal('add-account');
+        updateUiState('activeModal', 'add-account');
         break;
       case 'add-employee':
         if (!requireModuleAction('employee', 'add')) return;
 
         openModule('employee');
-        setActiveModal('add-employee');
+        updateUiState('activeModal', 'add-employee');
         break;
       case 'add-department':
         if (!requireModuleAction('departments', 'add')) return;
 
         openModule('departments');
-        setActiveModal('add-department');
+        updateUiState('activeModal', 'add-department');
         break;
       case 'add-expense':
         if (!requireModuleAction('expense', 'add')) return;
 
         openModule('expense');
-        setActiveModal('add-expense');
+        updateUiState('activeModal', 'add-expense');
         break;
       case 'export-transactions':
         if (!requireModuleManagement('transactions', 'export')) return;
@@ -1984,7 +2129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         if (!requireModuleManagement('additions', 'update')) return;
 
         openModule('additions');
-        setActiveModal('manage-options');
+        updateUiState('activeModal', 'manage-options');
         break;
       default:
         addNotification('info', 'Action is ready.');
@@ -2121,12 +2266,18 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const handlePlanCancel = () => {
     const targetBusiness = currentRole === 'Customer' ? currentBusiness : selectedPlanBusiness;
     if (!targetBusiness) {
+      addNotification('error', 'The selected plan details are no longer available.');
+      closeModal();
+      onNavigate('dashboard');
       return;
     }
     const targetAccessState = getBusinessAccessState(targetBusiness);
-
-    const confirmed = window.confirm(`Cancel the current plan for ${targetBusiness.name || 'this business workspace'}?`);
-    if (!confirmed) return;
+    if (!targetAccessState) {
+      addNotification('error', 'The selected plan details are no longer available.');
+      closeModal();
+      onNavigate('dashboard');
+      return;
+    }
 
     persistBusinessProfileUpdate(targetBusiness, {
       subscription: {
@@ -2151,8 +2302,8 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     const business = businesses.find((item) => item.id === businessId);
     if (!business) return;
 
-    setSelectedPlanBusiness(business);
-    setActiveModal('manage-plan');
+    updateUiState('selectedPlanBusiness', business);
+    updateUiState('activeModal', 'manage-plan');
   };
 
   const handleOnboardingBusinessNameSave = (name: string) => {
@@ -2457,10 +2608,65 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
+    const amountErrors = validateTransactionAmounts({
+      totalAmount: values.totalAmount,
+      paidAmount: values.paidAmount,
+      dueAmount: values.dueAmount,
+      status: values.status,
+    });
+    if (amountErrors.length > 0) {
+      addNotification('warning', amountErrors[0]);
+      return;
+    }
+
+    const selectedAccount = values.accountId
+      ? accounts.find((account) => account.id === values.accountId) || null
+      : null;
+    const selectedDepartment = values.departmentId
+      ? counters.find((counter) => counter.id === values.departmentId) || null
+      : null;
+    const accountErrors = validateTransactionAccountSelection({
+      paymentMode: values.paymentMode,
+      accountId: values.accountId,
+      paymentDetails: values.paymentDetails,
+      selectedAccount,
+      selectedDepartment,
+    });
+    if (accountErrors.length > 0) {
+      addNotification('warning', accountErrors[0]);
+      return;
+    }
+
+    const transition = canTransitionTransactionStatus(editingTransaction.status, values.status);
+    if (!transition.allowed) {
+      addNotification('warning', transition.error);
+      return;
+    }
+
+    const now = new Date().toISOString();
+
     const updatedTransaction: Transaction = {
       ...editingTransaction,
       ...values,
+      updatedAt: now,
+      updatedBy: displayUserName,
+      lastAuditAction: 'updated',
     };
+
+    if (editingTransaction.status !== updatedTransaction.status) {
+      if (updatedTransaction.status === 'cancelled') {
+        updatedTransaction.cancelledAt = now;
+        updatedTransaction.cancelledBy = displayUserName;
+        updatedTransaction.lastAuditAction = 'cancelled';
+      }
+
+      if (updatedTransaction.status === 'refunded') {
+        updatedTransaction.refundedAt = now;
+        updatedTransaction.refundedBy = displayUserName;
+        updatedTransaction.refundReason = values.note?.trim() || editingTransaction.refundReason || 'Refund processed during transaction update.';
+        updatedTransaction.lastAuditAction = 'refunded';
+      }
+    }
 
     dispatch({
       type: 'UPDATE_TRANSACTION',
@@ -2488,7 +2694,11 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   };
 
   const handleToggleOption = () => {
-    if (!selectedOption) return;
+    if (!selectedOption) {
+      addNotification('error', 'The selected setting is no longer available.');
+      closeModal();
+      return;
+    }
     if (!requireModuleManagement('additions', 'configure')) return;
 
     const nextStatus = selectedOption.status === 'Enabled' ? 'Disabled' : 'Enabled';
@@ -2505,58 +2715,52 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   };
 
   const toggleFavoriteService = (serviceId: string) => {
-    setFavoriteServiceIds((current) =>
+    updateUiState('favoriteServiceIds', (current) =>
       current.includes(serviceId)
         ? current.filter((id) => id !== serviceId)
         : [...current, serviceId],
     );
   };
 
-  const renderDetails = (rows: Array<[string, React.ReactNode]>) => (
-    <div className="detail-list">
-      {rows.map(([label, value]) => (
-        <div key={label} className="detail-row">
-          <span className="detail-label">{label}</span>
-          <span className="detail-value">{value}</span>
-        </div>
-      ))}
-    </div>
-  );
+  const renderPermissionDenied = (moduleId: string) => {
+    const moduleUi = getModuleUi(moduleId);
 
-  const renderPermissionDenied = (moduleId: string) => (
-    <div className="row g-4">
-      <div className="col-12">
-        <div className="panel p-5 text-center">
-            <div className="delete-confirm-icon mx-auto mb-3">
-              <FaExclamationTriangle />
-            </div>
-            <p className="eyebrow mb-2">Access Restricted</p>
-            <h2 className="h4 fw-semibold mb-2">{getRoleLabel(currentRole)} cannot open {getModuleLabel(moduleId)}</h2>
-            <p className="page-muted mb-4">
-              This page is protected by the role rules in the platform structure.
-            </p>
-            <button type="button" className="btn-app btn-app-primary" onClick={() => openModule('dashboard')}>
-              Go To Dashboard
-            </button>
+    return (
+      <div className="row g-4">
+        <div className="col-12">
+          <PermissionState
+            eyebrow={moduleUi?.label || 'Access Restricted'}
+            title={moduleUi?.permissionTitle || `${getRoleLabel(currentRole)} cannot open ${getModuleLabel(moduleId)}`}
+            description={moduleUi?.permissionDescription || 'This page is protected by the role and permission rules for the current workspace.'}
+            action={{
+              label: 'Go To Dashboard',
+              onClick: () => openModule('dashboard'),
+            }}
+          />
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderCustomerRoutePermissionState = () => {
     const message = currentRole === 'Admin'
-      ? 'The admin workspace only supports the business directory on customer routes. Open Business List to keep working in this section.'
+      ? 'The admin workspace only supports the business directory on customer routes. Open the directory list to keep working in this section.'
       : customerPageOptions.length > 0
         ? 'This URL points to a customer view your current permissions do not allow. Choose one of the customer pages available to your role.'
         : 'This business can still add customers, but the customer list views stay hidden until their permissions are turned on.';
 
     return (
-      <section className="panel p-4">
-        <p className="eyebrow mb-2">Customer Route</p>
-        <h3 className="h5 fw-semibold mb-2">{requestedCustomerPageCopy.label} is unavailable</h3>
-        <p className="page-muted mb-3">{message}</p>
+      <PermissionState
+        eyebrow="Customer Route"
+        title={requestedCustomerPageCopy.permissionTitle}
+        description={message}
+        action={customerPageOptions.length === 0 ? {
+          label: 'Go To Dashboard',
+          onClick: () => openModule('dashboard'),
+        } : undefined}
+      >
         {customerPageOptions.length > 0 ? (
-          <div className="d-flex flex-wrap gap-2">
+          <div className="d-flex flex-wrap gap-2 justify-content-center">
             {customerPageOptions.map((option) => (
               <Link
                 key={option.id}
@@ -2567,12 +2771,8 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
               </Link>
             ))}
           </div>
-        ) : (
-          <button type="button" className="btn-app btn-app-primary" onClick={() => openModule('dashboard')}>
-            Go To Dashboard
-          </button>
-        )}
-      </section>
+        ) : null}
+      </PermissionState>
     );
   };
 
@@ -2596,13 +2796,20 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
           </div>
         </div>
 
-        {totalResults === 0 && (
+        {totalResults === 0 ? (
           <div className="col-12">
-            <div className="panel p-5 text-center page-muted">
-                No matching records found.
-            </div>
+            <EmptyState
+              eyebrow="Global Search"
+              title={`No results for "${searchQuery}"`}
+              description="Try a customer name, transaction number, phone number, or service name."
+              action={{
+                label: 'Clear Search',
+                onClick: () => setSearchQuery(''),
+                variant: 'secondary',
+              }}
+            />
           </div>
-        )}
+        ) : null}
 
         {searchMatches.services.length > 0 && (
           <div className="col-12 col-xl-4">
@@ -2654,6 +2861,16 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       return pendingDelete
         ? { moduleId: deleteActionModuleIds[pendingDelete.actionType], permission: 'delete' as const }
         : null;
+    }
+
+    if (modal === 'manage-plan' || modal === 'confirm-plan-cancel') {
+      return currentRole === 'Admin'
+        ? { moduleId: 'customers', permission: 'edit' as const }
+        : { moduleId: 'dashboard', permission: 'access' as const };
+    }
+
+    if (modal === 'confirm-option-change') {
+      return { moduleId: 'additions', permission: 'edit' as const };
     }
 
     const modalPermissions: Partial<Record<Exclude<ModalMode, null>, { moduleId: string; permission: 'access' | 'add' | 'edit' | 'delete' }>> = {
@@ -2756,12 +2973,72 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       );
     }
 
+    if (activeModal === 'confirm-plan-cancel') {
+      const planTargetBusiness = currentRole === 'Customer' ? currentBusiness : selectedPlanBusiness;
+      const planTargetAccessState = planTargetBusiness ? getBusinessAccessState(planTargetBusiness) : null;
+
+      if (!planTargetBusiness || !planTargetAccessState) {
+        return (
+          <ActionModal title="Plan Details" eyebrow="Subscription" onClose={closeModal}>
+            <ErrorState
+              title="Plan details are unavailable"
+              description="Refresh the workspace and reopen the plan manager to continue."
+              action={{
+                label: 'Go To Dashboard',
+                onClick: () => {
+                  closeModal();
+                  onNavigate('dashboard');
+                },
+              }}
+              secondaryAction={{
+                label: 'Close',
+                onClick: closeModal,
+              }}
+            />
+          </ActionModal>
+        );
+      }
+
+      return (
+        <ConfirmActionModal
+          title="Cancel Plan"
+          eyebrow="Subscription"
+          description={`Review the plan cancellation for ${planTargetBusiness.name}.`}
+          promptTitle={`Cancel the current plan for ${planTargetBusiness.name}?`}
+          promptDescription="The workspace will move to an inactive state until a new plan is applied."
+          confirmLabel="Cancel Plan"
+          confirmVariant="danger"
+          tone="danger"
+          onConfirm={handlePlanCancel}
+          onCancel={() => updateUiState('activeModal', 'manage-plan')}
+        />
+      );
+    }
+
     if (activeModal === 'manage-plan') {
       const planTargetBusiness = currentRole === 'Customer' ? currentBusiness : selectedPlanBusiness;
       const planTargetAccessState = planTargetBusiness ? getBusinessAccessState(planTargetBusiness) : null;
 
       if (!planTargetBusiness || !planTargetAccessState) {
-        return null;
+        return (
+          <ActionModal title="Plan Details" eyebrow="Subscription" onClose={closeModal}>
+            <ErrorState
+              title="Plan details are unavailable"
+              description="Refresh the workspace and reopen the plan manager to continue."
+              action={{
+                label: 'Go To Dashboard',
+                onClick: () => {
+                  closeModal();
+                  onNavigate('dashboard');
+                },
+              }}
+              secondaryAction={{
+                label: 'Close',
+                onClick: closeModal,
+              }}
+            />
+          </ActionModal>
+        );
       }
 
       return (
@@ -2770,8 +3047,8 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
           eyebrow="Subscription"
           description={
             currentRole === 'Admin'
-              ? `Update the dummy subscription plan for ${planTargetBusiness.name}.`
-              : 'Change the dummy subscription plan that controls this business workspace.'
+              ? `Update the subscription plan for ${planTargetBusiness.name}.`
+              : 'Change the subscription plan that controls this business workspace.'
           }
           onClose={closeModal}
         >
@@ -2788,7 +3065,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             onCancelPlan={
               planTargetAccessState
               && (planTargetAccessState.subscription.status === 'active' || planTargetAccessState.subscription.status === 'trial')
-                ? handlePlanCancel
+                ? () => updateUiState('activeModal', 'confirm-plan-cancel')
                 : undefined
             }
           />
@@ -2899,30 +3176,38 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     }
 
     if (activeModal === 'confirm-delete' && pendingDelete) {
+      const isTransactionDelete = pendingDelete.actionType === 'DELETE_TRANSACTION';
+
       return (
-        <ActionModal
-          title="Confirm Delete"
+        <ConfirmActionModal
+          title={isTransactionDelete ? 'Archive Transaction' : 'Delete Record'}
           eyebrow={pendingDelete.module}
-          description="This action removes the record from the current dashboard data."
+          description={isTransactionDelete
+            ? 'This keeps the transaction record for audit purposes and removes it from the active workflow.'
+            : 'This action removes the record from the current dashboard data.'}
+          promptTitle={isTransactionDelete ? `Archive ${pendingDelete.label}?` : `Delete ${pendingDelete.label}?`}
+          promptDescription={isTransactionDelete
+            ? 'Financial values stay preserved, while the record is hidden from active transaction lists.'
+            : 'This keeps the workflow simple while still protecting the team from accidental clicks.'}
+          confirmLabel={isTransactionDelete ? 'Archive Transaction' : 'Delete Record'}
+          confirmVariant="danger"
           tone="danger"
-          onClose={closeModal}
+          onConfirm={confirmDeleteRecord}
+          onCancel={closeModal}
         >
-          <div className="d-flex align-items-start gap-3">
-            <div className="delete-confirm-icon">
-              <FaExclamationTriangle />
+          {isTransactionDelete ? (
+            <div className="app-field mt-4">
+              <label className="form-label">Archive Reason</label>
+              <textarea
+                className="form-control"
+                rows={3}
+                value={transactionDeleteReason}
+                onChange={(event) => updateUiState('transactionDeleteReason', event.target.value)}
+                placeholder="Explain why this transaction is being archived"
+              />
             </div>
-            <div>
-              <h3 className="h5 fw-semibold mb-2">Delete {pendingDelete.label}?</h3>
-              <p className="page-muted mb-0">
-                This keeps the workflow simple while still protecting the team from accidental clicks.
-              </p>
-            </div>
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn-app btn-app-secondary" onClick={closeModal}>Cancel</button>
-            <button type="button" className="btn-app btn-app-danger" onClick={confirmDeleteRecord}>Delete Record</button>
-          </div>
-        </ActionModal>
+          ) : null}
+        </ConfirmActionModal>
       );
     }
 
@@ -2981,7 +3266,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     if (activeModal === 'view-transaction' && selectedTransaction) {
       return (
         <ActionModal title="Transaction Details" onClose={closeModal}>
-          {renderDetails([
+          <DetailList rows={[
             ['Transaction No.', selectedTransaction.transactionNumber],
             ['Customer', selectedTransaction.customerName],
             ['Customer Phone', selectedTransaction.customerPhone || 'Not added'],
@@ -2996,15 +3281,15 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             ['Status', selectedTransaction.status],
             ['Notes', selectedTransaction.note || 'No notes'],
             ['Date', selectedTransaction.date],
-          ])}
+          ]} />
           <div className="modal-actions">
             {canPerformModuleAction('transactions', 'edit') ? (
               <button
                 type="button"
                 className="btn-app btn-app-secondary"
                 onClick={() => {
-                  setEditingTransaction(selectedTransaction);
-                  setActiveModal('edit-transaction');
+                  updateUiState('editingTransaction', selectedTransaction);
+                  updateUiState('activeModal', 'edit-transaction');
                 }}
               >
                 Edit Transaction
@@ -3031,7 +3316,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
             >
               Load Into Workflow
             </button>
-            {selectedTransaction.status !== 'cancelled' ? (
+            {selectedTransaction.status === 'pending' ? (
               <button
                 type="button"
                 className="btn-app btn-app-danger"
@@ -3061,21 +3346,21 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
         >
           <div className="row g-3 mb-4">
             <div className="col-12 col-md-6">
-              {renderDetails([
+              <DetailList rows={[
                 ['Customer', selectedCustomerHistory.name],
                 ['Phone', selectedCustomerHistory.phone],
                 ['Email', selectedCustomerHistory.email || 'Not added'],
                 ['Status', selectedCustomerHistory.status || 'Active'],
-              ])}
+              ]} />
             </div>
             <div className="col-12 col-md-6">
-              {renderDetails([
+              <DetailList rows={[
                 ['Transactions', selectedCustomerSummary.totalTransactions],
                 ['Gross Amount', `Rs. ${selectedCustomerSummary.grossAmount.toLocaleString('en-IN')}`],
                 ['Collected Amount', `Rs. ${selectedCustomerSummary.collectedAmount.toLocaleString('en-IN')}`],
                 ['Outstanding Amount', `Rs. ${selectedCustomerSummary.outstandingAmount.toLocaleString('en-IN')}`],
                 ['Last Visit', selectedCustomerSummary.lastVisit],
-              ])}
+              ]} />
             </div>
           </div>
           <div className="table-panel mb-4">
@@ -3145,13 +3430,13 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     if (activeModal === 'view-history' && selectedHistoryEvent) {
       return (
         <ActionModal title="History Details" onClose={closeModal}>
-          {renderDetails([
+          <DetailList rows={[
             ['Event', selectedHistoryEvent.title],
             ['Module', selectedHistoryEvent.module],
             ['Actor', selectedHistoryEvent.actor],
             ['Status', selectedHistoryEvent.status],
             ['Date', selectedHistoryEvent.date],
-          ])}
+          ]} />
         </ActionModal>
       );
     }
@@ -3159,17 +3444,17 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     if (activeModal === 'view-report' && selectedReport) {
       return (
         <ActionModal title="Report Details" onClose={closeModal}>
-          {renderDetails([
+          <DetailList rows={[
             ['Report', selectedReport.name],
             ['Type', selectedReport.type],
             ['Owner', selectedReport.owner],
             ['Status', selectedReport.status],
             ['Date', selectedReport.date],
-          ])}
+          ]} />
           {selectedReport.summary ? (
             <div className="form-section-card mt-4">
               <div className="form-section-title mb-3">Daily Closing Snapshot</div>
-              {renderDetails([
+              <DetailList rows={[
                 ['Transactions', selectedReport.summary.transactionCount],
                 ['Completed', selectedReport.summary.completedCount],
                 ['Pending', selectedReport.summary.pendingCount],
@@ -3182,25 +3467,63 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
                 ['Net Amount', `Rs. ${selectedReport.summary.netAmount.toLocaleString('en-IN')}`],
                 ['Top Service', selectedReport.summary.topService],
                 ['Busiest Department', selectedReport.summary.busiestDepartment],
-              ])}
+              ]} />
             </div>
           ) : null}
         </ActionModal>
       );
     }
 
+    if (activeModal === 'confirm-option-change') {
+      if (!selectedOption) {
+        return (
+          <ActionModal title="Setting Change" eyebrow="Settings" onClose={closeModal}>
+            <ErrorState
+              title="Setting details are unavailable"
+              description="Refresh the workspace and reopen this setting to continue."
+              action={{
+                label: 'Close',
+                onClick: closeModal,
+              }}
+            />
+          </ActionModal>
+        );
+      }
+
+      const isDisablingOption = selectedOption.status === 'Enabled';
+
+      return (
+        <ConfirmActionModal
+          title={isDisablingOption ? 'Disable Setting' : 'Enable Setting'}
+          eyebrow={getModuleLabel('additions') || 'Settings'}
+          description={`Review this change for ${selectedOption.title} before continuing.`}
+          promptTitle={`${isDisablingOption ? 'Disable' : 'Enable'} ${selectedOption.title}?`}
+          promptDescription="This may affect shared reports, rules, or integrations for the workspace."
+          confirmLabel={isDisablingOption ? 'Disable Setting' : 'Enable Setting'}
+          confirmVariant={isDisablingOption ? 'danger' : 'primary'}
+          tone={isDisablingOption ? 'danger' : 'default'}
+          onConfirm={handleToggleOption}
+          onCancel={() => updateUiState('activeModal', 'configure-option')}
+        />
+      );
+    }
+
     if (activeModal === 'configure-option' && selectedOption) {
       return (
         <ActionModal title="Configure Option" onClose={closeModal}>
-          {renderDetails([
+          <DetailList rows={[
             ['Option', selectedOption.title],
             ['Category', selectedOption.category],
             ['Current Status', selectedOption.status],
             ['Description', selectedOption.description],
-          ])}
+          ]} />
           <div className="modal-actions">
             <button type="button" className="btn-app btn-app-secondary" onClick={closeModal}>Cancel</button>
-            <button type="button" className="btn-app btn-app-primary" onClick={handleToggleOption}>
+            <button
+              type="button"
+              className="btn-app btn-app-primary"
+              onClick={() => updateUiState('activeModal', 'confirm-option-change')}
+            >
               {selectedOption.status === 'Enabled' ? 'Disable Option' : 'Enable Option'}
             </button>
           </div>
@@ -3222,6 +3545,104 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     return null;
   };
 
+  const activeTabCtx: DashboardTabContext = {
+    currentRole,
+    currentUser,
+    accessContext,
+    selectedCounter,
+    availableCounters,
+    visibleServices,
+    recentServices,
+    notifications,
+    businesses,
+    accounts,
+    employees,
+    counters,
+    reports,
+    expenses,
+    additionOptions,
+    workflowDraft,
+    employeeAssignedDepartment,
+    displayUserName,
+    filteredTransactionRecords,
+    filteredHistoryEvents,
+    filteredDepartments,
+    filteredBusinesses,
+    customerDirectoryRecords,
+    customerOutstandingRows,
+    customerPaymentTransactions,
+    customerPageView,
+    customerPageOptions,
+    customerSectionTitle,
+    customerSectionDescription,
+    customerEntityLabel,
+    customerEntityPlural,
+    businessPermissionFilter,
+    businessPermissionFilterLabel,
+    historyStatusFilter,
+    departmentSearchInput,
+    departmentAccountStatusFilter,
+    isTransactionFiltersOpen,
+    serviceSummary,
+    customerSummary,
+    reminderSummary,
+    employeeSummary,
+    departmentSummary,
+    accountSummary,
+    transactionSummary,
+    historySummary,
+    reportSummary,
+    expenseSummary,
+    canEmployeeOperateOnDepartment,
+    canAddCustomerRecords,
+    canViewCustomerRecords,
+    canEditCustomerRecords,
+    canDeleteCustomerRecords,
+    canAddEmployeeRecords,
+    canViewEmployeeRecords,
+    canEditEmployeeRecords,
+    canDeleteEmployeeRecords,
+    canAddDepartmentRecords,
+    canEditDepartmentRecords,
+    canDeleteDepartmentRecords,
+    canAddAccountRecords,
+    canEditAccountRecords,
+    canDeleteAccountRecords,
+    hasRequestedCustomerPageAccess,
+    renderSummaryCards,
+    renderTransactionFilters,
+    renderBusinessPlanSection,
+    renderAdminDashboard,
+    renderCustomerRoutePermissionState,
+    canManageModule,
+    canDeleteModule,
+    canPerformModuleAction,
+    canAccessModuleForSession,
+    getRoleLabel,
+    handleQuickAction,
+    handleDismissNotification,
+    handleViewTransaction,
+    handleDeleteRecord,
+    handleEditService,
+    handleDeleteService,
+    handleViewCustomerHistory,
+    handleEditCustomer,
+    handleViewHistory,
+    handleEditEmployee,
+    handleDepartmentSearch,
+    clearDepartmentFilters,
+    handleEditDepartment,
+    handleEditAccount,
+    handleEditTransaction,
+    handleViewReport,
+    handleEditExpense,
+    handleConfigureOption,
+    setIsTransactionFiltersOpen,
+    setDepartmentSearchInput,
+    setDepartmentAccountStatusFilter,
+    setBusinessPermissionFilter,
+  };
+
   const renderContent = () => {
     if (isBusinessSubscriptionLocked) {
       return (
@@ -3235,707 +3656,12 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       return renderPermissionDenied(activeTab);
     }
 
-    switch (activeTab) {
-      case 'dashboard': {
-        if (currentRole === 'Admin') {
-          return renderAdminDashboard();
-        }
+    return (
+      <DashboardTabContextProvider value={activeTabCtx}>
+        {children}
+      </DashboardTabContextProvider>
+    );
 
-        const isBusinessWorkspace = currentRole === 'Customer';
-
-        const serviceSnapshotSection = canAccessModuleForSession(accessContext, 'services') ? (
-          <div className="col-12">
-            <div className="panel p-4 p-lg-5">
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">Service Snapshot</p>
-                  <h2 className="panel-title">Most-used services</h2>
-                  <p className="panel-copy">
-                    {selectedCounter
-                      ? `A quick glance at the live services available in ${selectedCounter.name}.`
-                      : 'A quick glance at the live services operators can open right away.'}
-                  </p>
-                </div>
-                {canManageModule('services') && canEmployeeOperateOnDepartment ? (
-                  <button type="button" className="btn-app btn-app-primary" onClick={() => handleQuickAction('add-service')}>
-                    <FaPlusCircle />
-                    Add Service
-                  </button>
-                ) : null}
-              </div>
-              <div className="row g-4">
-                {visibleServices.slice(0, 3).map((service) => (
-                  <div key={service.id} className="col-12 col-md-6 col-xl-4">
-                    <div className="metric-card summary-card--blue">
-                      <div className="d-flex justify-content-between gap-3">
-                        <span className="status-chip status-chip--info">{service.category}</span>
-                        <span className={`status-chip ${service.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
-                          {service.status}
-                        </span>
-                      </div>
-                      <h3 className="h5 fw-semibold mt-4 mb-2">{service.name}</h3>
-                      <p className="metric-card__detail mb-4">{service.description}</p>
-                      <div className="d-flex justify-content-between align-items-center gap-3">
-                        <span className="fw-semibold text-primary">Rs. {service.price.toLocaleString('en-IN')}</span>
-                        <div className="table-actions">
-                          {canManageModule('services') ? (
-                            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => handleEditService(service)}>
-                              Edit
-                            </button>
-                          ) : null}
-                          {canDeleteModule('services') ? (
-                            <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => handleDeleteService(service.id)}>
-                              Delete
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : null;
-
-        const recentActivitySection = (
-          <>
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Recent Activity"
-                title="Counters and latest services"
-                description="Keep an eye on active balances and the newest services processed by the team."
-              />
-            </div>
-
-            <div className="col-12">
-              <div className="row g-4">
-                <div className="col-12 col-lg-6">
-                  <CountersTable counters={availableCounters} />
-                </div>
-                {canAccessModuleForSession(accessContext, 'services') && (
-                  <div className="col-12 col-lg-6">
-                    <RecentServicesTable services={recentServices} />
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        );
-
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <WelcomeHero
-                userName={displayUserName}
-                role={currentRole}
-                counterName={selectedCounter?.name || 'No counter selected'}
-                counterStatus={selectedCounter?.status || 'Inactive'}
-                onPrimaryAction={() => handleQuickAction('new-transaction')}
-                onSecondaryAction={() => handleQuickAction('favorites')}
-              />
-            </div>
-
-            {isBusinessWorkspace ? renderBusinessPlanSection() : null}
-            {isBusinessWorkspace ? null : serviceSnapshotSection}
-
-            <div className="col-12">
-              <div className="panel p-4 p-lg-5">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Today Overview</p>
-                    <h2 className="panel-title">Operating pulse</h2>
-                  </div>
-                </div>
-                <div className="row g-4">
-                  <div className="col-12 col-sm-6 col-lg-3">
-                    <DashboardCard
-                      title="Today Earnings"
-                      value="Rs. 1,250"
-                      icon={<FaDollarSign />}
-                      trend={{ value: 12, isPositive: true }}
-                      color="green"
-                    />
-                  </div>
-                  <div className="col-12 col-sm-6 col-lg-3">
-                    <DashboardCard
-                      title="Pending Tasks"
-                      value="8"
-                      icon={<FaHourglassHalf />}
-                      trend={{ value: 5, isPositive: false }}
-                      color="orange"
-                    />
-                  </div>
-                  <div className="col-12 col-sm-6 col-lg-3">
-                    <DashboardCard
-                      title="Active Users"
-                      value="24"
-                      icon={<FaUsers />}
-                      color="blue"
-                    />
-                  </div>
-                  <div className="col-12 col-sm-6 col-lg-3">
-                    <DashboardCard
-                      title="Total Transactions"
-                      value="156"
-                      icon={<FaChartLine />}
-                      trend={{ value: 8, isPositive: true }}
-                      color="purple"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12">
-              <div className="row g-4">
-                <div className="col-12 col-lg-6 dashboard-balance-col">
-                  <QuickActions onAction={handleQuickAction} />
-                </div>
-                <div className="col-12 col-lg-6 dashboard-balance-col">
-                  <NotificationCenter
-                    notifications={notifications}
-                    onDismiss={handleDismissNotification}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {isBusinessWorkspace ? null : recentActivitySection}
-
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Transactions"
-                title="Transaction history"
-                description="Review recent customer activity and open a record when you need more detail."
-                action={canManageModule('transactions') && canEmployeeOperateOnDepartment ? {
-                  label: 'Add Transaction',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('new-transaction'),
-                } : undefined}
-              />
-            </div>
-
-            {isTransactionFiltersOpen ? renderTransactionFilters() : null}
-
-            <div className="col-12">
-              <TransactionTable
-                transactions={filteredTransactionRecords}
-                onView={handleViewTransaction}
-                onDelete={canDeleteModule('transactions') ? (id) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-                onToggleFilters={() => setIsTransactionFiltersOpen((current) => !current)}
-                isFilterOpen={isTransactionFiltersOpen}
-              />
-            </div>
-
-            {isBusinessWorkspace ? serviceSnapshotSection : null}
-            {isBusinessWorkspace ? recentActivitySection : null}
-          </div>
-        );
-      }
-      case 'services':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Service Catalog"
-                title="Manage your live services"
-                description={
-                  selectedCounter
-                    ? `Track active offerings, pricing, and service status for ${selectedCounter.name}.`
-                    : 'Track active offerings, pricing, and service status with the latest metrics.'
-                }
-                action={canManageModule('services') && canEmployeeOperateOnDepartment ? {
-                  label: 'Add Service',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('add-service'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(serviceSummary)}
-
-            <div className="col-12">
-              <ServicesTable
-                services={visibleServices}
-                onEdit={canManageModule('services') ? handleEditService : undefined}
-                onDelete={canDeleteModule('services') ? (id) => handleDeleteRecord('DELETE_SERVICE', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'customers':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow={currentRole === 'Admin' ? 'Business Hub' : 'Customer Hub'}
-                title={customerSectionTitle}
-                description={customerSectionDescription}
-                action={canAddCustomerRecords ? {
-                  label: `Add ${customerEntityLabel}`,
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('add-customer'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(customerSummary)}
-
-            {currentRole !== 'Admin' && customerPageOptions.length > 0 ? (
-              <div className="col-12">
-                <section className="panel p-4">
-                  <div className="panel-header">
-                    <div>
-                      <p className="eyebrow">Customer Options</p>
-                      <h2 className="panel-title">Choose what you want to review</h2>
-                      <p className="panel-copy">Switch between the customer directory, payment list, and outstanding balances based on your assigned permissions.</p>
-                    </div>
-                  </div>
-                  <div className="d-flex flex-wrap gap-2">
-                    {customerPageOptions.map((option) => (
-                      <Link
-                        key={option.id}
-                        href={getCustomerWorkspacePath(option.id)}
-                        className={customerPageView === option.id ? 'btn-app btn-app-primary' : 'btn-app btn-app-secondary'}
-                      >
-                        {option.label}
-                      </Link>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            ) : null}
-
-            {currentRole === 'Admin' ? (
-              <div className="col-12">
-                <section className="panel department-toolbar">
-                  <div className="panel-header">
-                    <div>
-                      <p className="eyebrow">Business Filters</p>
-                      <h2 className="panel-title">Filter businesses by permission</h2>
-                      <p className="panel-copy">See which business logins were granted a specific permission before you edit access.</p>
-                    </div>
-                    <div className="panel-status-chip">
-                      Showing {filteredBusinesses.length} of {businesses.length}
-                    </div>
-                  </div>
-                  <div className="department-toolbar__grid">
-                    <div className="app-field mb-0">
-                      <label className="form-label">Permission</label>
-                      <select
-                        className="form-select"
-                        value={businessPermissionFilter}
-                        onChange={(event) => setBusinessPermissionFilter(event.target.value)}
-                      >
-                        <option value="all">All permissions</option>
-                        {customerPermissionOptions.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="department-toolbar__actions">
-                      <button
-                        type="button"
-                        className="btn-app btn-app-secondary"
-                        onClick={() => setBusinessPermissionFilter('all')}
-                        disabled={businessPermissionFilter === 'all'}
-                      >
-                        Clear Filter
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            ) : null}
-
-            <div className="col-12">
-              {!hasRequestedCustomerPageAccess ? (
-                renderCustomerRoutePermissionState()
-              ) : canViewCustomerRecords ? (
-                currentRole === 'Admin' || customerPageView === 'list' ? (
-                  <CustomersTable
-                    customers={customerDirectoryRecords}
-                    eyebrow={customerEntityPlural}
-                    title={currentRole === 'Admin' ? 'Business directory' : 'Customer directory'}
-                    copy={currentRole === 'Admin' ? `Business records, login status, and permission access. Current filter: ${businessPermissionFilterLabel}.` : 'Contact details and profile status used across service workflows.'}
-                    entityLabel={customerEntityLabel}
-                    emptyLabel={`No ${customerEntityLabel.toLowerCase()} records found.`}
-                    onView={currentRole === 'Admin' ? undefined : handleViewCustomerHistory}
-                    onEdit={canEditCustomerRecords ? handleEditCustomer : undefined}
-                    onDelete={canDeleteCustomerRecords ? (id) => handleDeleteRecord(currentRole === 'Admin' ? 'DELETE_BUSINESS' : 'DELETE_CUSTOMER', id) : undefined}
-                  />
-                ) : customerPageView === 'payments' ? (
-                  <CustomerPaymentsTable transactions={customerPaymentTransactions} onView={handleViewTransaction} />
-                ) : (
-                  <CustomerOutstandingTable rows={customerOutstandingRows} onView={handleViewCustomerHistory} />
-                )
-              ) : (
-                <section className="panel p-4">
-                  <p className="eyebrow mb-2">Customer Directory</p>
-                  <h3 className="h5 fw-semibold mb-2">Customer list access is disabled</h3>
-                  <p className="page-muted mb-0">
-                    This business can still add customers, but the customer list, payment list, and outstanding options stay hidden until those permissions are turned on.
-                  </p>
-                </section>
-              )}
-            </div>
-          </div>
-        );
-      case 'reminder':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Reminder Center"
-                title="Track alerts and follow-ups"
-                description="Review notifications, failed events, and pending updates without leaving the main workflow."
-                action={{
-                  label: historyStatusFilter === 'All' ? 'Show Failed' : 'Show All',
-                  icon: <FaHistory />,
-                  onClick: () => handleQuickAction('filter-history'),
-                }}
-              />
-            </div>
-
-            {renderSummaryCards(reminderSummary)}
-
-            <div className="col-12 col-xl-5">
-              <NotificationCenter
-                notifications={notifications}
-                onDismiss={handleDismissNotification}
-              />
-            </div>
-
-            <div className="col-12 col-xl-7">
-              <HistoryTable
-                events={filteredHistoryEvents}
-                onView={handleViewHistory}
-                onDelete={canDeleteModule('history') ? (id) => handleDeleteRecord('DELETE_HISTORY_EVENT', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'employee':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Employee Hub"
-                title="Manage your employee directory"
-                description="Add, update, and remove employee records from the business workspace."
-                action={canAddEmployeeRecords ? {
-                  label: 'Add Employee',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('add-employee'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(employeeSummary)}
-
-            <div className="col-12">
-              {canViewEmployeeRecords ? (
-                <EmployeesTable
-                  departments={counters}
-                  employees={employees}
-                  onEdit={canEditEmployeeRecords ? handleEditEmployee : undefined}
-                  onDelete={canDeleteEmployeeRecords ? (id) => handleDeleteRecord('DELETE_EMPLOYEE', id) : undefined}
-                />
-              ) : (
-                <section className="panel p-4">
-                  <p className="eyebrow mb-2">Employee Directory</p>
-                  <h3 className="h5 fw-semibold mb-2">Employee list access is disabled</h3>
-                  <p className="page-muted mb-0">
-                    Add Employee can stay enabled on its own, but the directory list only appears when an employee list, salary, or outstanding permission is available.
-                  </p>
-                </section>
-              )}
-            </div>
-          </div>
-        );
-      case 'departments':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Department Hub"
-                title="Manage departments and linked counters"
-                description="Add departments, map them to accounts, and review balances with search and account-status filters."
-                action={canAddDepartmentRecords ? {
-                  label: 'Add Department',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('add-department'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(departmentSummary)}
-
-            <div className="col-12">
-              <section className="panel department-toolbar">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Search and Filter</p>
-                    <h2 className="panel-title">Find the right department quickly</h2>
-                    <p className="panel-copy">Search by department, code, account holder, bank, or account number, then filter by linked account status.</p>
-                  </div>
-                  <div className="panel-status-chip">
-                    Showing {filteredDepartments.length} of {counters.length}
-                  </div>
-                </div>
-
-                <form
-                  className="department-toolbar__grid"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    handleDepartmentSearch();
-                  }}
-                >
-                  <div className="app-field mb-0">
-                    <label className="form-label">Search</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Search departments, account holder, bank, or account number"
-                      value={departmentSearchInput}
-                      onChange={(event) => setDepartmentSearchInput(event.target.value)}
-                    />
-                  </div>
-                  <div className="app-field mb-0">
-                    <label className="form-label">Account Status</label>
-                    <select
-                      className="form-select"
-                      value={departmentAccountStatusFilter}
-                      onChange={(event) => setDepartmentAccountStatusFilter(event.target.value as 'All' | 'Active' | 'Inactive' | 'Unassigned')}
-                    >
-                      <option value="All">All</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                      <option value="Unassigned">Unassigned</option>
-                    </select>
-                  </div>
-                  <div className="department-toolbar__actions">
-                    <button type="submit" className="btn-app btn-app-primary">Search</button>
-                    <button type="button" className="btn-app btn-app-secondary" onClick={clearDepartmentFilters}>Clear</button>
-                  </div>
-                </form>
-              </section>
-            </div>
-
-            <div className="col-12">
-              <DepartmentsTable
-                accounts={accounts}
-                counters={filteredDepartments.map((row) => row.counter)}
-                onEdit={canEditDepartmentRecords ? handleEditDepartment : undefined}
-                onDelete={canDeleteDepartmentRecords ? (id) => handleDeleteRecord('DELETE_COUNTER', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'accounts':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Account"
-                title="Manage bank account records"
-                description="Review account holders, bank details, IFSC codes, balances, and status from one table."
-                action={canAddAccountRecords ? {
-                  label: 'Add Account',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('add-account'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(accountSummary)}
-
-            <div className="col-12">
-              <AccountsTable
-                accounts={accounts}
-                onEdit={canEditAccountRecords ? handleEditAccount : undefined}
-                onDelete={canDeleteAccountRecords ? (id) => handleDeleteRecord('DELETE_ACCOUNT', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'transactions':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Transactions"
-                title="Review recent activity"
-                description="A clear view of completed, pending, and disputed payment flows."
-                action={canManageModule('transactions') ? {
-                  label: 'Add Transaction',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('new-transaction'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(transactionSummary)}
-
-            <div id="service-workflow" className="col-12">
-              {currentRole === 'Employee' && !employeeAssignedDepartment ? (
-                <div className="panel p-4 h-100">
-                  <p className="eyebrow mb-2">Service Workflow</p>
-                  <h3 className="h5 fw-semibold mb-2">Department assignment required</h3>
-                  <p className="page-muted mb-0">
-                    Assign this employee to a department before they can create transactions or post service payments.
-                  </p>
-                </div>
-              ) : canManageModule('transactions') ? (
-                <ServiceForm
-                  key={`${workflowDraft?.token || 'service-workflow-form'}:${selectedCounter?.id || 'no-department'}`}
-                  availableDepartments={availableCounters}
-                  businessId={currentUser.businessId || ''}
-                  selectedDepartment={selectedCounter}
-                  actor={{
-                    id: currentUser.id,
-                    name: displayUserName,
-                    role: currentRole === 'Employee' ? 'Employee' : 'Customer',
-                  }}
-                  draft={workflowDraft}
-                />
-              ) : (
-                <div className="panel p-4 h-100">
-                  <p className="eyebrow mb-2">Service Workflow</p>
-                  <h3 className="h5 fw-semibold mb-2">Transaction entry is restricted</h3>
-                  <p className="page-muted mb-0">
-                    {getRoleLabel(currentRole)} can view allowed information, but cannot create service transactions.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {isTransactionFiltersOpen ? renderTransactionFilters() : null}
-
-            <div className="col-12">
-              <TransactionTable
-                transactions={filteredTransactionRecords}
-                onEdit={canPerformModuleAction('transactions', 'edit') ? handleEditTransaction : undefined}
-                onView={handleViewTransaction}
-                onDelete={canDeleteModule('transactions') ? (id) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-                onToggleFilters={() => setIsTransactionFiltersOpen((current) => !current)}
-                isFilterOpen={isTransactionFiltersOpen}
-              />
-            </div>
-          </div>
-        );
-      case 'history':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="System History"
-                title="Track past activity"
-                description="Review audit logs, events, and history details for every important change."
-                action={canAccessModuleForSession(accessContext, 'history') ? {
-                  label: historyStatusFilter === 'All' ? 'Show Failed' : 'Show All',
-                  icon: <FaHistory />,
-                  onClick: () => handleQuickAction('filter-history'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(historySummary)}
-
-            <div className="col-12">
-              <HistoryTable
-                events={filteredHistoryEvents}
-                onView={handleViewHistory}
-                onDelete={canDeleteModule('history') ? (id) => handleDeleteRecord('DELETE_HISTORY_EVENT', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'reports':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Reports Center"
-                title="Make data-driven decisions"
-                description="View the latest insights, exports, and engagement summaries."
-                action={canManageModule('reports') ? {
-                  label: 'Generate',
-                  icon: <FaChartLine />,
-                  onClick: () => handleQuickAction('generate-report'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(reportSummary)}
-
-            <div className="col-12">
-              <ReportsTable
-                reports={reports}
-                onView={handleViewReport}
-                onDelete={canDeleteModule('reports') ? (id) => handleDeleteRecord('DELETE_REPORT', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'expense':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Expense"
-                title="Keep expense reporting in one place"
-                description="Track expense entries, categories, and status from the business workspace."
-                action={canManageModule('expense') ? {
-                  label: 'Add Expense',
-                  icon: <FaPlusCircle />,
-                  onClick: () => handleQuickAction('add-expense'),
-                } : undefined}
-              />
-            </div>
-
-            {renderSummaryCards(expenseSummary)}
-
-            <div className="col-12">
-              <ExpensesTable
-                expenses={expenses}
-                onEdit={canManageModule('expense') ? handleEditExpense : undefined}
-                onDelete={canDeleteModule('expense') ? (id) => handleDeleteRecord('DELETE_EXPENSE', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      case 'additions':
-        return (
-          <div className="row g-4">
-            <div className="col-12">
-              <SectionHero
-                eyebrow="Configuration Options"
-                title="Fine tune system behavior"
-                description="Use these advanced controls to update rules, reports, and integration settings."
-                action={canManageModule('additions') ? {
-                  label: 'Manage Options',
-                  icon: <FaCog />,
-                  onClick: () => handleQuickAction('update-options'),
-                } : undefined}
-              />
-            </div>
-
-            <div className="col-12">
-              <AdditionsTable
-                options={additionOptions}
-                onConfigure={canManageModule('additions') ? handleConfigureOption : undefined}
-                onDelete={canDeleteModule('additions') ? (id) => handleDeleteRecord('DELETE_ADDITION_OPTION', id) : undefined}
-              />
-            </div>
-          </div>
-        );
-      default:
-        return <div>Dashboard</div>;
-    }
   };
 
   const toggleSidebar = () => {
@@ -3988,6 +3714,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
       <div className="dashboard-main">
         <Header
           activeTab={activeTab}
+          customerPageView={customerPageView}
           counters={availableCounters}
           selectedCounterId={safeSelectedCounterId}
           notificationCount={notifications.length}
@@ -3996,13 +3723,13 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
           onLogout={onLogout}
           onCounterChange={setSelectedCounterId}
           onSearch={handleSearch}
-          onNotificationsClick={() => setActiveModal('notifications')}
+          onNotificationsClick={() => updateUiState('activeModal', 'notifications')}
           isSidebarOpen={isSidebarOpen}
           onSidebarToggle={toggleSidebar}
         />
         <main className="dashboard-content">
           <div className="content-container">
-            {isBusinessSubscriptionLocked ? renderContent() : normalizedSearchQuery ? renderSearchResults() : renderContent()}
+            {isSearchActive ? renderSearchResults() : renderContent()}
           </div>
         </main>
         <Footer />

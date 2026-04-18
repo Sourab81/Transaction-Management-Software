@@ -168,7 +168,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
         <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3">
           <div>
             <div className="form-section-title mb-1">Subscription Plan</div>
-            <p className="page-muted small mb-0">Choose the dummy plan this business will use to access the software.</p>
+            <p className="page-muted small mb-0">Choose the subscription plan this business will use to access the software.</p>
           </div>
           <span className="status-chip status-chip--info">{selectedPlan.label}</span>
         </div>

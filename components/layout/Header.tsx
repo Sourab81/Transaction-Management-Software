@@ -1,6 +1,8 @@
 import React from 'react';
 import { FaBars, FaBell, FaSearch, FaSignOutAlt, FaUser } from 'react-icons/fa';
+import { getCustomerWorkspaceViewUi, getModuleLabel } from '../../lib/module-ui';
 import { getModuleDisplayById, getRoleLabel, type UserRole } from '../../lib/platform-structure';
+import type { CustomerWorkspaceView } from '../../lib/workspace-routes';
 import CounterDropdown from '../ui/CounterDropdown';
 
 interface Counter {
@@ -13,6 +15,7 @@ interface Counter {
 
 interface HeaderProps {
   activeTab: string;
+  customerPageView?: CustomerWorkspaceView;
   counters: Counter[];
   selectedCounterId: string;
   notificationCount: number;
@@ -34,6 +37,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({
   activeTab,
+  customerPageView,
   counters,
   selectedCounterId,
   notificationCount,
@@ -47,8 +51,9 @@ const Header: React.FC<HeaderProps> = ({
   onSidebarToggle,
 }) => {
   const currentModule = getModuleDisplayById(activeTab, currentUser.role);
-  const heading = currentModule?.heading || 'Dashboard';
-  const description = currentModule?.description || 'Overview of your workspace.';
+  const headerTitle = activeTab === 'customers' && customerPageView
+    ? getCustomerWorkspaceViewUi(customerPageView).label
+    : getModuleLabel(activeTab) || currentModule?.label || 'Dashboard';
   const roleLabel = getRoleLabel(currentUser.role);
   const showDepartmentSelector = (currentUser.role === 'Customer' || currentUser.role === 'Employee') && counters.length > 0;
   const showMissingDepartmentState = currentUser.role === 'Employee' && counters.length === 0;
@@ -68,8 +73,7 @@ const Header: React.FC<HeaderProps> = ({
             <FaBars size={16} />
           </button>
           <div className="app-header__heading">
-            <p className="eyebrow">{heading}</p>
-            <h1>{description}</h1>
+            <h1>{headerTitle}</h1>
           </div>
         </div>
 

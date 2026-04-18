@@ -99,6 +99,9 @@ export const canDeleteModuleForSession = (context: SessionAccessContext, moduleI
 
 export const canDeleteRecordsForRole = (role: SessionAccessContext['role']) => role === 'Admin';
 
+const getActiveTransactions = (transactions: Transaction[]) =>
+  transactions.filter((transaction) => !transaction.isDeleted);
+
 export const getVisibleServices = (context: SessionAccessContext, services: Service[]) => {
   return canAccessModuleForSession(context, 'services') ? services : [];
 };
@@ -115,7 +118,7 @@ export const getVisibleTransactions = (
   transactions: Transaction[],
 ) => {
   if (!canAccessModuleForSession(context, 'transactions')) return [];
-  return transactions;
+  return getActiveTransactions(transactions);
 };
 
 interface SearchRecord {
@@ -168,10 +171,12 @@ export const getSearchMatches = ({
 };
 
 export const getTransactionSummary = (transactions: Transaction[]) => {
+  const activeTransactions = getActiveTransactions(transactions);
+
   return {
-    totalVolume: transactions.reduce((total, item) => total + item.totalAmount, 0),
-    completed: transactions.filter((item) => item.status === 'completed').length,
-    pending: transactions.filter((item) => item.status === 'pending').length,
-    disputes: transactions.filter((item) => item.status === 'cancelled' || item.status === 'refunded').length,
+    totalVolume: activeTransactions.reduce((total, item) => total + item.totalAmount, 0),
+    completed: activeTransactions.filter((item) => item.status === 'completed').length,
+    pending: activeTransactions.filter((item) => item.status === 'pending').length,
+    disputes: activeTransactions.filter((item) => item.status === 'cancelled' || item.status === 'refunded').length,
   };
 };

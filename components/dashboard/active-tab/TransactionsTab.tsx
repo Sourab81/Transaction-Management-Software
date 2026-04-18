@@ -4,9 +4,13 @@ import SectionHero from '../SectionHero';
 import ServiceForm from '../../forms/ServiceForm';
 import TransactionTable from '../../tables/TransactionTable';
 import { FaPlusCircle } from 'react-icons/fa';
+import { getModuleUi } from '../../../lib/module-ui';
+import EmptyState from '../../ui/state/EmptyState';
+import PermissionState from '../../ui/state/PermissionState';
+import type { DashboardTabContext } from './types';
 
 interface TransactionsTabProps {
-  ctx: any;
+  ctx: DashboardTabContext;
 }
 
 export default function TransactionsTab({ ctx }: TransactionsTabProps) {
@@ -22,7 +26,6 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     currentUser,
     displayUserName,
     handleQuickAction,
-    handleTransactionSubmit,
     isTransactionFiltersOpen,
     renderTransactionFilters,
     filteredTransactionRecords,
@@ -32,7 +35,16 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     setIsTransactionFiltersOpen,
     canPerformModuleAction,
     handleEditTransaction,
+    getRoleLabel,
   } = ctx;
+  const transactionsUi = getModuleUi('transactions');
+  const isShowingFilteredTransactionState = isTransactionFiltersOpen && filteredTransactionRecords.length === 0;
+  const addTransactionAction = canManageModule('transactions')
+    ? {
+        label: 'Add Transaction',
+        onClick: () => handleQuickAction('new-transaction'),
+      }
+    : undefined;
 
   return (
     <div className="row g-4">
@@ -53,13 +65,11 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
 
       <div id="service-workflow" className="col-12">
         {currentRole === 'Employee' && !employeeAssignedDepartment ? (
-          <div className="panel p-4 h-100">
-            <p className="eyebrow mb-2">Service Workflow</p>
-            <h3 className="h5 fw-semibold mb-2">Department assignment required</h3>
-            <p className="page-muted mb-0">
-              Assign this employee to a department before they can create transactions or post service payments.
-            </p>
-          </div>
+          <PermissionState
+            eyebrow="Service Workflow"
+            title="Department assignment required"
+            description="Assign this employee to a department before they can create transactions or post service payments."
+          />
         ) : canManageModule('transactions') ? (
           <ServiceForm
             key={`${workflowDraft?.token || 'service-workflow-form'}:${selectedCounter?.id || 'no-department'}`}
@@ -74,27 +84,42 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
             draft={workflowDraft}
           />
         ) : (
-          <div className="panel p-4 h-100">
-            <p className="eyebrow mb-2">Service Workflow</p>
-            <h3 className="h5 fw-semibold mb-2">Transaction entry is restricted</h3>
-            <p className="page-muted mb-0">
-              {currentRole === 'Employee' ? 'Employees can view allowed information, but cannot create service transactions.' : 'Your role can view allowed information, but cannot create service transactions.'}
-            </p>
-          </div>
+          <PermissionState
+            eyebrow="Service Workflow"
+            title="Transaction entry is restricted"
+            description={`${getRoleLabel(currentRole)} can view allowed information, but cannot create service transactions.`}
+          />
         )}
       </div>
 
       {isTransactionFiltersOpen ? renderTransactionFilters() : null}
 
       <div className="col-12">
-        <TransactionTable
-          transactions={filteredTransactionRecords}
-          onEdit={canPerformModuleAction('transactions', 'edit') ? handleEditTransaction : undefined}
-          onView={handleViewTransaction}
-          onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-          onToggleFilters={() => setIsTransactionFiltersOpen((current: boolean) => !current)}
-          isFilterOpen={isTransactionFiltersOpen}
-        />
+        {filteredTransactionRecords.length === 0 ? (
+          <EmptyState
+            eyebrow={transactionsUi?.label}
+            title={isShowingFilteredTransactionState ? 'No transactions match the current filters' : transactionsUi?.emptyTitle || 'No transaction records yet'}
+            description={isShowingFilteredTransactionState
+              ? 'Adjust or hide the current filters to review more transaction records.'
+              : transactionsUi?.emptyDescription || 'Saved service transactions will appear here after they are added.'}
+            action={isShowingFilteredTransactionState
+              ? {
+                  label: 'Hide Filters',
+                  onClick: () => setIsTransactionFiltersOpen(false),
+                  variant: 'secondary',
+                }
+              : addTransactionAction}
+          />
+        ) : (
+          <TransactionTable
+            transactions={filteredTransactionRecords}
+            onEdit={canPerformModuleAction('transactions', 'edit') ? handleEditTransaction : undefined}
+            onView={handleViewTransaction}
+            onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
+            onToggleFilters={() => setIsTransactionFiltersOpen((current) => !current)}
+            isFilterOpen={isTransactionFiltersOpen}
+          />
+        )}
       </div>
     </div>
   );
