@@ -49,6 +49,8 @@ export type DashboardDeleteActionType =
 export interface DashboardTabContext {
   currentRole: SessionUser['role'];
   currentUser: SessionUser;
+  currentBusinessProfile: Business | null;
+  currentEmployeeProfile: Employee | null;
   accessContext: SessionAccessContext;
   selectedCounter: Counter | null;
   availableCounters: Counter[];
@@ -120,6 +122,10 @@ export interface DashboardTabContext {
   canPerformModuleAction: (moduleId: string, action: 'add' | 'edit' | 'delete') => boolean;
   canAccessModuleForSession: (context: SessionAccessContext, moduleId: string) => boolean;
   getRoleLabel: (role: SessionUser['role']) => string;
+  handleLogout: () => void;
+  handleAdminProfileSave: (values: { name: string; email: string; password?: string }) => void;
+  handleBusinessProfileSave: (values: { name: string; phone: string; email: string; password?: string }) => void;
+  handleEmployeeProfileSave: (values: { name: string; phone: string; email: string; password?: string }) => void;
   handleQuickAction: (action: string) => void;
   handleDismissNotification: (id: string) => void;
   handleViewTransaction: (transaction: Transaction) => void;

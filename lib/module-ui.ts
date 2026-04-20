@@ -11,6 +11,7 @@ export type ModuleUiId =
   | 'expense'
   | 'history'
   | 'reports'
+  | 'profile'
   | 'additions';
 
 export interface ModuleUiConfig {
@@ -110,6 +111,14 @@ export const moduleUi: Record<ModuleUiId, ModuleUiConfig> = {
     emptyDescription: 'Generate a report to review exports, summaries, and audit snapshots.',
     permissionTitle: 'Report access is restricted',
     permissionDescription: 'Your current permissions do not allow you to open reports.',
+  },
+  profile: {
+    id: 'profile',
+    label: 'Profile',
+    emptyTitle: 'Profile details are unavailable',
+    emptyDescription: 'Your personal account details will appear here once the workspace finishes loading your session.',
+    permissionTitle: 'Profile access is restricted',
+    permissionDescription: 'Your current permissions do not allow you to open profile settings.',
   },
   additions: {
     id: 'additions',

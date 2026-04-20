@@ -3,7 +3,7 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar } from 'react-icons/fa';
-import { type SessionUser } from '../../lib/auth-session';
+import { getAvailableUsers, updateAdminCredentials, type SessionUser } from '../../lib/auth-session';
 import { buildCsv } from '../../lib/csv';
 import {
   canPerformModuleActionForSession,
@@ -270,6 +270,7 @@ interface DashboardUiState {
 interface DashboardProps {
   currentUser: SessionUser;
   onLogout: () => void;
+  onSessionUserChange: (user: SessionUser) => void;
   activeTab: string;
   customerPageView: CustomerWorkspaceView;
   onNavigate: (moduleId: string) => void;
@@ -318,7 +319,15 @@ const initialDashboardFilterState: DashboardFilterState = {
 
 const emptyTransactionRecords: Transaction[] = [];
 
-const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab, customerPageView, onNavigate, children }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  currentUser,
+  onLogout,
+  onSessionUserChange,
+  activeTab,
+  customerPageView,
+  onNavigate,
+  children,
+}) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const dispatch = useAppDispatch();
@@ -497,6 +506,13 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const currentEmployee = currentRole === 'Employee'
     ? employees.find((employee) => employee.id === currentUser.id) || null
     : null;
+  const adminAccountEmail = useMemo(() => {
+    const adminUser = currentRole === 'Admin'
+      ? currentUser
+      : getAvailableUsers().find((user) => user.role === 'Admin');
+
+    return (adminUser?.email || 'admin@enest.com').trim().toLowerCase();
+  }, [currentRole, currentUser]);
   const sessionPermissions = useMemo(() => {
     if (currentRole === 'Employee') {
       return intersectCustomerPermissions(
@@ -1327,11 +1343,17 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   };
 
   const normalizeEmail = (email: string) => email.trim().toLowerCase();
+  const updateSessionUser = (updates: Partial<SessionUser>) => {
+    onSessionUserChange({
+      ...currentUser,
+      ...updates,
+    });
+  };
 
   const isBusinessEmailTaken = (email: string, excludedBusinessId?: string) => {
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) return false;
-    if (normalizedEmail === 'admin@enest.com') return true;
+    if (normalizedEmail === adminAccountEmail) return true;
 
     const businessConflict = businesses.some((business) =>
       normalizeEmail(business.email) === normalizedEmail && business.id !== excludedBusinessId
@@ -1349,7 +1371,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const isEmployeeEmailTaken = (email: string, excludedEmployeeId?: string) => {
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) return false;
-    if (normalizedEmail === 'admin@enest.com') return true;
+    if (normalizedEmail === adminAccountEmail) return true;
 
     const businessConflict = businesses.some((business) => normalizeEmail(business.email) === normalizedEmail);
     if (businessConflict) {
@@ -2244,6 +2266,110 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     }
 
     persistBusinessProfileUpdate(currentBusiness, updates);
+  };
+
+  const handleAdminProfileSave = (values: { name: string; email: string; password?: string }) => {
+    const nextName = values.name.trim();
+    const nextEmail = normalizeEmail(values.email);
+    if (!nextName || !nextEmail) {
+      addNotification('error', 'Name and email are required to update the profile.');
+      return;
+    }
+
+    const businessConflict = businesses.some((business) => normalizeEmail(business.email) === nextEmail);
+    const employeeConflict = Object.values(businessWorkspacesById).some((tenantWorkspace) =>
+      tenantWorkspace.employees.some((employee) => normalizeEmail(employee.email) === nextEmail)
+    );
+
+    if (nextEmail !== adminAccountEmail && (businessConflict || employeeConflict)) {
+      addNotification('error', 'That email is already assigned to another login.');
+      return;
+    }
+
+    const currentAdminPassword = getAvailableUsers().find((user) => user.role === 'Admin' && user.id === currentUser.id)?.password || 'admin123';
+    updateAdminCredentials({
+      name: nextName,
+      email: nextEmail,
+      password: values.password || currentAdminPassword,
+    });
+    updateSessionUser({
+      name: nextName,
+      email: nextEmail,
+    });
+    addHistoryEvent(`${nextName} profile updated`, 'Profile');
+    addNotification('success', 'Profile updated successfully.');
+  };
+
+  const handleBusinessProfileSave = (values: { name: string; phone: string; email: string; password?: string }) => {
+    if (!currentBusiness) {
+      addNotification('error', 'Your business profile is unavailable right now.');
+      return;
+    }
+
+    const nextName = values.name.trim();
+    const nextPhone = values.phone.trim();
+    const nextEmail = normalizeEmail(values.email);
+    if (!nextName || !nextPhone || !nextEmail) {
+      addNotification('error', 'Name, phone, and email are required to update the profile.');
+      return;
+    }
+
+    if (isBusinessEmailTaken(nextEmail, currentBusiness.id)) {
+      addNotification('error', 'That email is already assigned to another login.');
+      return;
+    }
+
+    persistBusinessProfileUpdate(currentBusiness, {
+      name: nextName,
+      phone: nextPhone,
+      email: nextEmail,
+      password: values.password || currentBusiness.password,
+    });
+    updateSessionUser({
+      name: nextName,
+      email: nextEmail,
+    });
+    addHistoryEvent(`${nextName} profile updated`, 'Profile');
+    addNotification('success', 'Profile updated successfully.');
+  };
+
+  const handleEmployeeProfileSave = (values: { name: string; phone: string; email: string; password?: string }) => {
+    const businessId = requireBusinessWorkspaceId();
+    if (!businessId || !currentEmployee) {
+      addNotification('error', 'Your employee profile is unavailable right now.');
+      return;
+    }
+
+    const nextName = values.name.trim();
+    const nextPhone = values.phone.trim();
+    const nextEmail = normalizeEmail(values.email);
+    if (!nextName || !nextPhone || !nextEmail) {
+      addNotification('error', 'Name, phone, and email are required to update the profile.');
+      return;
+    }
+
+    if (isEmployeeEmailTaken(nextEmail, currentEmployee.id)) {
+      addNotification('error', 'That email is already assigned to another login.');
+      return;
+    }
+
+    dispatch({
+      type: 'UPDATE_EMPLOYEE',
+      businessId,
+      payload: {
+        ...currentEmployee,
+        name: nextName,
+        phone: nextPhone,
+        email: nextEmail,
+        password: values.password || currentEmployee.password,
+      },
+    });
+    updateSessionUser({
+      name: nextName,
+      email: nextEmail,
+    });
+    addHistoryEvent(`${nextName} profile updated`, 'Profile');
+    addNotification('success', 'Profile updated successfully.');
   };
 
   const handlePlanUpdate = (subscription: BusinessSubscription) => {
@@ -3548,6 +3674,8 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   const activeTabCtx: DashboardTabContext = {
     currentRole,
     currentUser,
+    currentBusinessProfile: currentBusiness || null,
+    currentEmployeeProfile: currentEmployee,
     accessContext,
     selectedCounter,
     availableCounters,
@@ -3619,6 +3747,10 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
     canPerformModuleAction,
     canAccessModuleForSession,
     getRoleLabel,
+    handleLogout: onLogout,
+    handleAdminProfileSave,
+    handleBusinessProfileSave,
+    handleEmployeeProfileSave,
     handleQuickAction,
     handleDismissNotification,
     handleViewTransaction,
@@ -3644,7 +3776,7 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
   };
 
   const renderContent = () => {
-    if (isBusinessSubscriptionLocked) {
+    if (isBusinessSubscriptionLocked && activeTab !== 'profile') {
       return (
         <div className="row g-4">
           {renderBusinessPlanSection(true)}
@@ -3720,9 +3852,9 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, onLogout, activeTab,
           notificationCount={notifications.length}
           searchValue={searchQuery}
           currentUser={{ ...currentUser, name: displayUserName }}
-          onLogout={onLogout}
           onCounterChange={setSelectedCounterId}
           onSearch={handleSearch}
+          onProfileOpen={() => onNavigate('profile')}
           onNotificationsClick={() => updateUiState('activeModal', 'notifications')}
           isSidebarOpen={isSidebarOpen}
           onSidebarToggle={toggleSidebar}

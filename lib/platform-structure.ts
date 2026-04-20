@@ -10,6 +10,7 @@ import {
   FaPlusSquare,
   FaTachometerAlt,
   FaUniversity,
+  FaUserCircle,
   FaUserTie,
   FaUsers,
 } from 'react-icons/fa';
@@ -166,6 +167,16 @@ export const userDashboardModules: PlatformModule[] = [
     heading: 'Reports',
     description: ' ',
     icon: FaChartBar,
+    allowedRoles: ['Admin', 'Employee', 'Customer'],
+    sidebarRoles: ['Admin', 'Employee', 'Customer'],
+  },
+  {
+    id: 'profile',
+    label: 'Profile',
+    sidebarLabel: 'Profile',
+    heading: 'Profile',
+    description: ' ',
+    icon: FaUserCircle,
     allowedRoles: ['Admin', 'Employee', 'Customer'],
     sidebarRoles: ['Admin', 'Employee', 'Customer'],
   },
@@ -470,7 +481,7 @@ export const canAccessModule = (role: UserRole, moduleId: string) => {
   return Boolean(platformModule?.allowedRoles.includes(role));
 };
 
-const adminAccessibleModules = new Set(['dashboard', 'customers', 'reminder', 'history', 'reports', 'additions']);
+const adminAccessibleModules = new Set(['dashboard', 'customers', 'reminder', 'history', 'reports', 'profile', 'additions']);
 const permissionBackedModules = new Set(['customers', 'employee', 'services', 'accounts', 'departments', 'reports', 'expense', 'transactions']);
 
 const businessHasModulePermission = (permissions: CustomerPermissions | null | undefined, moduleId: string) => {
@@ -519,6 +530,10 @@ export const canAccessModuleForSession = (context: SessionAccessContext, moduleI
 
   if (!context.businessId) {
     return false;
+  }
+
+  if (moduleId === 'profile') {
+    return true;
   }
 
   if (context.role === 'Customer') {

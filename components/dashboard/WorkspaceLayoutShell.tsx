@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { getStoredUser, logoutUser, type SessionUser } from '../../lib/auth-session';
+import { getStoredUser, logoutUser, updateStoredUser, type SessionUser } from '../../lib/auth-session';
 import {
   DEFAULT_WORKSPACE_MODULE_ID,
   LOGIN_ROUTE,
@@ -79,6 +79,11 @@ const WorkspaceLayoutShell = ({ children }: WorkspaceLayoutShellProps) => {
     router.replace(LOGIN_ROUTE);
   };
 
+  const handleSessionUserChange = (user: SessionUser) => {
+    updateStoredUser(user);
+    setCurrentUser(user);
+  };
+
   const handleNavigate = (moduleId: string) => {
     const nextPath = getWorkspaceModulePath(moduleId);
 
@@ -105,6 +110,7 @@ const WorkspaceLayoutShell = ({ children }: WorkspaceLayoutShellProps) => {
     <Dashboard
       currentUser={currentUser}
       onLogout={handleLogout}
+      onSessionUserChange={handleSessionUserChange}
       activeTab={routeState.activeTab}
       customerPageView={routeState.customerPageView}
       onNavigate={handleNavigate}

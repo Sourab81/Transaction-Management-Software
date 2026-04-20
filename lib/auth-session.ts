@@ -26,6 +26,13 @@ export interface SessionUser {
   businessId?: string;
 }
 
+interface StoredAdminProfile {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
 const STATIC_AUTH_USERS: AuthUser[] = [
   {
     id: 'admin-1',
@@ -37,6 +44,50 @@ const STATIC_AUTH_USERS: AuthUser[] = [
 ];
 
 const SESSION_KEY = 'enest-auth-user';
+const ADMIN_PROFILE_STORAGE_KEY = 'enest-admin-profile';
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const readStoredAdminProfile = (): StoredAdminProfile | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const rawProfile = localStorage.getItem(ADMIN_PROFILE_STORAGE_KEY);
+    if (!rawProfile) return null;
+
+    const parsedProfile = JSON.parse(rawProfile) as Partial<StoredAdminProfile>;
+    if (!parsedProfile.id || !parsedProfile.name || !parsedProfile.email || !parsedProfile.password) {
+      localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      id: parsedProfile.id,
+      name: parsedProfile.name,
+      email: normalizeEmail(parsedProfile.email),
+      password: parsedProfile.password,
+    };
+  } catch {
+    localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY);
+    return null;
+  }
+};
+
+const getStaticAuthUsers = (): AuthUser[] => {
+  const storedAdminProfile = readStoredAdminProfile();
+
+  return STATIC_AUTH_USERS.map((user) => {
+    if (!storedAdminProfile || user.role !== 'Admin' || user.id !== storedAdminProfile.id) {
+      return user;
+    }
+
+    return {
+      ...user,
+      name: storedAdminProfile.name,
+      email: storedAdminProfile.email,
+      password: storedAdminProfile.password,
+    };
+  });
+};
 
 const readAppState = (): AppState | null => {
   if (typeof window === 'undefined') return null;
@@ -64,7 +115,7 @@ const readBusinessUsers = (state: AppState): AuthUser[] =>
     .map((business) => ({
       id: business.id,
       name: business.name,
-      email: business.email.trim().toLowerCase(),
+      email: normalizeEmail(business.email),
       password: business.password,
       role: 'Customer' as const,
       businessId: business.id,
@@ -83,7 +134,7 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
       workspace.employees
         .filter((employee): employee is Employee => Boolean(employee?.id && employee?.name && employee?.email))
         .forEach((employee) => {
-          const normalizedEmail = employee.email.trim().toLowerCase();
+          const normalizedEmail = normalizeEmail(employee.email);
           if (!normalizedEmail || seenEmails.has(normalizedEmail)) return;
 
           seenEmails.add(normalizedEmail);
@@ -102,7 +153,7 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
 };
 
 export const getAvailableUsersFromState = (state: AppState): AuthUser[] => {
-  const authUsers = [...STATIC_AUTH_USERS];
+  const authUsers = getStaticAuthUsers();
   const businessUsers = readBusinessUsers(state);
   const employeeUsers = readEmployeeUsers(state);
 
@@ -128,17 +179,44 @@ export const getAvailableUsersFromState = (state: AppState): AuthUser[] => {
 export const getAvailableUsers = (): AuthUser[] => {
   const state = readAppState();
   if (!state) {
-    return [...STATIC_AUTH_USERS];
+    return getStaticAuthUsers();
   }
 
   return getAvailableUsersFromState(state);
+};
+
+export const updateStoredUser = (sessionUser: SessionUser | null) => {
+  if (typeof window === 'undefined') return;
+
+  if (!sessionUser) {
+    localStorage.removeItem(SESSION_KEY);
+    return;
+  }
+
+  localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+};
+
+export const updateAdminCredentials = (updates: Partial<Pick<AuthUser, 'name' | 'email' | 'password'>>) => {
+  if (typeof window === 'undefined') return;
+
+  const currentAdminUser = getStaticAuthUsers().find((user) => user.role === 'Admin');
+  if (!currentAdminUser) return;
+
+  const nextProfile: StoredAdminProfile = {
+    id: currentAdminUser.id,
+    name: updates.name?.trim() || currentAdminUser.name,
+    email: updates.email ? normalizeEmail(updates.email) : currentAdminUser.email,
+    password: updates.password || currentAdminUser.password,
+  };
+
+  localStorage.setItem(ADMIN_PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
 };
 
 export const loginWithDummyCredentials = (role: LoginRole, email: string, password: string): SessionUser | null => {
   const matchedUser = getAvailableUsers().find(
     (user) =>
       user.role === role &&
-      user.email === email.trim().toLowerCase() &&
+      user.email === normalizeEmail(email) &&
       user.password === password
   );
 
@@ -154,9 +232,7 @@ export const loginWithDummyCredentials = (role: LoginRole, email: string, passwo
     businessId: matchedUser.businessId,
   };
 
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-  }
+  updateStoredUser(sessionUser);
 
   return sessionUser;
 };
@@ -173,7 +249,6 @@ export const getStoredUser = (): SessionUser | null => {
     const matchedUser = getAvailableUsers().find(
       (user) =>
         user.id === parsed.id &&
-        user.email === parsed.email &&
         user.role === parsed.role &&
         user.businessId === parsed.businessId
     );
@@ -197,7 +272,5 @@ export const getStoredUser = (): SessionUser | null => {
 };
 
 export const logoutUser = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(SESSION_KEY);
-  }
+  updateStoredUser(null);
 };
