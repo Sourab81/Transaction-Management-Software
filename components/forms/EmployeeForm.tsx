@@ -46,9 +46,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     )
   );
 
-  const enabledPermissionCount = Object.values(permissions).filter(Boolean).length;
+  const enabledPermissionCount = Object.values(permissions).filter((enabled) => enabled === 1).length;
 
-  const isPermissionAvailable = (permissionId: string) => Boolean(businessPermissions[permissionId]);
+  const isPermissionAvailable = (permissionId: string) => businessPermissions[permissionId] === 1;
 
   const togglePermission = (permissionId: string) => {
     if (!isPermissionAvailable(permissionId)) {
@@ -57,7 +57,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
     setPermissions((current) => ({
       ...current,
-      [permissionId]: !current[permissionId],
+      [permissionId]: current[permissionId] === 1 ? 0 : 1,
     }));
   };
 
@@ -74,11 +74,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     }
 
     setPermissions((current) => {
-      const shouldEnableAll = !grantableItems.every((item) => current[item.id]);
+      const shouldEnableAll = !grantableItems.every((item) => current[item.id] === 1);
       const nextPermissions = { ...current };
 
       grantableItems.forEach((item) => {
-        nextPermissions[item.id] = shouldEnableAll;
+        nextPermissions[item.id] = shouldEnableAll ? 1 : 0;
       });
 
       return nextPermissions;
@@ -224,7 +224,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           {customerPermissionSections.map((section) => {
             const toggleItems = section.items.filter((item) => item.kind !== 'label');
             const grantableItems = toggleItems.filter((item) => isPermissionAvailable(item.id));
-            const enabledCount = grantableItems.filter((item) => permissions[item.id]).length;
+            const enabledCount = grantableItems.filter((item) => permissions[item.id] === 1).length;
             const isSectionEnabled = grantableItems.length > 0 && enabledCount === grantableItems.length;
 
             return (
@@ -259,7 +259,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                       );
                     }
 
-                    const isEnabled = permissions[item.id] ?? false;
+                    const isEnabled = permissions[item.id] === 1;
                     const isAvailable = isPermissionAvailable(item.id);
 
                     return (

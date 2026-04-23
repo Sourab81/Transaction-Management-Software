@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { getStoredUser, logoutUser, updateStoredUser, type SessionUser } from '../../lib/auth-session';
+import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
 import {
   DEFAULT_WORKSPACE_MODULE_ID,
   LOGIN_ROUTE,
@@ -17,6 +18,7 @@ import Dashboard from './Dashboard';
 
 interface WorkspaceLayoutShellProps {
   children: ReactNode;
+  initialWorkspaceData?: WorkspaceInitialData;
 }
 
 interface WorkspaceRouteState {
@@ -48,7 +50,10 @@ const resolveWorkspaceRouteState = (pathname: string): WorkspaceRouteState => {
   };
 };
 
-const WorkspaceLayoutShell = ({ children }: WorkspaceLayoutShellProps) => {
+const WorkspaceLayoutShell = ({
+  children,
+  initialWorkspaceData,
+}: WorkspaceLayoutShellProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
@@ -109,6 +114,7 @@ const WorkspaceLayoutShell = ({ children }: WorkspaceLayoutShellProps) => {
   return (
     <Dashboard
       currentUser={currentUser}
+      initialWorkspaceData={initialWorkspaceData}
       onLogout={handleLogout}
       onSessionUserChange={handleSessionUserChange}
       activeTab={routeState.activeTab}

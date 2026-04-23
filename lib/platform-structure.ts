@@ -69,7 +69,8 @@ export interface CustomerPermissionOption {
   sectionLabel: string;
 }
 
-export type CustomerPermissions = Record<string, boolean>;
+export type PermissionFlag = 0 | 1;
+export type CustomerPermissions = Record<string, PermissionFlag>;
 export type BusinessFeatureAction = 'view' | 'add' | 'edit' | 'delete';
 
 export interface SessionAccessContext {
@@ -219,107 +220,125 @@ export const adminDashboardModules = [
   'Reports',
 ];
 
-const customerPermissionIdAliases: Record<string, string[]> = {
-  'master.account_manage': ['master.account_manage', 'masters.accounts', 'accounts.accounts_update'],
-  'master.department_manage': ['master.department_manage', 'masters.counter', 'accounts.counters_update'],
-  'customers.add': ['customers.add', 'customer.add_customer'],
-  'customers.list': ['customers.list', 'customer.customer_list'],
-  'customers.payment_list': ['customers.payment_list', 'customer.customer_payment_list'],
-  'customers.outstanding': ['customers.outstanding', 'customer.customer_outstanding'],
-  'services.access': ['services.access', 'service.add_service', 'service.service_list'],
-  'accounts.cash_deposit': ['accounts.cash_deposit'],
-  'accounts.department_transfer': ['accounts.department_transfer', 'accounts.counter_transfer'],
-  'reminder.new_sms': ['reminder.new_sms'],
-  'reminder.set_reminder': ['reminder.set_reminder'],
-  'reminder.scheduled_message': ['reminder.scheduled_message'],
-  'reports.bank_counter_report': ['reports.bank_counter_report'],
-  'reports.day_report_service_charge_details': ['reports.day_report_service_charge_details'],
-  'reports.day_report_account_and_counter_details': ['reports.day_report_account_and_counter_details'],
-  'reports.day_report_expense_details': ['reports.day_report_expense_details'],
-  'reports.day_report_net_details': ['reports.day_report_net_details'],
-  'reports.day_report_grand_total': ['reports.day_report_grand_total'],
-  'reports.day_report_log_report': ['reports.day_report_log_report'],
-  'reports.service_report': ['reports.service_report'],
-  'employee.add': ['employee.add', 'users.add_user'],
-  'employee.list': ['employee.list', 'users.users_list'],
-  'employee.salary': ['employee.salary', 'users.users_salary'],
-  'employee.outstanding': ['employee.outstanding', 'users.user_outstanding'],
-  'expense.access': ['expense.access', 'expense.user_other_expense'],
+const withLegacyPermissionAliases = (canonicalId: string, extraAliases: string[] = []) => {
+  const legacyDotId = canonicalId.replace('_', '.');
+  return Array.from(new Set([canonicalId, legacyDotId, ...extraAliases]));
 };
+
+const customerPermissionIdAliases: Record<string, string[]> = {
+  master_account_manage: withLegacyPermissionAliases('master_account_manage', ['masters.accounts', 'accounts.accounts_update']),
+  master_department_manage: withLegacyPermissionAliases('master_department_manage', ['masters.counter', 'accounts.counters_update']),
+  customers_add: withLegacyPermissionAliases('customers_add', ['customer.add_customer']),
+  customers_list: withLegacyPermissionAliases('customers_list', ['customer.customer_list']),
+  customers_payment_list: withLegacyPermissionAliases('customers_payment_list', ['customer.customer_payment_list']),
+  customers_outstanding: withLegacyPermissionAliases('customers_outstanding', ['customer.customer_outstanding']),
+  services_access: withLegacyPermissionAliases('services_access', ['service.add_service', 'service.service_list']),
+  accounts_cash_deposit: withLegacyPermissionAliases('accounts_cash_deposit'),
+  accounts_department_transfer: withLegacyPermissionAliases('accounts_department_transfer', ['accounts.counter_transfer']),
+  reminder_new_sms: withLegacyPermissionAliases('reminder_new_sms'),
+  reminder_set_reminder: withLegacyPermissionAliases('reminder_set_reminder'),
+  reminder_scheduled_message: withLegacyPermissionAliases('reminder_scheduled_message'),
+  reports_bank_counter_report: withLegacyPermissionAliases('reports_bank_counter_report'),
+  reports_day_report_service_charge_details: withLegacyPermissionAliases('reports_day_report_service_charge_details'),
+  reports_day_report_account_and_counter_details: withLegacyPermissionAliases('reports_day_report_account_and_counter_details'),
+  reports_day_report_expense_details: withLegacyPermissionAliases('reports_day_report_expense_details'),
+  reports_day_report_net_details: withLegacyPermissionAliases('reports_day_report_net_details'),
+  reports_day_report_grand_total: withLegacyPermissionAliases('reports_day_report_grand_total'),
+  reports_day_report_log_report: withLegacyPermissionAliases('reports_day_report_log_report'),
+  reports_service_report: withLegacyPermissionAliases('reports_service_report'),
+  employee_add: withLegacyPermissionAliases('employee_add', ['users.add_user']),
+  employee_list: withLegacyPermissionAliases('employee_list', ['users.users_list']),
+  employee_salary: withLegacyPermissionAliases('employee_salary', ['users.users_salary']),
+  employee_outstanding: withLegacyPermissionAliases('employee_outstanding', ['users.user_outstanding']),
+  expense_access: withLegacyPermissionAliases('expense_access', ['expense.user_other_expense']),
+};
+
+const customerPermissionIdByAlias = Object.entries(customerPermissionIdAliases).reduce<Record<string, string>>(
+  (aliasesByPermissionId, [canonicalId, aliases]) => {
+    aliases.forEach((alias) => {
+      aliasesByPermissionId[alias] = canonicalId;
+    });
+    return aliasesByPermissionId;
+  },
+  {},
+);
+
+const resolveCanonicalPermissionId = (permissionId: string) =>
+  customerPermissionIdByAlias[permissionId] ?? permissionId;
 
 export const customerPermissionSections: CustomerPermissionSection[] = [
   {
     id: 'master',
     label: 'Master',
     items: [
-      { id: 'master.account_manage', label: 'Account (Add, Edit)' },
-      { id: 'master.department_manage', label: 'Department (Add, Edit)' },
+      { id: 'master_account_manage', label: 'Account (Add, Edit)' },
+      { id: 'master_department_manage', label: 'Department (Add, Edit)' },
     ],
   },
   {
     id: 'customers',
     label: 'Customers',
     items: [
-      { id: 'customers.add', label: 'Add Customer' },
-      { id: 'customers.list', label: 'Customers List' },
-      { id: 'customers.payment_list', label: 'Customers Payment List' },
-      { id: 'customers.outstanding', label: 'Customer Outstanding' },
+      { id: 'customers_add', label: 'Add Customer' },
+      { id: 'customers_list', label: 'Customers List' },
+      { id: 'customers_payment_list', label: 'Customers Payment List' },
+      { id: 'customers_outstanding', label: 'Customer Outstanding' },
     ],
   },
   {
     id: 'services',
     label: 'Services',
     items: [
-      { id: 'services.access', label: 'Services' },
+      { id: 'services_access', label: 'Services' },
     ],
   },
   {
     id: 'accounts',
     label: 'Accounts',
     items: [
-      { id: 'accounts.cash_deposit', label: 'Cash Deposit' },
-      { id: 'accounts.department_transfer', label: 'Department Transfer' },
+      { id: 'accounts_cash_deposit', label: 'Cash Deposit' },
+      { id: 'accounts_department_transfer', label: 'Department Transfer' },
     ],
   },
   {
     id: 'reminder',
     label: 'Reminder',
     items: [
-      { id: 'reminder.new_sms', label: 'New SMS' },
-      { id: 'reminder.set_reminder', label: 'Set Reminder' },
-      { id: 'reminder.scheduled_message', label: 'Scheduled Message' },
+      { id: 'reminder_new_sms', label: 'New SMS' },
+      { id: 'reminder_set_reminder', label: 'Set Reminder' },
+      { id: 'reminder_scheduled_message', label: 'Scheduled Message' },
     ],
   },
   {
     id: 'reports',
     label: 'Reports',
     items: [
-      { id: 'reports.bank_counter_report', label: 'Bank Counter Report' },
-      { id: 'reports.day_report_heading', label: 'Day Report', kind: 'label' },
-      { id: 'reports.day_report_service_charge_details', label: 'Service Charge Details', indent: 1 },
-      { id: 'reports.day_report_account_and_counter_details', label: 'Account And Counter Details', indent: 1 },
-      { id: 'reports.day_report_expense_details', label: 'Expense Details', indent: 1 },
-      { id: 'reports.day_report_net_details', label: 'Net Details', indent: 1 },
-      { id: 'reports.day_report_grand_total', label: 'Grand Total', indent: 1 },
-      { id: 'reports.day_report_log_report', label: 'Log Report', indent: 1 },
-      { id: 'reports.service_report', label: 'Service Report' },
+      { id: 'reports_bank_counter_report', label: 'Bank Counter Report' },
+      // { id: 'reports_day_report_heading', label: 'Day Report', kind: 'label' },
+      { id: 'reports_day_report_service_charge_details', label: 'Service Charge Details', indent: 1 },
+      { id: 'reports_day_report_account_and_counter_details', label: 'Account And Counter Details', indent: 1 },
+      { id: 'reports_day_report_expense_details', label: 'Expense Details', indent: 1 },
+      { id: 'reports_day_report_net_details', label: 'Net Details', indent: 1 },
+      { id: 'reports_day_report_grand_total', label: 'Grand Total', indent: 1 },
+      { id: 'reports_day_report_log_report', label: 'Log Report', indent: 1 },
+      { id: 'reports_service_report', label: 'Service Report' },
     ],
   },
   {
     id: 'employee',
     label: 'Employee',
     items: [
-      { id: 'employee.add', label: 'Add Employee' },
-      { id: 'employee.list', label: 'Employee List' },
-      { id: 'employee.salary', label: 'Employee Salary' },
-      { id: 'employee.outstanding', label: 'Employee Outstanding' },
+      { id: 'employee_add', label: 'Add Employee' },
+      { id: 'employee_list', label: 'Employee List' },
+      { id: 'employee_salary', label: 'Employee Salary' },
+      { id: 'employee_outstanding', label: 'Employee Outstanding' },
     ],
   },
   {
     id: 'expense',
     label: 'Expense',
     items: [
-      { id: 'expense.access', label: 'Expense' },
+      { id: 'expense_access', label: 'Expense' },
     ],
   },
 ];
@@ -340,15 +359,33 @@ export const customerPermissionOptions: CustomerPermissionOption[] = customerPer
 );
 
 export const buildDefaultCustomerPermissions = (): CustomerPermissions =>
-  Object.fromEntries(customerPermissionToggleItems.map((item) => [item.id, false]));
+  Object.fromEntries(customerPermissionToggleItems.map((item) => [item.id, 0])) as CustomerPermissions;
 
-export const normalizeCustomerPermissions = (permissions?: Partial<CustomerPermissions> | null): CustomerPermissions => {
+const toPermissionFlag = (value: unknown): PermissionFlag => {
+  if (value === 1 || value === true) {
+    return 1;
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (['1', 'true', 'yes', 'active', 'enabled'].includes(normalizedValue)) {
+      return 1;
+    }
+  }
+
+  return 0;
+};
+
+export const normalizeCustomerPermissions = (permissions?: Record<string, unknown> | null): CustomerPermissions => {
   const nextPermissions = buildDefaultCustomerPermissions();
   if (!permissions) return nextPermissions;
 
   Object.entries(customerPermissionIdAliases).forEach(([canonicalId, aliases]) => {
-    if (aliases.some((alias) => permissions[alias])) {
-      nextPermissions[canonicalId] = true;
+    const resolvedValue = aliases.find((alias) => toPermissionFlag(permissions[alias]) === 1);
+
+    if (resolvedValue) {
+      nextPermissions[canonicalId] = 1;
     }
   });
 
@@ -356,12 +393,13 @@ export const normalizeCustomerPermissions = (permissions?: Partial<CustomerPermi
 };
 
 export const createCustomerPermissions = (enabledPermissionIds: string[] = []): CustomerPermissions => {
-  const rawPermissions = Object.fromEntries(enabledPermissionIds.map((permissionId) => [permissionId, true])) as CustomerPermissions;
+  const rawPermissions = Object.fromEntries(enabledPermissionIds.map((permissionId) => [permissionId, 1])) as CustomerPermissions;
   const nextPermissions = normalizeCustomerPermissions(rawPermissions);
 
   enabledPermissionIds.forEach((permissionId) => {
-    if (permissionId in nextPermissions) {
-      nextPermissions[permissionId] = true;
+    const canonicalPermissionId = resolveCanonicalPermissionId(permissionId);
+    if (canonicalPermissionId in nextPermissions) {
+      nextPermissions[canonicalPermissionId] = 1;
     }
   });
 
@@ -378,7 +416,7 @@ export const intersectCustomerPermissions = (
   return Object.fromEntries(
     Object.keys(normalizedBasePermissions).map((permissionId) => [
       permissionId,
-      normalizedBasePermissions[permissionId] && normalizedScopedPermissions[permissionId],
+      normalizedBasePermissions[permissionId] === 1 && normalizedScopedPermissions[permissionId] === 1 ? 1 : 0,
     ]),
   ) as CustomerPermissions;
 };
@@ -386,7 +424,13 @@ export const intersectCustomerPermissions = (
 export const isPermissionEnabled = (
   permissions: CustomerPermissions | null | undefined,
   permissionId: string,
-) => Boolean(permissions?.[permissionId]);
+) => {
+  const canonicalPermissionId = resolveCanonicalPermissionId(permissionId);
+  const aliases = customerPermissionIdAliases[canonicalPermissionId] ?? [permissionId];
+
+  return aliases.some((alias) => toPermissionFlag(permissions?.[alias]) === 1)
+    || toPermissionFlag(permissions?.[canonicalPermissionId]) === 1;
+};
 
 export const hasAnyEnabledPermission = (
   permissions: CustomerPermissions | null | undefined,
@@ -396,7 +440,13 @@ export const hasAnyEnabledPermission = (
 export const hasEnabledPermissionPrefix = (
   permissions: CustomerPermissions | null | undefined,
   prefix: string,
-) => Object.entries(permissions ?? {}).some(([permissionId, enabled]) => enabled && permissionId.startsWith(prefix));
+) => {
+  const legacyPrefix = prefix.includes('_') ? prefix.replace('_', '.') : prefix;
+  return Object.entries(permissions ?? {}).some(
+    ([permissionId, enabled]) =>
+      enabled === 1 && (permissionId.startsWith(prefix) || permissionId.startsWith(legacyPrefix)),
+  );
+};
 
 export const canUseBusinessFeature = (
   permissions: CustomerPermissions | null | undefined,
@@ -407,39 +457,39 @@ export const canUseBusinessFeature = (
     case 'customers':
       if (action === 'view') {
         return hasAnyEnabledPermission(permissions, [
-          'customers.add',
-          'customers.list',
-          'customers.payment_list',
-          'customers.outstanding',
+          'customers_add',
+          'customers_list',
+          'customers_payment_list',
+          'customers_outstanding',
         ]);
       }
-      if (action === 'add') return isPermissionEnabled(permissions, 'customers.add');
-      return isPermissionEnabled(permissions, 'customers.list');
+      if (action === 'add') return isPermissionEnabled(permissions, 'customers_add');
+      return isPermissionEnabled(permissions, 'customers_list');
     case 'employee':
       if (action === 'view') {
         return hasAnyEnabledPermission(permissions, [
-          'employee.add',
-          'employee.list',
-          'employee.salary',
-          'employee.outstanding',
+          'employee_add',
+          'employee_list',
+          'employee_salary',
+          'employee_outstanding',
         ]);
       }
-      if (action === 'add') return isPermissionEnabled(permissions, 'employee.add');
-      return isPermissionEnabled(permissions, 'employee.list');
+      if (action === 'add') return isPermissionEnabled(permissions, 'employee_add');
+      return isPermissionEnabled(permissions, 'employee_list');
     case 'services':
-      return isPermissionEnabled(permissions, 'services.access');
+      return isPermissionEnabled(permissions, 'services_access');
     case 'accounts':
       if (action === 'view') return true;
-      return isPermissionEnabled(permissions, 'master.account_manage');
+      return isPermissionEnabled(permissions, 'master_account_manage');
     case 'departments':
       if (action === 'view') return true;
-      return isPermissionEnabled(permissions, 'master.department_manage');
+      return isPermissionEnabled(permissions, 'master_department_manage');
     case 'reports':
-      return hasEnabledPermissionPrefix(permissions, 'reports.');
+      return hasEnabledPermissionPrefix(permissions, 'reports_');
     case 'expense':
-      return isPermissionEnabled(permissions, 'expense.access');
+      return isPermissionEnabled(permissions, 'expense_access');
     case 'transactions':
-      return isPermissionEnabled(permissions, 'services.access');
+      return isPermissionEnabled(permissions, 'services_access');
     default:
       return false;
   }

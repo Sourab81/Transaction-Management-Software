@@ -43,6 +43,13 @@ import {
   useVisibleServiceRecords,
   useVisibleTransactionRecords,
 } from '../../lib/dashboard-selectors';
+import { useCustomers } from '../../lib/hooks/useCustomers';
+import { useDashboardSummary } from '../../lib/hooks/useDashboardSummary';
+import { useDepartments } from '../../lib/hooks/useDepartments';
+import { useEmployees } from '../../lib/hooks/useEmployees';
+import { useReports } from '../../lib/hooks/useReports';
+import { useTransactions } from '../../lib/hooks/useTransactions';
+import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
 import {
   getCustomerWorkspaceViewUi,
   getModuleLabel as getModuleUiLabel,
@@ -78,6 +85,7 @@ import DetailList from '../ui/DetailList';
 import ConfirmActionModal from '../ui/state/ConfirmActionModal';
 import EmptyState from '../ui/state/EmptyState';
 import ErrorState from '../ui/state/ErrorState';
+import LoadingState from '../ui/state/LoadingState';
 import PermissionState from '../ui/state/PermissionState';
 import NotificationCenter from './NotificationCenter';
 import BusinessOnboarding from './BusinessOnboarding';
@@ -140,6 +148,29 @@ const getNextOnboardingStep = (
     default:
       return 'dashboard';
   }
+};
+
+const mergeWorkspaceRecords = <T extends { id: string }>(workspaceRecords: T[], apiRecords: T[]) => {
+  if (apiRecords.length === 0) {
+    return workspaceRecords;
+  }
+
+  const workspaceRecordById = new Map(workspaceRecords.map((record) => [record.id, record]));
+  const mergedRecords = apiRecords.map((apiRecord) => {
+    const localRecord = workspaceRecordById.get(apiRecord.id);
+
+    return localRecord
+      ? {
+          ...localRecord,
+          ...apiRecord,
+        }
+      : apiRecord;
+  });
+
+  const apiRecordIds = new Set(apiRecords.map((record) => record.id));
+  const remainingWorkspaceRecords = workspaceRecords.filter((record) => !apiRecordIds.has(record.id));
+
+  return [...mergedRecords, ...remainingWorkspaceRecords];
 };
 
 type ModalMode =
@@ -269,6 +300,7 @@ interface DashboardUiState {
 
 interface DashboardProps {
   currentUser: SessionUser;
+  initialWorkspaceData?: WorkspaceInitialData;
   onLogout: () => void;
   onSessionUserChange: (user: SessionUser) => void;
   activeTab: string;
@@ -321,6 +353,7 @@ const emptyTransactionRecords: Transaction[] = [];
 
 const Dashboard: React.FC<DashboardProps> = ({
   currentUser,
+  initialWorkspaceData,
   onLogout,
   onSessionUserChange,
   activeTab,
@@ -335,23 +368,75 @@ const Dashboard: React.FC<DashboardProps> = ({
   const businesses = useBusinesses();
   const currentBusiness = useBusinessRecord(currentUser.businessId);
   const workspace = useRoleScopedWorkspace(currentRole, currentUser.businessId);
+  const shouldLoadWorkspaceApi = currentRole !== 'Admin' && Boolean(currentUser.businessId);
+  const initialWorkspaceApiData = currentRole === 'Admin' ? undefined : initialWorkspaceData;
+  const {
+    counters: apiCounters,
+    isLoading: isDepartmentsLoading,
+    error: departmentsError,
+    reload: reloadDepartments,
+  } = useDepartments(shouldLoadWorkspaceApi, initialWorkspaceApiData?.counters);
+  const {
+    customers: apiCustomers,
+    isLoading: isCustomersLoading,
+    error: customersError,
+    reload: reloadCustomers,
+  } = useCustomers(shouldLoadWorkspaceApi, initialWorkspaceApiData?.customers);
+  const {
+    employees: apiEmployees,
+    isLoading: isEmployeesLoading,
+    error: employeesError,
+    reload: reloadEmployees,
+  } = useEmployees(shouldLoadWorkspaceApi, initialWorkspaceApiData?.employees);
+  const {
+    transactions: apiTransactions,
+    isLoading: isTransactionsLoading,
+    error: transactionsError,
+    reload: reloadTransactions,
+  } = useTransactions(shouldLoadWorkspaceApi, initialWorkspaceApiData?.transactions);
+  const {
+    reports: apiReports,
+    isLoading: isReportsLoading,
+    error: reportsError,
+    reload: reloadReports,
+  } = useReports(shouldLoadWorkspaceApi, initialWorkspaceApiData?.reports);
+  const {
+    summary: apiDashboardSummary,
+  } = useDashboardSummary(shouldLoadWorkspaceApi, initialWorkspaceApiData?.dashboardSummary);
   const adminWorkspace = useAdminWorkspaceData();
   const businessWorkspacesById = useBusinessWorkspacesById();
   const accounts = workspace.accounts;
   const services = workspace.services;
-  const customers: Array<Business | BusinessCustomer> = currentRole === 'Admin' ? businesses : workspace.customers;
-  const employees = workspace.employees;
+  const counters = useMemo(
+    () => mergeWorkspaceRecords(workspace.counters, apiCounters),
+    [apiCounters, workspace.counters],
+  );
+  const customers: Array<Business | BusinessCustomer> = useMemo(
+    () => currentRole === 'Admin'
+      ? businesses
+      : mergeWorkspaceRecords(workspace.customers, apiCustomers),
+    [apiCustomers, businesses, currentRole, workspace.customers],
+  );
+  const employees = useMemo(
+    () => mergeWorkspaceRecords(workspace.employees, apiEmployees),
+    [apiEmployees, workspace.employees],
+  );
   const expenses = workspace.expenses;
   const transactionHistory = useMemo(
-    () => workspace.transactions.filter((transaction) => !transaction.isDeleted),
-    [workspace.transactions],
+    () => mergeWorkspaceRecords(workspace.transactions, apiTransactions)
+      .filter((transaction) => !transaction.isDeleted),
+    [apiTransactions, workspace.transactions],
   );
   const recentServices = useRecentServices(transactionHistory);
   const baseNotifications = currentRole === 'Admin' ? adminWorkspace.notifications : workspace.notifications;
   const historyEvents = currentRole === 'Admin' ? adminWorkspace.historyEvents : workspace.historyEvents;
-  const reports = currentRole === 'Admin' ? adminWorkspace.reports : workspace.reports;
+  const reports = useMemo(
+    () => currentRole === 'Admin'
+      ? adminWorkspace.reports
+      : mergeWorkspaceRecords(workspace.reports, apiReports),
+    [adminWorkspace.reports, apiReports, currentRole, workspace.reports],
+  );
   const additionOptions = adminWorkspace.additionOptions;
-  const counters = workspace.counters;
   const [selectedCounterId, setSelectedCounterId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState<DashboardFilterState>(initialDashboardFilterState);
@@ -516,13 +601,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const sessionPermissions = useMemo(() => {
     if (currentRole === 'Employee') {
       return intersectCustomerPermissions(
-        currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
-        currentEmployee?.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
+        currentBusiness?.permissions ?? currentUser.permissions ?? buildDefaultCustomerPermissions(),
+        currentEmployee?.permissions ?? currentUser.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
       );
     }
 
-    return currentBusiness?.permissions ?? null;
-  }, [currentBusiness?.permissions, currentEmployee?.permissions, currentRole]);
+    return currentBusiness?.permissions ?? currentUser.permissions ?? null;
+  }, [currentBusiness?.permissions, currentEmployee?.permissions, currentRole, currentUser.permissions]);
   const currentBusinessAccessState = useMemo(
     () => currentRole === 'Admin' ? null : getBusinessAccessState(currentBusiness),
     [currentBusiness, currentRole],
@@ -548,17 +633,20 @@ const Dashboard: React.FC<DashboardProps> = ({
     && !isBusinessSubscriptionLocked
     && Boolean(currentBusiness)
     && !currentBusiness?.onboardingCompleted;
+  const tokenAssignedDepartmentId = currentUser.counterId || currentUser.departmentId;
+  const resolvedAssignedDepartmentId = tokenAssignedDepartmentId || currentEmployee?.departmentId;
   const availableCounters = currentRole === 'Employee'
-    ? currentEmployee?.departmentId
-      ? counters.filter((counter) => counter.id === currentEmployee.departmentId)
+    ? resolvedAssignedDepartmentId
+      ? counters.filter((counter) => counter.id === resolvedAssignedDepartmentId)
       : []
     : counters;
-  const employeeAssignedDepartment = currentEmployee?.departmentId
-    ? counters.find((counter) => counter.id === currentEmployee.departmentId)
+  const employeeAssignedDepartment = resolvedAssignedDepartmentId
+    ? counters.find((counter) => counter.id === resolvedAssignedDepartmentId)
     : null;
 
-  const safeSelectedCounterId = availableCounters.some((counter) => counter.id === selectedCounterId)
-    ? selectedCounterId
+  const requestedCounterId = selectedCounterId || tokenAssignedDepartmentId;
+  const safeSelectedCounterId = availableCounters.some((counter) => counter.id === requestedCounterId)
+    ? requestedCounterId || ''
     : availableCounters[0]?.id || '';
   const selectedCounter = availableCounters.find((counter) => counter.id === safeSelectedCounterId) || availableCounters[0];
   const selectedDepartmentName = selectedCounter?.name || '';
@@ -604,13 +692,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const customerPageOptions = currentRole === 'Admin'
     ? [{ id: 'list' as const, label: customerListPageUi.label, description: 'Manage business directory records.' }]
     : ([
-        isPermissionEnabled(accessContext.permissions, 'customers.list')
+        isPermissionEnabled(accessContext.permissions, 'customers_list')
           ? { id: 'list' as const, label: customerListPageUi.label, description: customerListPageUi.emptyDescription }
           : null,
-        isPermissionEnabled(accessContext.permissions, 'customers.payment_list')
+        isPermissionEnabled(accessContext.permissions, 'customers_payment_list')
           ? { id: 'payments' as const, label: customerPaymentsPageUi.label, description: customerPaymentsPageUi.emptyDescription }
           : null,
-        isPermissionEnabled(accessContext.permissions, 'customers.outstanding')
+        isPermissionEnabled(accessContext.permissions, 'customers_outstanding')
           ? { id: 'outstanding' as const, label: customerOutstandingPageUi.label, description: customerOutstandingPageUi.emptyDescription }
           : null,
       ].filter((option): option is { id: CustomerWorkspaceView; label: string; description: string } => Boolean(option)));
@@ -2213,7 +2301,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleBusinessSubmit = (values: BusinessFormValues) => {
     if (!requireModuleAction('customers', editingBusiness ? 'edit' : 'add')) return;
 
-    if (Object.values(values.permissions).every((enabled) => !enabled)) {
+    if (Object.values(values.permissions).every((enabled) => enabled === 0)) {
       addNotification('warning', 'Select at least one permission before saving the business.');
       return;
     }
@@ -3674,6 +3762,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const activeTabCtx: DashboardTabContext = {
     currentRole,
     currentUser,
+    dashboardSummary: apiDashboardSummary,
     currentBusinessProfile: currentBusiness || null,
     currentEmployeeProfile: currentEmployee,
     accessContext,
@@ -3775,6 +3864,129 @@ const Dashboard: React.FC<DashboardProps> = ({
     setBusinessPermissionFilter,
   };
 
+  const renderModuleDataState = () => {
+    if (currentRole === 'Admin') {
+      return null;
+    }
+
+    if (activeTab === 'departments') {
+      if (isDepartmentsLoading && counters.length === 0) {
+        return (
+          <LoadingState
+            eyebrow="Loading Departments"
+            title="Fetching departments"
+            description="Pulling the latest department and counter records from the backend."
+          />
+        );
+      }
+
+      if (departmentsError && counters.length === 0) {
+        return (
+          <ErrorState
+            eyebrow="Departments Unavailable"
+            title="Unable to load departments"
+            description={departmentsError}
+            action={{ label: 'Retry', onClick: reloadDepartments }}
+          />
+        );
+      }
+    }
+
+    if (activeTab === 'customers') {
+      if (isCustomersLoading && customers.length === 0) {
+        return (
+          <LoadingState
+            eyebrow="Loading Customers"
+            title="Fetching customers"
+            description="Pulling the latest customer directory from the backend."
+          />
+        );
+      }
+
+      if (customersError && customers.length === 0) {
+        return (
+          <ErrorState
+            eyebrow="Customers Unavailable"
+            title="Unable to load customers"
+            description={customersError}
+            action={{ label: 'Retry', onClick: reloadCustomers }}
+          />
+        );
+      }
+    }
+
+    if (activeTab === 'employee') {
+      if (isEmployeesLoading && employees.length === 0) {
+        return (
+          <LoadingState
+            eyebrow="Loading Employees"
+            title="Fetching employees"
+            description="Pulling the latest employee records from the backend."
+          />
+        );
+      }
+
+      if (employeesError && employees.length === 0) {
+        return (
+          <ErrorState
+            eyebrow="Employees Unavailable"
+            title="Unable to load employees"
+            description={employeesError}
+            action={{ label: 'Retry', onClick: reloadEmployees }}
+          />
+        );
+      }
+    }
+
+    if (activeTab === 'transactions') {
+      if (isTransactionsLoading && transactionHistory.length === 0) {
+        return (
+          <LoadingState
+            eyebrow="Loading Transactions"
+            title="Fetching transactions"
+            description="Pulling the latest transaction records from the backend."
+          />
+        );
+      }
+
+      if (transactionsError && transactionHistory.length === 0) {
+        return (
+          <ErrorState
+            eyebrow="Transactions Unavailable"
+            title="Unable to load transactions"
+            description={transactionsError}
+            action={{ label: 'Retry', onClick: reloadTransactions }}
+          />
+        );
+      }
+    }
+
+    if (activeTab === 'reports') {
+      if (isReportsLoading && reports.length === 0) {
+        return (
+          <LoadingState
+            eyebrow="Loading Reports"
+            title="Fetching reports"
+            description="Pulling the latest report records from the backend."
+          />
+        );
+      }
+
+      if (reportsError && reports.length === 0) {
+        return (
+          <ErrorState
+            eyebrow="Reports Unavailable"
+            title="Unable to load reports"
+            description={reportsError}
+            action={{ label: 'Retry', onClick: reloadReports }}
+          />
+        );
+      }
+    }
+
+    return null;
+  };
+
   const renderContent = () => {
     if (isBusinessSubscriptionLocked && activeTab !== 'profile') {
       return (
@@ -3786,6 +3998,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     if (!canAccessModuleForSession(accessContext, activeTab)) {
       return renderPermissionDenied(activeTab);
+    }
+
+    const remoteModuleState = renderModuleDataState();
+    if (remoteModuleState) {
+      return remoteModuleState;
     }
 
     return (
@@ -3816,8 +4033,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         accounts={accounts}
         services={services}
         customers={workspace.customers}
-        canAddMoreDepartments={isPermissionEnabled(sessionPermissions, 'master.department_manage')}
-        canAddMoreAccounts={isPermissionEnabled(sessionPermissions, 'master.account_manage')}
+        canAddMoreDepartments={isPermissionEnabled(sessionPermissions, 'master_department_manage')}
+        canAddMoreAccounts={isPermissionEnabled(sessionPermissions, 'master_account_manage')}
         canAccessServices={canAccessOnboardingServices}
         onLogout={onLogout}
         onSaveBusinessName={handleOnboardingBusinessNameSave}

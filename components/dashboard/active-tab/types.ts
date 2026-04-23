@@ -1,5 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { SessionUser } from '../../../lib/auth-session';
+import type { DashboardSummary } from '../../../lib/mappers/dashboard-summary-mapper';
 import type { SessionAccessContext } from '../../../lib/platform-structure';
 import type {
   Account,
@@ -49,6 +50,7 @@ export type DashboardDeleteActionType =
 export interface DashboardTabContext {
   currentRole: SessionUser['role'];
   currentUser: SessionUser;
+  dashboardSummary: DashboardSummary | null;
   currentBusinessProfile: Business | null;
   currentEmployeeProfile: Employee | null;
   accessContext: SessionAccessContext;

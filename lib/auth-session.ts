@@ -1,11 +1,30 @@
-import type { UserRole } from './platform-structure';
+import type {
+  CustomerPermissions,
+  UserRole,
+} from './platform-structure';
+import {
+  type LoginApiResponseBody,
+  loginWithApi,
+} from './api/auth';
+import {
+  AUTH_TOKEN_COOKIE_NAME,
+  clearAuthTokenCookie,
+  setAuthTokenCookie,
+} from './auth-cookie';
 import {
   APP_STATE_STORAGE_KEY,
+  ensureRequiredAppStateAccounts,
+  getInitialAppState,
   type AppState,
   type Business,
   type Employee,
 } from './store';
 import { getBusinessAccessState } from './subscription';
+import {
+  extractAccessToken,
+  mapLoginResponseToSessionUser,
+} from './mappers/session-user-mapper';
+import { mapPermissionValue } from './mappers/permission-mapper';
 
 export type LoginRole = 'Admin' | 'Employee' | 'Customer';
 
@@ -16,6 +35,7 @@ export interface AuthUser {
   password: string;
   role: UserRole;
   businessId?: string;
+  permissions?: CustomerPermissions;
 }
 
 export interface SessionUser {
@@ -24,6 +44,10 @@ export interface SessionUser {
   email: string;
   role: UserRole;
   businessId?: string;
+  departmentId?: string;
+  counterId?: string;
+  counterName?: string;
+  permissions?: CustomerPermissions;
 }
 
 interface StoredAdminProfile {
@@ -44,8 +68,26 @@ const STATIC_AUTH_USERS: AuthUser[] = [
 ];
 
 const SESSION_KEY = 'enest-auth-user';
+const AUTH_TOKEN_KEY = AUTH_TOKEN_COOKIE_NAME;
 const ADMIN_PROFILE_STORAGE_KEY = 'enest-admin-profile';
+const TEMPORARY_LOGIN_ROLE_OVERRIDES: Record<string, UserRole> = {
+  // TODO: Remove this frontend-only override after the backend returns role/business info for this login.
+  'sagar@gmail.com': 'Customer',
+};
+
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const isUserRole = (value: unknown): value is UserRole =>
+  value === 'Admin' || value === 'Employee' || value === 'Customer';
+
+const createSessionUserFromAuthUser = (user: AuthUser): SessionUser => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  businessId: user.businessId,
+  permissions: user.permissions,
+});
 
 const readStoredAdminProfile = (): StoredAdminProfile | null => {
   if (typeof window === 'undefined') return null;
@@ -89,6 +131,24 @@ const getStaticAuthUsers = (): AuthUser[] => {
   });
 };
 
+const getLocalAdminUsers = (): AuthUser[] => {
+  const adminUsers = [...getStaticAuthUsers(), ...STATIC_AUTH_USERS].filter(
+    (user) => user.role === 'Admin',
+  );
+  const seenCredentials = new Set<string>();
+
+  return adminUsers.filter((user) => {
+    const credentialKey = `${normalizeEmail(user.email)}:${user.password}`;
+
+    if (seenCredentials.has(credentialKey)) {
+      return false;
+    }
+
+    seenCredentials.add(credentialKey);
+    return true;
+  });
+};
+
 const readAppState = (): AppState | null => {
   if (typeof window === 'undefined') return null;
 
@@ -96,7 +156,7 @@ const readAppState = (): AppState | null => {
     const rawState = localStorage.getItem(APP_STATE_STORAGE_KEY);
     if (!rawState) return null;
 
-    return JSON.parse(rawState) as AppState;
+    return ensureRequiredAppStateAccounts(JSON.parse(rawState) as AppState);
   } catch {
     return null;
   }
@@ -119,6 +179,7 @@ const readBusinessUsers = (state: AppState): AuthUser[] =>
       password: business.password,
       role: 'Customer' as const,
       businessId: business.id,
+      permissions: business.permissions,
     }));
 
 const readEmployeeUsers = (state: AppState): AuthUser[] => {
@@ -145,11 +206,142 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
             password: employee.password || 'employee123',
             role: 'Employee',
             businessId: business.id,
+            permissions: employee.permissions,
           });
         });
     });
 
   return employeeUsers;
+};
+
+const resolveLocalUserBySessionFields = (
+  email: string,
+  role: UserRole | null,
+  businessId?: string,
+) => {
+  const matches = getAvailableUsers().filter((user) => user.email === email);
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  if (role && businessId) {
+    const exactMatch = matches.find((user) => user.role === role && user.businessId === businessId);
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  if (role) {
+    const roleMatches = matches.filter((user) => user.role === role);
+    if (roleMatches.length === 1) {
+      return roleMatches[0];
+    }
+  }
+
+  if (businessId) {
+    const businessMatches = matches.filter((user) => user.businessId === businessId);
+    if (businessMatches.length === 1) {
+      return businessMatches[0];
+    }
+  }
+
+  return matches.length === 1 ? matches[0] : null;
+};
+
+const resolveStoredSessionUser = (sessionUser: SessionUser): SessionUser | null => {
+  const matchedUser = getAvailableUsers().find(
+    (user) =>
+      user.role === sessionUser.role &&
+      user.email === sessionUser.email &&
+      user.businessId === sessionUser.businessId,
+  );
+
+  if (matchedUser) {
+    return {
+      ...createSessionUserFromAuthUser(matchedUser),
+      departmentId: sessionUser.departmentId,
+      counterId: sessionUser.counterId,
+      counterName: sessionUser.counterName,
+      permissions: sessionUser.permissions || matchedUser.permissions,
+    };
+  }
+
+  if (sessionUser.role !== 'Admin' && !sessionUser.businessId) {
+    return null;
+  }
+
+  return sessionUser;
+};
+
+const resolveTemporaryLoginOverrideUser = (email: string): AuthUser | null => {
+  const forcedRole = TEMPORARY_LOGIN_ROLE_OVERRIDES[email];
+  if (!forcedRole) {
+    return null;
+  }
+
+  const matchingUsers = getAvailableUsers().filter((user) => user.email === email);
+  if (matchingUsers.length === 0) {
+    return null;
+  }
+
+  return matchingUsers.find((user) => user.role === forcedRole) || null;
+};
+
+const resolveSessionUserFromApiLogin = (
+  normalizedEmail: string,
+  body: LoginApiResponseBody | null,
+): SessionUser => {
+  const mappedSessionUser = mapLoginResponseToSessionUser(
+    normalizedEmail,
+    body,
+    (sessionEmail, role, businessId) => resolveLocalUserBySessionFields(sessionEmail, role, businessId),
+  );
+  const temporaryOverrideUser = resolveTemporaryLoginOverrideUser(normalizedEmail);
+  const sessionUser = temporaryOverrideUser
+    ? {
+        ...createSessionUserFromAuthUser(temporaryOverrideUser),
+        departmentId: mappedSessionUser?.departmentId,
+        counterId: mappedSessionUser?.counterId,
+        counterName: mappedSessionUser?.counterName,
+        permissions: mappedSessionUser?.permissions || temporaryOverrideUser.permissions,
+      }
+    : mappedSessionUser;
+
+  if (!sessionUser) {
+    throw new Error(
+      'Login succeeded, but the backend response did not identify whether this account should open admin, business, or employee access.',
+    );
+  }
+
+  return sessionUser;
+};
+
+const updateStoredAccessToken = (token: string | null) => {
+  if (typeof window === 'undefined') return;
+
+  if (!token) {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    return;
+  }
+
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+};
+
+export const clearServerAuthSession = async () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      cache: 'no-store',
+      keepalive: true,
+    });
+  } catch {
+    // Ignore logout transport failures during local session cleanup.
+  }
 };
 
 export const getAvailableUsersFromState = (state: AppState): AuthUser[] => {
@@ -179,7 +371,7 @@ export const getAvailableUsersFromState = (state: AppState): AuthUser[] => {
 export const getAvailableUsers = (): AuthUser[] => {
   const state = readAppState();
   if (!state) {
-    return getStaticAuthUsers();
+    return getAvailableUsersFromState(ensureRequiredAppStateAccounts(getInitialAppState()));
   }
 
   return getAvailableUsersFromState(state);
@@ -194,6 +386,12 @@ export const updateStoredUser = (sessionUser: SessionUser | null) => {
   }
 
   localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+};
+
+export const getStoredAccessToken = () => {
+  if (typeof window === 'undefined') return null;
+
+  return localStorage.getItem(AUTH_TOKEN_KEY);
 };
 
 export const updateAdminCredentials = (updates: Partial<Pick<AuthUser, 'name' | 'email' | 'password'>>) => {
@@ -213,26 +411,60 @@ export const updateAdminCredentials = (updates: Partial<Pick<AuthUser, 'name' | 
 };
 
 export const loginWithDummyCredentials = (role: LoginRole, email: string, password: string): SessionUser | null => {
-  const matchedUser = getAvailableUsers().find(
-    (user) =>
-      user.role === role &&
-      user.email === normalizeEmail(email) &&
-      user.password === password
-  );
+  const normalizedEmail = normalizeEmail(email);
+  const matchedUser = role === 'Admin'
+    ? getLocalAdminUsers().find(
+        (user) =>
+          user.email === normalizedEmail &&
+          user.password === password,
+      )
+    : getAvailableUsers().find(
+        (user) =>
+          user.role === role &&
+          user.email === normalizedEmail &&
+          user.password === password,
+      );
 
   if (!matchedUser) {
     return null;
   }
 
-  const sessionUser: SessionUser = {
-    id: matchedUser.id,
-    name: matchedUser.name,
-    email: matchedUser.email,
-    role: matchedUser.role,
-    businessId: matchedUser.businessId,
-  };
+  const sessionUser = createSessionUserFromAuthUser(matchedUser);
+  updateStoredUser(sessionUser);
+  updateStoredAccessToken(null);
+  clearAuthTokenCookie();
+
+  return sessionUser;
+};
+
+export const loginWithApiCredentials = async (
+  email: string,
+  password: string,
+): Promise<SessionUser> => {
+  const normalizedEmail = normalizeEmail(email);
+  const { body } = await loginWithApi(normalizedEmail, password);
+  const sessionUser = resolveSessionUserFromApiLogin(normalizedEmail, body);
 
   updateStoredUser(sessionUser);
+  const accessToken = extractAccessToken(body);
+  updateStoredAccessToken(accessToken);
+
+  if (accessToken) {
+    setAuthTokenCookie(accessToken);
+  }
+
+  return sessionUser;
+};
+
+export const completeApiLogin = (
+  email: string,
+  body: LoginApiResponseBody | null,
+): SessionUser => {
+  const normalizedEmail = normalizeEmail(email);
+  const sessionUser = resolveSessionUserFromApiLogin(normalizedEmail, body);
+
+  updateStoredUser(sessionUser);
+  updateStoredAccessToken(extractAccessToken(body));
 
   return sessionUser;
 };
@@ -246,25 +478,37 @@ export const getStoredUser = (): SessionUser | null => {
   try {
     const parsed = JSON.parse(raw) as Partial<SessionUser>;
 
-    const matchedUser = getAvailableUsers().find(
-      (user) =>
-        user.id === parsed.id &&
-        user.role === parsed.role &&
-        user.businessId === parsed.businessId
-    );
-
-    if (!matchedUser) {
+    if (!parsed.id || !parsed.name || !parsed.email || !isUserRole(parsed.role)) {
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
 
-    return {
-      id: matchedUser.id,
-      name: matchedUser.name,
-      email: matchedUser.email,
-      role: matchedUser.role,
-      businessId: matchedUser.businessId,
-    };
+    const resolvedUser = resolveStoredSessionUser({
+      id: String(parsed.id),
+      name: String(parsed.name),
+      email: normalizeEmail(String(parsed.email)),
+      role: parsed.role,
+      businessId: typeof parsed.businessId === 'string' && parsed.businessId.trim()
+        ? parsed.businessId
+        : undefined,
+      departmentId: typeof parsed.departmentId === 'string' && parsed.departmentId.trim()
+        ? parsed.departmentId
+        : undefined,
+      counterId: typeof parsed.counterId === 'string' && parsed.counterId.trim()
+        ? parsed.counterId
+        : undefined,
+      counterName: typeof parsed.counterName === 'string' && parsed.counterName.trim()
+        ? parsed.counterName
+        : undefined,
+      permissions: mapPermissionValue(parsed.permissions),
+    });
+
+    if (!resolvedUser) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+
+    return resolvedUser;
   } catch {
     localStorage.removeItem(SESSION_KEY);
     return null;
@@ -273,4 +517,7 @@ export const getStoredUser = (): SessionUser | null => {
 
 export const logoutUser = () => {
   updateStoredUser(null);
+  updateStoredAccessToken(null);
+  clearAuthTokenCookie();
+  void clearServerAuthSession();
 };

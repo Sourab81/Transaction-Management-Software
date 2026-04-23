@@ -41,14 +41,14 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
   );
   const [showPassword, setShowPassword] = useState(Boolean(initialValues?.password));
 
-  const enabledPermissionCount = Object.values(permissions).filter(Boolean).length;
+  const enabledPermissionCount = Object.values(permissions).filter((enabled) => enabled === 1).length;
   const selectedPlan = getBusinessSubscriptionPlan(planId);
   const previewEndDate = calculateBusinessSubscriptionEndDate(planId, subscriptionStartDate);
 
   const togglePermission = (permissionId: string) => {
     setPermissions((current) => ({
       ...current,
-      [permissionId]: !current[permissionId],
+      [permissionId]: current[permissionId] === 1 ? 0 : 1,
     }));
   };
 
@@ -62,11 +62,11 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
     const toggleItems = section.items.filter((item) => item.kind !== 'label');
 
     setPermissions((current) => {
-      const shouldEnableAll = !toggleItems.every((item) => current[item.id]);
+      const shouldEnableAll = !toggleItems.every((item) => current[item.id] === 1);
       const nextPermissions = { ...current };
 
       toggleItems.forEach((item) => {
-        nextPermissions[item.id] = shouldEnableAll;
+        nextPermissions[item.id] = shouldEnableAll ? 1 : 0;
       });
 
       return nextPermissions;
@@ -220,7 +220,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
         <div className="permission-builder">
           {customerPermissionSections.map((section) => {
             const toggleItems = section.items.filter((item) => item.kind !== 'label');
-            const enabledCount = toggleItems.filter((item) => permissions[item.id]).length;
+            const enabledCount = toggleItems.filter((item) => permissions[item.id] === 1).length;
             const isSectionEnabled = toggleItems.length > 0 && enabledCount === toggleItems.length;
 
             return (
@@ -254,7 +254,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
                       );
                     }
 
-                    const isEnabled = permissions[item.id] ?? false;
+                    const isEnabled = permissions[item.id] === 1;
 
                     return (
                       <div key={item.id} className={`permission-row ${item.indent ? 'permission-row--child' : ''}`}>

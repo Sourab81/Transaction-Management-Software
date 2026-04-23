@@ -46,7 +46,7 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({ departments, employees,
               employees.map((employee, index) => {
                 const status = employee.status || 'Active';
                 const department = employee.departmentId ? departmentById.get(employee.departmentId) : undefined;
-                const enabledPermissionCount = Object.values(employee.permissions || {}).filter(Boolean).length;
+                const enabledPermissionCount = Object.values(employee.permissions || {}).filter((enabled) => enabled === 1).length;
 
                 return (
                   <tr key={employee.id}>

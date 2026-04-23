@@ -470,10 +470,10 @@ const initialBusinesses: Business[] = [
     onboardingStep: 'dashboard',
     subscription: createBusinessSubscription('year-1', '2026-01-10'),
     permissions: createCustomerPermissions([
-      'customers.list',
-      'customers.payment_list',
-      'services.access',
-      'reports.bank_counter_report',
+      'customers_list',
+      'customers_payment_list',
+      'services_access',
+      'reports_bank_counter_report',
     ]),
   },
   {
@@ -488,8 +488,26 @@ const initialBusinesses: Business[] = [
     onboardingStep: 'dashboard',
     subscription: createBusinessSubscription('year-3', '2026-01-12'),
     permissions: createCustomerPermissions([
-      'customers.list',
-      'services.access',
+      'customers_list',
+      'services_access',
+    ]),
+  },
+  {
+    id: 'business-sagar',
+    name: 'Sagar Thakur',
+    phone: '6265965711',
+    email: 'sagar@gmail.com',
+    password: 'Sagar@11',
+    status: 'Active',
+    joinedDate: '2024-01-18',
+    onboardingCompleted: true,
+    onboardingStep: 'dashboard',
+    subscription: createBusinessSubscription('year-1', '2026-01-18'),
+    permissions: createCustomerPermissions([
+      'customers_list',
+      'customers_payment_list',
+      'services_access',
+      'reports_bank_counter_report',
     ]),
   },
 ];
@@ -582,6 +600,8 @@ const buildInitialState = (): AppState => ({
   adminWorkspace: initialAdminWorkspace,
 });
 
+export const getInitialAppState = (): AppState => buildInitialState();
+
 const initialState: AppState = buildInitialState();
 
 export const APP_STATE_STORAGE_KEY = 'enest-app-state-v2';
@@ -613,6 +633,55 @@ const normalizeBusiness = (
     onboardingCompleted: business.onboardingCompleted ?? false,
     onboardingStep: business.onboardingCompleted ? 'dashboard' : business.onboardingStep || 'welcome',
     subscription: toStoredBusinessSubscription(accessState.subscription),
+  };
+};
+
+const REQUIRED_BUSINESS_LOGINS: BusinessNormalizationInput[] = [
+  {
+    id: 'business-sagar',
+    name: 'Sagar Thakur',
+    phone: '6265965711',
+    email: 'sagar@gmail.com',
+    password: 'Sagar@11',
+    status: 'Active',
+    joinedDate: '2024-01-18',
+    onboardingCompleted: true,
+    onboardingStep: 'dashboard',
+    subscription: createBusinessSubscription('year-1', '2026-01-18'),
+    permissions: createCustomerPermissions([
+      'customers_list',
+      'customers_payment_list',
+      'services_access',
+      'reports_bank_counter_report',
+    ]),
+  },
+];
+
+export const ensureRequiredAppStateAccounts = (state: AppState): AppState => {
+  const missingBusinesses = REQUIRED_BUSINESS_LOGINS
+    .map((business) => normalizeBusiness(business))
+    .filter((requiredBusiness) =>
+      !state.businesses.some(
+        (existingBusiness) => existingBusiness.email.trim().toLowerCase() === requiredBusiness.email,
+      ),
+    );
+
+  if (missingBusinesses.length === 0) {
+    return state;
+  }
+
+  return {
+    ...state,
+    businesses: [...state.businesses, ...missingBusinesses],
+    businessWorkspacesById: {
+      ...state.businessWorkspacesById,
+      ...Object.fromEntries(
+        missingBusinesses.map((business) => [
+          business.id,
+          state.businessWorkspacesById[business.id] ?? createBusinessWorkspaceFromPermissions(business.permissions),
+        ]),
+      ),
+    },
   };
 };
 
@@ -943,7 +1012,7 @@ export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
 
   const fallbackBusinesses = migratedBusinesses.length > 0 ? migratedBusinesses : initialState.businesses;
 
-  return {
+  return ensureRequiredAppStateAccounts({
     businesses: fallbackBusinesses,
     businessWorkspacesById: Object.fromEntries(
       fallbackBusinesses.map((business) => [
@@ -957,7 +1026,7 @@ export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
       reports: legacyState.reports,
       additionOptions: legacyState.additionOptions,
     }),
-  };
+  });
 };
 
 const loadInitialState = (): AppState => {
@@ -974,7 +1043,7 @@ const loadInitialState = (): AppState => {
         )
       );
 
-      return {
+      return ensureRequiredAppStateAccounts({
         businesses,
         businessWorkspacesById: Object.fromEntries(
           businesses.map((business) => [
@@ -983,7 +1052,7 @@ const loadInitialState = (): AppState => {
           ])
         ),
         adminWorkspace: normalizeAdminWorkspace(parsedState.adminWorkspace),
-      };
+      });
     }
 
     const legacyState = window.localStorage.getItem(LEGACY_APP_STATE_STORAGE_KEY);

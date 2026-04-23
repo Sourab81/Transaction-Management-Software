@@ -136,15 +136,15 @@ const transactions: Transaction[] = [
 ];
 
 const businessPermissions = createCustomerPermissions([
-  'customers.list',
-  'services.access',
-  'reports.bank_counter_report',
-  'master.account_manage',
+  'customers_list',
+  'services_access',
+  'reports_bank_counter_report',
+  'master_account_manage',
 ]);
 
 const restrictedPermissions = createCustomerPermissions([]);
-const addOnlyCustomerPermissions = createCustomerPermissions(['customers.add']);
-const employeeCustomerOnlyPermissions = createCustomerPermissions(['customers.list']);
+const addOnlyCustomerPermissions = createCustomerPermissions(['customers_add']);
+const employeeCustomerOnlyPermissions = createCustomerPermissions(['customers_list']);
 
 const adminContext = { role: 'Admin' as const };
 const businessContext = { role: 'Customer' as const, businessId: 'business-1', permissions: businessPermissions };

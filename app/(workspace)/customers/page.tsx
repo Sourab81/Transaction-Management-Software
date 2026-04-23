@@ -1,5 +1,3 @@
-'use client';
-
 import WorkspaceModulePage from '../../../components/dashboard/WorkspaceModulePage';
 import CustomersTab from '../../../components/dashboard/active-tab/CustomersTab';
 

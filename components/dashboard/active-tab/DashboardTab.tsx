@@ -18,6 +18,7 @@ interface DashboardTabProps {
 export default function DashboardTab({ ctx }: DashboardTabProps) {
   const {
     currentRole,
+    dashboardSummary,
     selectedCounter,
     visibleServices,
     recentServices,
@@ -43,9 +44,13 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   } = ctx;
 
   const isBusinessWorkspace = currentRole === 'Customer';
-  const collectedAmount = filteredTransactionRecords.reduce((total, transaction) => total + transaction.paidAmount, 0);
-  const pendingTransactions = filteredTransactionRecords.filter((transaction) => transaction.status === 'pending').length;
-  const activeServiceCount = visibleServices.filter((service) => service.status === 'Active').length;
+  const collectedAmount = dashboardSummary?.collectedAmount
+    ?? filteredTransactionRecords.reduce((total, transaction) => total + transaction.paidAmount, 0);
+  const pendingTransactions = dashboardSummary?.pendingTransactions
+    ?? filteredTransactionRecords.filter((transaction) => transaction.status === 'pending').length;
+  const customerCount = dashboardSummary?.customerCount ?? customerDirectoryRecords.length;
+  const activeServiceCount = dashboardSummary?.activeServiceCount
+    ?? visibleServices.filter((service) => service.status === 'Active').length;
 
   if (currentRole === 'Admin') {
     return renderAdminDashboard();
@@ -175,7 +180,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
             <div className="col-12 col-sm-6 col-lg-3">
               <DashboardCard
                 title="Customers"
-                value={customerDirectoryRecords.length}
+                value={customerCount}
                 icon={<FaUsers />}
                 color="blue"
               />

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { getAvailableUsersFromState } from '../lib/auth-session';
+import { getAvailableUsersFromState, getStoredAccessToken, loginWithDummyCredentials } from '../lib/auth-session';
 import { createCustomerPermissions } from '../lib/platform-structure';
 import { createBusinessSubscription } from '../lib/subscription';
 import { createBusinessWorkspaceFromPermissions, type AppState } from '../lib/store';
 
 const businessPermissions = createCustomerPermissions([
-  'customers.list',
-  'services.access',
+  'customers_list',
+  'services_access',
 ]);
 
 const buildState = (): AppState => {
@@ -120,5 +120,113 @@ describe('auth session user discovery', () => {
 
     assert(users.some((user) => user.role === 'Customer' && user.businessId === 'business-1'));
     assert(!users.some((user) => user.role === 'Employee' && user.businessId === 'business-1'));
+  });
+
+  test('supports the seeded admin credentials through the local dummy login path', () => {
+    const user = loginWithDummyCredentials('Admin', 'admin@enest.com', 'admin123');
+
+    assert.deepEqual(user, {
+      id: 'admin-1',
+      name: 'Admin User',
+      email: 'admin@enest.com',
+      role: 'Admin',
+      businessId: undefined,
+      permissions: undefined,
+    });
+  });
+
+  test('keeps the seeded admin fallback available even when a custom admin profile is stored', () => {
+    const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+    const originalLocalStorage = (globalThis as typeof globalThis & { localStorage?: unknown }).localStorage;
+    const storage = new Map<string, string>();
+    const localStorageMock = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string) => {
+        storage.delete(key);
+      },
+    };
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { localStorage: localStorageMock },
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: localStorageMock,
+    });
+
+    localStorageMock.setItem('enest-admin-profile', JSON.stringify({
+      id: 'admin-1',
+      name: 'Custom Admin',
+      email: 'custom-admin@enest.com',
+      password: 'custom-admin-password',
+    }));
+
+    try {
+      const user = loginWithDummyCredentials('Admin', 'admin@enest.com', 'admin123');
+
+      assert.deepEqual(user, {
+        id: 'admin-1',
+        name: 'Admin User',
+        email: 'admin@enest.com',
+        role: 'Admin',
+        businessId: undefined,
+        permissions: undefined,
+      });
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      });
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: originalLocalStorage,
+      });
+    }
+  });
+
+  test('clears any stored backend token when the temporary admin login succeeds', () => {
+    const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+    const originalLocalStorage = (globalThis as typeof globalThis & { localStorage?: unknown }).localStorage;
+    const storage = new Map<string, string>();
+    const localStorageMock = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string) => {
+        storage.delete(key);
+      },
+    };
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { localStorage: localStorageMock },
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: localStorageMock,
+    });
+
+    localStorageMock.setItem('enest-auth-token', 'stale-access-token');
+
+    try {
+      const user = loginWithDummyCredentials('Admin', 'admin@enest.com', 'admin123');
+
+      assert.equal(user?.role, 'Admin');
+      assert.equal(getStoredAccessToken(), null);
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      });
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: originalLocalStorage,
+      });
+    }
   });
 });

@@ -17,15 +17,15 @@ const canViewBusinessRecords = (context: SessionAccessContext, moduleId: string)
   switch (moduleId) {
     case 'customers':
       return hasAnyEnabledPermission(context.permissions, [
-        'customers.list',
-        'customers.payment_list',
-        'customers.outstanding',
+        'customers_list',
+        'customers_payment_list',
+        'customers_outstanding',
       ]);
     case 'employee':
       return hasAnyEnabledPermission(context.permissions, [
-        'employee.list',
-        'employee.salary',
-        'employee.outstanding',
+        'employee_list',
+        'employee_salary',
+        'employee_outstanding',
       ]);
     case 'services':
     case 'accounts':
