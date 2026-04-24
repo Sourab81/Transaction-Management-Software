@@ -75,11 +75,7 @@ describe('store migration', () => {
     assert.equal(workspace?.transactions.length, 0);
     assert.equal(workspace?.accounts.length, 1);
     assert.equal(workspace?.accounts[0]?.accountHolder, 'Primary Account');
-    assert.equal(workspace?.counters.length, 1);
-    assert.equal(workspace?.counters[0]?.name, 'MAIN DEPARTMENT');
-    assert.deepEqual(workspace?.counters[0]?.linkedAccountIds, [workspace?.accounts[0]?.id]);
-    assert.equal(workspace?.counters[0]?.defaultAccountId, workspace?.accounts[0]?.id);
-    assert.equal(workspace?.counters[0]?.linkedAccountId, workspace?.accounts[0]?.id);
+    assert.equal(workspace?.counters.length, 0);
     assert.equal(migratedState.adminWorkspace.notifications[0]?.message, 'Legacy admin notification');
     assert.equal(migratedState.adminWorkspace.reports[0]?.name, 'Legacy report');
     assert.equal(migratedState.adminWorkspace.additionOptions[0]?.title, 'Legacy option');

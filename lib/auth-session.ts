@@ -4,13 +4,8 @@ import type {
 } from './platform-structure';
 import {
   type LoginApiResponseBody,
-  loginWithApi,
+  loginWithAppApi,
 } from './api/auth';
-import {
-  AUTH_TOKEN_COOKIE_NAME,
-  clearAuthTokenCookie,
-  setAuthTokenCookie,
-} from './auth-cookie';
 import {
   APP_STATE_STORAGE_KEY,
   ensureRequiredAppStateAccounts,
@@ -21,10 +16,13 @@ import {
 } from './store';
 import { getBusinessAccessState } from './subscription';
 import {
-  extractAccessToken,
   mapLoginResponseToSessionUser,
 } from './mappers/session-user-mapper';
 import { mapPermissionValue } from './mappers/permission-mapper';
+import {
+  getSessionUserClientCookie,
+  setSessionUserClientCookie,
+} from './session-user-cookie';
 
 export type LoginRole = 'Admin' | 'Employee' | 'Customer';
 
@@ -68,7 +66,6 @@ const STATIC_AUTH_USERS: AuthUser[] = [
 ];
 
 const SESSION_KEY = 'enest-auth-user';
-const AUTH_TOKEN_KEY = AUTH_TOKEN_COOKIE_NAME;
 const ADMIN_PROFILE_STORAGE_KEY = 'enest-admin-profile';
 const TEMPORARY_LOGIN_ROLE_OVERRIDES: Record<string, UserRole> = {
   // TODO: Remove this frontend-only override after the backend returns role/business info for this login.
@@ -317,17 +314,6 @@ const resolveSessionUserFromApiLogin = (
   return sessionUser;
 };
 
-const updateStoredAccessToken = (token: string | null) => {
-  if (typeof window === 'undefined') return;
-
-  if (!token) {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    return;
-  }
-
-  localStorage.setItem(AUTH_TOKEN_KEY, token);
-};
-
 export const clearServerAuthSession = async () => {
   if (typeof window === 'undefined') {
     return;
@@ -380,18 +366,18 @@ export const getAvailableUsers = (): AuthUser[] => {
 export const updateStoredUser = (sessionUser: SessionUser | null) => {
   if (typeof window === 'undefined') return;
 
+  setSessionUserClientCookie(sessionUser);
+
   if (!sessionUser) {
     localStorage.removeItem(SESSION_KEY);
     return;
   }
 
-  localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+  localStorage.removeItem(SESSION_KEY);
 };
 
 export const getStoredAccessToken = () => {
-  if (typeof window === 'undefined') return null;
-
-  return localStorage.getItem(AUTH_TOKEN_KEY);
+  return null;
 };
 
 export const updateAdminCredentials = (updates: Partial<Pick<AuthUser, 'name' | 'email' | 'password'>>) => {
@@ -431,8 +417,6 @@ export const loginWithDummyCredentials = (role: LoginRole, email: string, passwo
 
   const sessionUser = createSessionUserFromAuthUser(matchedUser);
   updateStoredUser(sessionUser);
-  updateStoredAccessToken(null);
-  clearAuthTokenCookie();
 
   return sessionUser;
 };
@@ -442,17 +426,10 @@ export const loginWithApiCredentials = async (
   password: string,
 ): Promise<SessionUser> => {
   const normalizedEmail = normalizeEmail(email);
-  const { body } = await loginWithApi(normalizedEmail, password);
+  const { body } = await loginWithAppApi(normalizedEmail, password);
   const sessionUser = resolveSessionUserFromApiLogin(normalizedEmail, body);
 
   updateStoredUser(sessionUser);
-  const accessToken = extractAccessToken(body);
-  updateStoredAccessToken(accessToken);
-
-  if (accessToken) {
-    setAuthTokenCookie(accessToken);
-  }
-
   return sessionUser;
 };
 
@@ -464,13 +441,24 @@ export const completeApiLogin = (
   const sessionUser = resolveSessionUserFromApiLogin(normalizedEmail, body);
 
   updateStoredUser(sessionUser);
-  updateStoredAccessToken(extractAccessToken(body));
 
   return sessionUser;
 };
 
 export const getStoredUser = (): SessionUser | null => {
   if (typeof window === 'undefined') return null;
+
+  const cookieUser = getSessionUserClientCookie();
+  if (cookieUser) {
+    const resolvedCookieUser = resolveStoredSessionUser(cookieUser);
+
+    if (!resolvedCookieUser) {
+      updateStoredUser(null);
+      return null;
+    }
+
+    return resolvedCookieUser;
+  }
 
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
@@ -508,6 +496,7 @@ export const getStoredUser = (): SessionUser | null => {
       return null;
     }
 
+    updateStoredUser(resolvedUser);
     return resolvedUser;
   } catch {
     localStorage.removeItem(SESSION_KEY);
@@ -517,7 +506,5 @@ export const getStoredUser = (): SessionUser | null => {
 
 export const logoutUser = () => {
   updateStoredUser(null);
-  updateStoredAccessToken(null);
-  clearAuthTokenCookie();
   void clearServerAuthSession();
 };

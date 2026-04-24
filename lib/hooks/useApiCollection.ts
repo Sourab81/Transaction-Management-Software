@@ -6,6 +6,7 @@ import { AppApiError } from '../api/app-client';
 interface UseApiCollectionOptions<T> {
   enabled: boolean;
   initialData?: T[];
+  revalidateOnMount?: boolean;
   request: () => Promise<unknown>;
   mapResponse: (payload: unknown) => T[];
 }
@@ -20,6 +21,7 @@ interface UseApiCollectionResult<T> {
 export function useApiCollection<T>({
   enabled,
   initialData,
+  revalidateOnMount = false,
   request,
   mapResponse,
 }: UseApiCollectionOptions<T>): UseApiCollectionResult<T> {
@@ -39,7 +41,7 @@ export function useApiCollection<T>({
       return;
     }
 
-    if (reloadToken === 0 && hasInitialData) {
+    if (reloadToken === 0 && hasInitialData && !revalidateOnMount) {
       setError('');
       setIsLoading(false);
       return;
@@ -86,7 +88,7 @@ export function useApiCollection<T>({
     return () => {
       isCancelled = true;
     };
-  }, [enabled, hasInitialData, initialData, reloadToken]);
+  }, [enabled, hasInitialData, initialData, reloadToken, revalidateOnMount]);
 
   return {
     data,

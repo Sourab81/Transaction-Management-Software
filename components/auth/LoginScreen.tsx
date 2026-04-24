@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   FaArrowRight,
   FaCheckCircle,
@@ -12,17 +13,15 @@ import {
   clearServerAuthSession,
   completeApiLogin,
   loginWithDummyCredentials,
-  type SessionUser,
+  updateStoredUser,
 } from '../../lib/auth-session';
 import { loginWithServerAction } from '../../app/login/actions';
 import { getRoleLabel } from '../../lib/platform-structure';
+import { getDefaultWorkspacePath } from '../../lib/workspace-routes';
 import styles from './LoginScreen.module.css';
 
-interface LoginScreenProps {
-  onLoginSuccess: (user: SessionUser) => void;
-}
-
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+const LoginScreen = () => {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -36,14 +35,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const normalizedPassword = password.trim();
 
     if (!normalizedEmail || !normalizedPassword) {
+      event.preventDefault();
       setStatus('');
       setError('Enter your email and password to continue.');
       return;
     }
 
     setError('');
-    setStatus('Verifying your credentials and opening the correct workspace.');
-    setIsSubmitting(true);
+    setStatus('Verifying your credentials and loading departments.');
 
     try {
       const temporaryAdminUser = loginWithDummyCredentials(
@@ -53,26 +52,42 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       );
 
       if (temporaryAdminUser) {
+        event.preventDefault();
         await clearServerAuthSession();
+        updateStoredUser(temporaryAdminUser);
         setStatus('Temporary admin access granted. Opening the admin workspace.');
-        onLoginSuccess(temporaryAdminUser);
+        setError('');
+        router.replace(getDefaultWorkspacePath());
         return;
       }
 
-      const result = await loginWithServerAction({
-        email: normalizedEmail,
-        password: normalizedPassword,
-      });
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.set('email', normalizedEmail);
+      formData.set('password', normalizedPassword);
 
-      if (!result.ok) {
+      const loginResult = await loginWithServerAction(
+        {
+          ok: false,
+          body: null,
+          message: '',
+          statusCode: undefined,
+          email: '',
+          submitted: false,
+        },
+        formData,
+      );
+
+      if (!loginResult.ok) {
         throw new Error(
-          result.message || 'Unable to sign in right now. Please try again in a moment.',
+          loginResult.message || 'Unable to sign in right now. Please try again in a moment.',
         );
       }
 
-      const user = completeApiLogin(normalizedEmail, result.body);
-      setStatus(`Verified. Opening the ${getRoleLabel(user.role).toLowerCase()} workspace.`);
-      onLoginSuccess(user);
+      const user = completeApiLogin(loginResult.email, loginResult.body);
+      setError('');
+      setStatus(`Verified. Departments loaded. Opening the ${getRoleLabel(user.role).toLowerCase()} workspace.`);
+      router.replace(getDefaultWorkspacePath());
     } catch (loginError) {
       setStatus('');
       setError(

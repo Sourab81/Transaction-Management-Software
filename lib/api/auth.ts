@@ -106,10 +106,17 @@ const hasExplicitFailureStatus = (value: unknown) => {
 };
 
 const getLoginEndpoint = () => {
+  if (typeof window !== 'undefined') {
+    return '/api/login';
+  }
+
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 
   if (!baseUrl) {
-    throw new LoginApiError('API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in .env.');
+    throw new LoginApiError(
+      'API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in .env.',
+      { statusCode: 501 },
+    );
   }
 
   return `${baseUrl.replace(/\/+$/, '')}/login`;

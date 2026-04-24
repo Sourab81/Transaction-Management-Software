@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { getStoredUser, logoutUser, updateStoredUser, type SessionUser } from '../../lib/auth-session';
+import { logoutUser, updateStoredUser, type SessionUser } from '../../lib/auth-session';
 import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
 import {
   DEFAULT_WORKSPACE_MODULE_ID,
@@ -18,6 +18,7 @@ import Dashboard from './Dashboard';
 
 interface WorkspaceLayoutShellProps {
   children: ReactNode;
+  initialUser: SessionUser;
   initialWorkspaceData?: WorkspaceInitialData;
 }
 
@@ -52,31 +53,17 @@ const resolveWorkspaceRouteState = (pathname: string): WorkspaceRouteState => {
 
 const WorkspaceLayoutShell = ({
   children,
+  initialUser,
   initialWorkspaceData,
 }: WorkspaceLayoutShellProps) => {
   const pathname = usePathname();
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(initialUser);
   const routeState = useMemo(() => resolveWorkspaceRouteState(pathname), [pathname]);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const user = getStoredUser();
-
-      if (!user) {
-        setCurrentUser(null);
-        setIsCheckingSession(false);
-        router.replace(LOGIN_ROUTE);
-        return;
-      }
-
-      setCurrentUser(user);
-      setIsCheckingSession(false);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [router]);
+    setCurrentUser(initialUser);
+  }, [initialUser]);
 
   const handleLogout = () => {
     logoutUser();
@@ -96,10 +83,6 @@ const WorkspaceLayoutShell = ({
       router.push(nextPath);
     }
   };
-
-  if (isCheckingSession) {
-    return <AppLoadingScreen />;
-  }
 
   if (!currentUser) {
     return (

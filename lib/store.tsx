@@ -290,7 +290,7 @@ type AdminAction =
   | { type: 'UPDATE_ADDITION_OPTION'; payload: AdditionOption }
   | { type: 'DELETE_ADDITION_OPTION'; payload: string };
 
-type AppAction = WorkspaceScopedAction | BusinessDirectoryAction | AdminAction;
+type AppAction = WorkspaceScopedAction | BusinessDirectoryAction | AdminAction | { type: 'HYDRATE_APP_STATE'; payload: AppState };
 
 const today = () => new Date().toISOString().split('T')[0];
 const nowIso = () => new Date().toISOString();
@@ -322,18 +322,6 @@ const createDefaultAccount = (): Account => ({
   currentBalance: 0,
   status: 'Active',
   date: today(),
-});
-
-const createDefaultDepartment = (linkedAccountId?: string): Counter => ({
-  id: createRecordId(),
-  name: 'MAIN DEPARTMENT',
-  code: 'D1',
-  linkedAccountIds: linkedAccountId ? [linkedAccountId] : [],
-  defaultAccountId: linkedAccountId,
-  linkedAccountId,
-  openingBalance: 0,
-  currentBalance: 0,
-  status: 'Active',
 });
 
 export const getDepartmentLinkedAccountIds = (
@@ -395,9 +383,7 @@ const ensureWorkspaceDefaults = (workspace: BusinessWorkspace): BusinessWorkspac
     nextAccounts.push(createDefaultAccount());
   }
 
-  if (nextCounters.length === 0) {
-    nextCounters.push(createDefaultDepartment(nextAccounts[0]?.id));
-  } else if (!nextCounters.some((counter) => getDepartmentLinkedAccountIds(counter).length > 0) && nextAccounts[0]) {
+  if (nextCounters.length > 0 && !nextCounters.some((counter) => getDepartmentLinkedAccountIds(counter).length > 0) && nextAccounts[0]) {
     nextCounters[0] = {
       ...nextCounters[0],
       linkedAccountIds: [nextAccounts[0].id],
@@ -1029,9 +1015,7 @@ export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
   });
 };
 
-const loadInitialState = (): AppState => {
-  if (typeof window === 'undefined') return initialState;
-
+const loadPersistedState = (): AppState => {
   try {
     const storedState = window.localStorage.getItem(APP_STATE_STORAGE_KEY);
 
@@ -1503,6 +1487,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ...workspace,
         additionOptions: workspace.additionOptions.filter((option) => option.id !== action.payload),
       }));
+    case 'HYDRATE_APP_STATE':
+      return action.payload;
     default:
       return state;
   }
@@ -1533,7 +1519,16 @@ const AppStateContext = createContext<AppState | null>(null);
 const AppDispatchContext = createContext<React.Dispatch<AppAction> | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, initialState, loadInitialState);
+  const [state, dispatch] = useReducer(appReducer, initialState);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const persistedState = loadPersistedState();
+    if (persistedState !== initialState) {
+      dispatch({ type: 'HYDRATE_APP_STATE', payload: persistedState });
+    }
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {

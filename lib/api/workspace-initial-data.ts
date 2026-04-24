@@ -15,9 +15,14 @@ import {
 import { mapEmployeesResponse } from '../mappers/employee-mapper';
 import { mapReportsResponse } from '../mappers/report-mapper';
 import { mapTransactionsResponse } from '../mappers/transaction-mapper';
+import {
+  WORKSPACE_PREFETCH_COOKIE_NAME,
+  parsePrefetchedWorkspaceDataCookieValue,
+} from '../workspace-prefetch-cookie';
 
 export interface WorkspaceInitialData {
   counters?: Counter[];
+  prefetchedCounters?: boolean;
   customers?: BusinessCustomer[];
   employees?: Employee[];
   transactions?: Transaction[];
@@ -54,16 +59,20 @@ const readWorkspaceResource = async <T>(
 export const getInitialWorkspaceData = async (): Promise<WorkspaceInitialData> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_TOKEN_COOKIE_NAME)?.value?.trim() || null;
+  const prefetchedWorkspaceData = token
+    ? parsePrefetchedWorkspaceDataCookieValue(
+        cookieStore.get(WORKSPACE_PREFETCH_COOKIE_NAME)?.value,
+      )
+    : null;
+  const prefetchedCounters = prefetchedWorkspaceData?.counters;
 
   const [
-    counters,
     customers,
     employees,
     transactions,
     reports,
     dashboardSummary,
   ] = await Promise.all([
-    readWorkspaceResource(token, 'departments', mapCountersResponse),
     readWorkspaceResource(token, 'customers', mapCustomersResponse),
     readWorkspaceResource(token, 'employees', mapEmployeesResponse),
     readWorkspaceResource(token, 'transactions', mapTransactionsResponse),
@@ -71,8 +80,13 @@ export const getInitialWorkspaceData = async (): Promise<WorkspaceInitialData> =
     readWorkspaceResource(token, 'dashboardSummary', mapDashboardSummaryResponse),
   ]);
 
+  const counters = typeof prefetchedCounters !== 'undefined'
+    ? prefetchedCounters
+    : await readWorkspaceResource(token, 'departments', mapCountersResponse);
+
   return {
     counters,
+    prefetchedCounters: typeof prefetchedCounters !== 'undefined',
     customers,
     employees,
     transactions,

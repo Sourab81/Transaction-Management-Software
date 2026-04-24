@@ -1,7 +1,15 @@
 import { cookies } from 'next/headers';
-import { type LoginApiResponseBody, LoginApiError, loginWithApi } from '../../../../lib/api/auth';
+import type { LoginApiResponseBody } from '../../../../lib/api/auth';
 import { AUTH_TOKEN_COOKIE_NAME, getAuthTokenServerCookieOptions } from '../../../../lib/auth-cookie';
-import { extractAccessToken } from '../../../../lib/mappers/session-user-mapper';
+import {
+  LoginWorkspaceBootstrapError,
+  loginAndLoadWorkspaceBootstrap,
+} from '../../../../lib/api/login-workspace-bootstrap';
+import {
+  WORKSPACE_PREFETCH_COOKIE_NAME,
+  getWorkspacePrefetchServerCookieOptions,
+  serializePrefetchedWorkspaceDataCookieValue,
+} from '../../../../lib/workspace-prefetch-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +58,18 @@ const readLoginPayload = async (request: Request) => {
   };
 };
 
+const clearBootstrapCookies = async () => {
+  const cookieStore = await cookies();
+  cookieStore.set(AUTH_TOKEN_COOKIE_NAME, '', {
+    ...getAuthTokenServerCookieOptions(),
+    maxAge: 0,
+  });
+  cookieStore.set(WORKSPACE_PREFETCH_COOKIE_NAME, '', {
+    ...getWorkspacePrefetchServerCookieOptions(),
+    maxAge: 0,
+  });
+};
+
 export async function POST(request: Request) {
   const { username, password } = await readLoginPayload(request);
 
@@ -61,19 +81,24 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { statusCode, body } = await loginWithApi(username, password);
-    const accessToken = extractAccessToken(body as LoginApiResponseBody | null);
-
-    if (accessToken) {
-      const cookieStore = await cookies();
-      cookieStore.set(AUTH_TOKEN_COOKIE_NAME, accessToken, getAuthTokenServerCookieOptions());
-    }
+    const normalizedUsername = username.trim().toLowerCase();
+    const { statusCode, body, accessToken, counters } =
+      await loginAndLoadWorkspaceBootstrap(normalizedUsername, password);
+    const cookieStore = await cookies();
+    cookieStore.set(AUTH_TOKEN_COOKIE_NAME, accessToken, getAuthTokenServerCookieOptions());
+    cookieStore.set(
+      WORKSPACE_PREFETCH_COOKIE_NAME,
+      serializePrefetchedWorkspaceDataCookieValue({ counters }),
+      getWorkspacePrefetchServerCookieOptions(),
+    );
 
     return Response.json(body, { status: statusCode });
   } catch (error) {
-    if (error instanceof LoginApiError) {
+    await clearBootstrapCookies();
+
+    if (error instanceof LoginWorkspaceBootstrapError) {
       return Response.json(
-        error.body ?? { message: error.message },
+        (error.body as LoginApiResponseBody | null) ?? { message: error.message },
         { status: error.statusCode ?? 502 },
       );
     }

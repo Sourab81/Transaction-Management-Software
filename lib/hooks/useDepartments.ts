@@ -15,10 +15,12 @@ interface UseDepartmentsResult {
 export function useDepartments(
   enabled: boolean,
   initialData?: Counter[],
+  revalidateOnMount = false,
 ): UseDepartmentsResult {
   const { data, isLoading, error, reload } = useApiCollection({
     enabled,
     initialData,
+    revalidateOnMount,
     request: getDepartmentsResponse,
     mapResponse: mapCountersResponse,
   });

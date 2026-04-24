@@ -57,7 +57,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   }
 
   const serviceSnapshotSection = canAccessModuleForSession(ctx.accessContext, 'services') ? (
-    <div className="col-12">
+    <div className="dashboard-section-block">
       <div className="panel p-4 p-lg-5">
         <div className="panel-header">
           <div>
@@ -112,8 +112,8 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   ) : null;
 
   const recentActivitySection = (
-    <>
-      <div className="col-12">
+    <div className="dashboard-section-stack">
+      <div className="dashboard-section-block">
         <SectionHero
           eyebrow="Recent Activity"
           title="Counters and latest services"
@@ -121,7 +121,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
         />
       </div>
 
-      <div className="col-12">
+      <div className="dashboard-section-block">
         <div className="row g-4">
           <div className="col-12 col-lg-6">
             <CountersTable counters={availableCounters} />
@@ -133,113 +133,96 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 
   return (
-    <div className="row g-4">
-      <div className="col-12">
-        <WelcomeHero
-          userName={displayUserName}
-          role={currentRole}
-          counterName={selectedCounter?.name || 'No counter selected'}
-          counterStatus={selectedCounter?.status || 'Inactive'}
-          onPrimaryAction={() => handleQuickAction('new-transaction')}
-          onSecondaryAction={() => handleQuickAction('favorites')}
-        />
-      </div>
+    <div className="dashboard-page-stack">
+      <WelcomeHero
+        userName={displayUserName}
+        role={currentRole}
+        counterName={selectedCounter?.name || 'No counter selected'}
+        counterStatus={selectedCounter?.status || 'Inactive'}
+        onPrimaryAction={() => handleQuickAction('new-transaction')}
+        onSecondaryAction={() => handleQuickAction('favorites')}
+      />
 
-      {isBusinessWorkspace ? renderBusinessPlanSection() : null}
-      {isBusinessWorkspace ? null : serviceSnapshotSection}
-
-      <div className="col-12">
-        <div className="panel p-4 p-lg-5">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Workspace Overview</p>
-              <h2 className="panel-title">Operating pulse</h2>
-            </div>
-          </div>
-          <div className="row g-4">
-            <div className="col-12 col-sm-6 col-lg-3">
-              <DashboardCard
-                title="Collected Amount"
-                value={`Rs. ${collectedAmount.toLocaleString('en-IN')}`}
-                icon={<FaDollarSign />}
-                color="green"
-              />
-            </div>
-            <div className="col-12 col-sm-6 col-lg-3">
-              <DashboardCard
-                title="Pending Transactions"
-                value={pendingTransactions}
-                icon={<FaHourglassHalf />}
-                color="orange"
-              />
-            </div>
-            <div className="col-12 col-sm-6 col-lg-3">
-              <DashboardCard
-                title="Customers"
-                value={customerCount}
-                icon={<FaUsers />}
-                color="blue"
-              />
-            </div>
-            <div className="col-12 col-sm-6 col-lg-3">
-              <DashboardCard
-                title="Active Services"
-                value={activeServiceCount}
-                icon={<FaCog />}
-                color="purple"
-              />
-            </div>
+      <section className="panel dashboard-kpi-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Workspace Overview</p>
+            <h2 className="panel-title">Operating pulse</h2>
           </div>
         </div>
-      </div>
+        <div className="dashboard-kpi-grid">
+          <DashboardCard
+            title="Collected Amount"
+            value={`Rs. ${collectedAmount.toLocaleString('en-IN')}`}
+            icon={<FaDollarSign />}
+            color="green"
+          />
+          <DashboardCard
+            title="Pending Transactions"
+            value={pendingTransactions}
+            icon={<FaHourglassHalf />}
+            color="orange"
+          />
+          <DashboardCard
+            title="Customers"
+            value={customerCount}
+            icon={<FaUsers />}
+            color="blue"
+          />
+          <DashboardCard
+            title="Active Services"
+            value={activeServiceCount}
+            icon={<FaCog />}
+            color="purple"
+          />
+        </div>
+      </section>
 
-      <div className="col-12">
-        <div className="row g-4">
-          <div className="col-12 col-lg-6 dashboard-balance-col">
-            <QuickActions onAction={handleQuickAction} />
-          </div>
-          <div className="col-12 col-lg-6 dashboard-balance-col">
-            <NotificationCenter
-              notifications={notifications}
-              onDismiss={handleDismissNotification}
+      <div className="dashboard-main-grid">
+        <div className="dashboard-main-column">
+          {isBusinessWorkspace ? renderBusinessPlanSection() : null}
+          {isBusinessWorkspace ? null : serviceSnapshotSection}
+          {isBusinessWorkspace ? null : recentActivitySection}
+
+          <div className="dashboard-section-block">
+            <SectionHero
+              eyebrow="Transactions"
+              title="Transaction history"
+              description="Review recent customer activity and open a record when you need more detail."
+              action={canManageModule('transactions') && canEmployeeOperateOnDepartment ? {
+                label: 'Add Transaction',
+                icon: <FaPlusCircle />,
+                onClick: () => handleQuickAction('new-transaction'),
+              } : undefined}
             />
           </div>
+
+          {isTransactionFiltersOpen ? renderTransactionFilters() : null}
+
+          <TransactionTable
+            transactions={filteredTransactionRecords}
+            onView={handleViewTransaction}
+            onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
+            onToggleFilters={() => ctx.setIsTransactionFiltersOpen((current) => !current)}
+            isFilterOpen={isTransactionFiltersOpen}
+          />
+
+          {isBusinessWorkspace ? serviceSnapshotSection : null}
+          {isBusinessWorkspace ? recentActivitySection : null}
         </div>
+
+        <aside className="dashboard-side-column">
+          <QuickActions onAction={handleQuickAction} />
+          <NotificationCenter
+            notifications={notifications}
+            onDismiss={handleDismissNotification}
+          />
+        </aside>
       </div>
-
-      {isBusinessWorkspace ? null : recentActivitySection}
-
-      <div className="col-12">
-        <SectionHero
-          eyebrow="Transactions"
-          title="Transaction history"
-          description="Review recent customer activity and open a record when you need more detail."
-          action={canManageModule('transactions') && canEmployeeOperateOnDepartment ? {
-            label: 'Add Transaction',
-            icon: <FaPlusCircle />, 
-            onClick: () => handleQuickAction('new-transaction'),
-          } : undefined}
-        />
-      </div>
-
-      {isTransactionFiltersOpen ? renderTransactionFilters() : null}
-
-      <div className="col-12">
-        <TransactionTable
-          transactions={filteredTransactionRecords}
-          onView={handleViewTransaction}
-          onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-          onToggleFilters={() => ctx.setIsTransactionFiltersOpen((current) => !current)}
-          isFilterOpen={isTransactionFiltersOpen}
-        />
-      </div>
-
-      {isBusinessWorkspace ? serviceSnapshotSection : null}
-      {isBusinessWorkspace ? recentActivitySection : null}
     </div>
   );
 }

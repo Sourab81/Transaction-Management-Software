@@ -43,13 +43,6 @@ interface BusinessOnboardingProps {
   onSkipCustomers: () => void;
 }
 
-const isSeedDepartment = (department: Counter) => (
-  department.name === 'MAIN DEPARTMENT' &&
-  department.code === 'D1' &&
-  department.openingBalance === 0 &&
-  department.currentBalance === 0
-);
-
 const isSeedAccount = (account: Account) => (
   account.accountHolder === 'Primary Account' &&
   account.bankName === 'Default Bank' &&
@@ -91,8 +84,8 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   ]), [canAccessServices]);
 
   const activeStepIndex = Math.max(visibleSteps.findIndex((step) => step.id === currentStep), 0);
-  const configuredDepartments = departments.filter((department) => !isSeedDepartment(department));
-  const availableDepartments = configuredDepartments.length > 0 ? configuredDepartments : departments;
+  const configuredDepartments = departments;
+  const availableDepartments = departments;
   const configuredAccounts = accounts.filter((account) => !isSeedAccount(account));
   const [businessName, setBusinessName] = useState(business.name);
   const [departmentName, setDepartmentName] = useState('');

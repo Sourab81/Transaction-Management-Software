@@ -2,34 +2,52 @@
 
 import { cookies } from 'next/headers';
 import {
-  type LoginApiResponseBody,
-  LoginApiError,
-  loginWithApi,
-} from '../../lib/api/auth';
-import {
   AUTH_TOKEN_COOKIE_NAME,
   getAuthTokenServerCookieOptions,
 } from '../../lib/auth-cookie';
-import { extractAccessToken } from '../../lib/mappers/session-user-mapper';
+import {
+  LoginWorkspaceBootstrapError,
+  loginAndLoadWorkspaceBootstrap,
+} from '../../lib/api/login-workspace-bootstrap';
+import {
+  WORKSPACE_PREFETCH_COOKIE_NAME,
+  getWorkspacePrefetchServerCookieOptions,
+  serializePrefetchedWorkspaceDataCookieValue,
+} from '../../lib/workspace-prefetch-cookie';
+import type { LoginApiResponseBody } from '../../lib/api/auth';
 
 export interface LoginActionResult {
   ok: boolean;
   body: LoginApiResponseBody | null;
-  message?: string;
+  message: string;
   statusCode?: number;
-}
-
-interface LoginActionInput {
   email: string;
-  password: string;
+  submitted: boolean;
 }
 
-export async function loginWithServerAction({
-  email,
-  password,
-}: LoginActionInput): Promise<LoginActionResult> {
-  const normalizedEmail = email.trim().toLowerCase();
-  const normalizedPassword = password.trim();
+const readStringFormValue = (formData: FormData, key: string) => {
+  const value = formData.get(key);
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const clearBootstrapCookies = async () => {
+  const cookieStore = await cookies();
+  cookieStore.set(AUTH_TOKEN_COOKIE_NAME, '', {
+    ...getAuthTokenServerCookieOptions(),
+    maxAge: 0,
+  });
+  cookieStore.set(WORKSPACE_PREFETCH_COOKIE_NAME, '', {
+    ...getWorkspacePrefetchServerCookieOptions(),
+    maxAge: 0,
+  });
+};
+
+export async function loginWithServerAction(
+  _previousState: LoginActionResult,
+  formData: FormData,
+): Promise<LoginActionResult> {
+  const normalizedEmail = readStringFormValue(formData, 'email').toLowerCase();
+  const normalizedPassword = readStringFormValue(formData, 'password');
 
   if (!normalizedEmail || !normalizedPassword) {
     return {
@@ -37,37 +55,48 @@ export async function loginWithServerAction({
       body: null,
       message: 'Username and password are required.',
       statusCode: 400,
+      email: normalizedEmail,
+      submitted: true,
     };
   }
 
   try {
-    const { statusCode, body } = await loginWithApi(
-      normalizedEmail,
-      normalizedPassword,
-    );
-    const accessToken = extractAccessToken(body);
-
-    if (accessToken) {
-      const cookieStore = await cookies();
-      cookieStore.set(
-        AUTH_TOKEN_COOKIE_NAME,
-        accessToken,
-        getAuthTokenServerCookieOptions(),
+    const { statusCode, body, accessToken, counters } =
+      await loginAndLoadWorkspaceBootstrap(
+        normalizedEmail,
+        normalizedPassword,
       );
-    }
+    const cookieStore = await cookies();
+    cookieStore.set(
+      AUTH_TOKEN_COOKIE_NAME,
+      accessToken,
+      getAuthTokenServerCookieOptions(),
+    );
+    cookieStore.set(
+      WORKSPACE_PREFETCH_COOKIE_NAME,
+      serializePrefetchedWorkspaceDataCookieValue({ counters }),
+      getWorkspacePrefetchServerCookieOptions(),
+    );
 
     return {
       ok: true,
       body,
+      message: '',
       statusCode,
+      email: normalizedEmail,
+      submitted: true,
     };
   } catch (error) {
-    if (error instanceof LoginApiError) {
+    await clearBootstrapCookies();
+
+    if (error instanceof LoginWorkspaceBootstrapError) {
       return {
         ok: false,
-        body: error.body,
+        body: (error.body as LoginApiResponseBody | null) ?? null,
         message: error.message,
         statusCode: error.statusCode ?? 502,
+        email: normalizedEmail,
+        submitted: true,
       };
     }
 
@@ -76,6 +105,8 @@ export async function loginWithServerAction({
       body: null,
       message: 'Unable to reach the login service. Check the API server and try again.',
       statusCode: 502,
+      email: normalizedEmail,
+      submitted: true,
     };
   }
 }

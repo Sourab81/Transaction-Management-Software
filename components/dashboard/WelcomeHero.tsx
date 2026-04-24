@@ -27,17 +27,19 @@ const WelcomeHero: React.FC<WelcomeHeroProps> = ({
   return (
     <section className="hero-panel glass-card">
       <div className="hero-panel__content">
-        <p className="eyebrow">{roleLabel} workspace</p>
-        <h1 className="hero-panel__headline">{greeting}, {userName} !</h1>
-        <div className="section-hero__actions">
-          <button type="button" className="btn-app btn-app-primary" onClick={onPrimaryAction}>
-            Start Transaction
-            <FaArrowRight size={13} />
-          </button>
-          <button type="button" className="btn-app btn-app-secondary" onClick={onSecondaryAction}>
-            <FaStar size={13} />
-            Open Favorites
-          </button>
+        <div className="hero-panel__intro">
+          <p className="eyebrow">{roleLabel} workspace</p>
+          <h1 className="hero-panel__headline">{greeting}, {userName} !</h1>
+          <div className="section-hero__actions">
+            <button type="button" className="btn-app btn-app-primary" onClick={onPrimaryAction}>
+              Start Transaction
+              <FaArrowRight size={13} />
+            </button>
+            <button type="button" className="btn-app btn-app-secondary" onClick={onSecondaryAction}>
+              <FaStar size={13} />
+              Open Favorites
+            </button>
+          </div>
         </div>
 
         <div className="hero-panel__meta">

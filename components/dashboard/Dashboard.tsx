@@ -114,13 +114,6 @@ const getSubscriptionStatusClass = (status?: BusinessSubscription['status']) => 
   return 'status-chip status-chip--active';
 };
 
-const isDefaultSeedDepartment = (department: Counter) => (
-  department.name === 'MAIN DEPARTMENT' &&
-  department.code === 'D1' &&
-  department.openingBalance === 0 &&
-  department.currentBalance === 0
-);
-
 const isDefaultSeedAccount = (account: Account) => (
   account.accountHolder === 'Primary Account' &&
   account.bankName === 'Default Bank' &&
@@ -375,7 +368,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     isLoading: isDepartmentsLoading,
     error: departmentsError,
     reload: reloadDepartments,
-  } = useDepartments(shouldLoadWorkspaceApi, initialWorkspaceApiData?.counters);
+  } = useDepartments(
+    shouldLoadWorkspaceApi,
+    initialWorkspaceApiData?.counters,
+    initialWorkspaceApiData?.prefetchedCounters === true,
+  );
   const {
     customers: apiCustomers,
     isLoading: isCustomersLoading,
@@ -633,6 +630,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     && !isBusinessSubscriptionLocked
     && Boolean(currentBusiness)
     && !currentBusiness?.onboardingCompleted;
+  const shouldRequireDepartmentSetup = currentRole === 'Customer'
+    && !isBusinessSubscriptionLocked
+    && !shouldShowBusinessOnboarding
+    && counters.length === 0;
   const tokenAssignedDepartmentId = currentUser.counterId || currentUser.departmentId;
   const resolvedAssignedDepartmentId = tokenAssignedDepartmentId || currentEmployee?.departmentId;
   const availableCounters = currentRole === 'Employee'
@@ -2532,8 +2533,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
-    const placeholderDepartment = counters.find(isDefaultSeedDepartment);
-    const hasConfiguredDepartment = counters.some((counter) => !isDefaultSeedDepartment(counter));
     const primaryAccountId = accounts[0]?.id;
     const departmentPayload: DepartmentFormValues = {
       name: values.name,
@@ -2545,18 +2544,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       currentBalance: 0,
       status: 'Active',
     };
-
-    if (!hasConfiguredDepartment && placeholderDepartment) {
-      dispatch({
-        type: 'UPDATE_COUNTER',
-        businessId,
-        payload: {
-          ...placeholderDepartment,
-          ...departmentPayload,
-        },
-      });
-      return;
-    }
 
     dispatch({
       type: 'ADD_COUNTER',
@@ -3993,6 +3980,20 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="row g-4">
           {renderBusinessPlanSection(true)}
         </div>
+      );
+    }
+
+    if (shouldRequireDepartmentSetup && activeTab !== 'departments' && activeTab !== 'profile') {
+      return (
+        <EmptyState
+          eyebrow="Department Setup"
+          title="Create your first department"
+          description="This business workspace does not have any departments yet. Open the Departments page and add one before continuing with daily operations."
+          action={{
+            label: 'Open Departments',
+            onClick: () => onNavigate('departments'),
+          }}
+        />
       );
     }
 
