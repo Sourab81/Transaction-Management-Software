@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react';
 import {
   buildDefaultCustomerPermissions,
-  createCustomerPermissions,
   normalizeCustomerPermissions,
   type CustomerPermissions,
 } from './platform-structure';
@@ -13,7 +12,6 @@ import {
 } from './transaction-workflow';
 import { getTransactionUpdateDelta, type BalanceDelta } from './transaction-accounting';
 import {
-  createBusinessSubscription,
   getBusinessAccessState,
   toStoredBusinessSubscription,
   type BusinessStatusReason,
@@ -312,18 +310,6 @@ const createTransactionNumber = () => {
   return `TXN-${dateCode}-${timeCode}-${randomCode}`;
 };
 
-const createDefaultAccount = (): Account => ({
-  id: createRecordId(),
-  accountHolder: 'Primary Account',
-  bankName: 'Default Bank',
-  accountNumber: '000000000001',
-  ifsc: 'ENST0000001',
-  openingBalance: 0,
-  currentBalance: 0,
-  status: 'Active',
-  date: today(),
-});
-
 export const getDepartmentLinkedAccountIds = (
   counter?: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId'> | null,
 ) => {
@@ -375,30 +361,6 @@ export const getServicesForDepartment = (
   return services.filter((service) => service.departmentId === departmentId);
 };
 
-const ensureWorkspaceDefaults = (workspace: BusinessWorkspace): BusinessWorkspace => {
-  const nextAccounts = [...workspace.accounts];
-  const nextCounters = [...workspace.counters];
-
-  if (nextAccounts.length === 0) {
-    nextAccounts.push(createDefaultAccount());
-  }
-
-  if (nextCounters.length > 0 && !nextCounters.some((counter) => getDepartmentLinkedAccountIds(counter).length > 0) && nextAccounts[0]) {
-    nextCounters[0] = {
-      ...nextCounters[0],
-      linkedAccountIds: [nextAccounts[0].id],
-      defaultAccountId: nextAccounts[0].id,
-      linkedAccountId: nextAccounts[0].id,
-    };
-  }
-
-  return {
-    ...workspace,
-    accounts: nextAccounts,
-    counters: nextCounters,
-  };
-};
-
 export const createEmptyBusinessWorkspace = (): BusinessWorkspace => ({
   customers: [],
   employees: [],
@@ -414,7 +376,7 @@ export const createEmptyBusinessWorkspace = (): BusinessWorkspace => ({
 
 export const createBusinessWorkspaceFromPermissions = (permissions: CustomerPermissions): BusinessWorkspace => {
   normalizeCustomerPermissions(permissions);
-  return ensureWorkspaceDefaults(createEmptyBusinessWorkspace());
+  return createEmptyBusinessWorkspace();
 };
 
 export const getBusinessWorkspace = (state: AppState, businessId?: string) => {
@@ -443,136 +405,13 @@ export const aggregateBusinessWorkspaces = (workspaces: BusinessWorkspace[]): Bu
   reports: workspaces.flatMap((workspace) => workspace.reports),
 });
 
-const initialBusinesses: Business[] = [
-  {
-    id: 'business-1',
-    name: 'John Doe',
-    phone: '1234567890',
-    email: 'john@example.com',
-    password: '',
-    status: 'Active',
-    joinedDate: '2024-01-10',
-    onboardingCompleted: true,
-    onboardingStep: 'dashboard',
-    subscription: createBusinessSubscription('year-1', '2026-01-10'),
-    permissions: createCustomerPermissions([
-      'customers_list',
-      'customers_payment_list',
-      'services_access',
-      'reports_bank_counter_report',
-    ]),
-  },
-  {
-    id: 'business-2',
-    name: 'Jane Smith',
-    phone: '0987654321',
-    email: 'jane@example.com',
-    password: '',
-    status: 'Active',
-    joinedDate: '2024-01-12',
-    onboardingCompleted: true,
-    onboardingStep: 'dashboard',
-    subscription: createBusinessSubscription('year-3', '2026-01-12'),
-    permissions: createCustomerPermissions([
-      'customers_list',
-      'services_access',
-    ]),
-  },
-  {
-    id: 'business-sagar',
-    name: 'Sagar Thakur',
-    phone: '6265965711',
-    email: 'sagar@gmail.com',
-    password: 'Sagar@11',
-    status: 'Active',
-    joinedDate: '2024-01-18',
-    onboardingCompleted: true,
-    onboardingStep: 'dashboard',
-    subscription: createBusinessSubscription('year-1', '2026-01-18'),
-    permissions: createCustomerPermissions([
-      'customers_list',
-      'customers_payment_list',
-      'services_access',
-      'reports_bank_counter_report',
-    ]),
-  },
-];
+const initialBusinesses: Business[] = [];
 
 const initialAdminWorkspace: AdminWorkspace = {
-  notifications: [
-    {
-      id: 'admin-notification-1',
-      type: 'warning',
-      message: '2 business records still need credential setup.',
-      timestamp: '2 minutes ago',
-    },
-    {
-      id: 'admin-notification-2',
-      type: 'info',
-      message: 'Daily admin report generated successfully.',
-      timestamp: '1 hour ago',
-    },
-  ],
-  historyEvents: [
-    { id: 'admin-history-1', title: 'Business directory reviewed', module: 'Customers', actor: 'Admin', status: 'Completed', date: '2024-01-15' },
-    { id: 'admin-history-2', title: 'Credential reminder scheduled', module: 'Reminder', actor: 'Admin', status: 'Pending', date: '2024-01-15' },
-    { id: 'admin-history-3', title: 'Report queue updated', module: 'Reports', actor: 'Admin', status: 'Completed', date: '2024-01-14' },
-  ],
-  reports: [
-    { id: 'admin-report-1', name: 'Daily Revenue Summary', type: 'Revenue', owner: 'Finance Team', status: 'Ready', date: '2024-01-15' },
-    { id: 'admin-report-2', name: 'Business Activity', type: 'Businesses', owner: 'Support Team', status: 'Scheduled', date: '2024-01-16' },
-    { id: 'admin-report-3', name: 'Credential Audit', type: 'Security', owner: 'Operations', status: 'Draft', date: '2024-01-17' },
-  ],
-  additionOptions: [
-    {
-      id: 'addition-1',
-      title: 'Service Rules',
-      category: 'Services',
-      description: 'Configure billing logic, thresholds, and categories.',
-      status: 'Enabled',
-      date: '2024-01-10',
-    },
-    {
-      id: 'addition-2',
-      title: 'Customer Segments',
-      category: 'Customers',
-      description: 'Create tags, loyalty tiers, and priority groups.',
-      status: 'Enabled',
-      date: '2024-01-11',
-    },
-    {
-      id: 'addition-3',
-      title: 'Transaction Settings',
-      category: 'Transactions',
-      description: 'Set payment methods, approval flows, and limits.',
-      status: 'Enabled',
-      date: '2024-01-12',
-    },
-    {
-      id: 'addition-4',
-      title: 'Report Settings',
-      category: 'Reports',
-      description: 'Choose templates, export formats, and schedules.',
-      status: 'Disabled',
-      date: '2024-01-13',
-    },
-    {
-      id: 'addition-5',
-      title: 'Audit Controls',
-      category: 'History',
-      description: 'Manage filters, user actions, and change tracking.',
-      status: 'Enabled',
-      date: '2024-01-14',
-    },
-    {
-      id: 'addition-6',
-      title: 'Integration Options',
-      category: 'Integrations',
-      description: 'Link external services, APIs, and data feeds.',
-      status: 'Disabled',
-      date: '2024-01-15',
-    },
-  ],
+  notifications: [],
+  historyEvents: [],
+  reports: [],
+  additionOptions: [],
 };
 
 const buildInitialState = (): AppState => ({
@@ -622,55 +461,6 @@ const normalizeBusiness = (
   };
 };
 
-const REQUIRED_BUSINESS_LOGINS: BusinessNormalizationInput[] = [
-  {
-    id: 'business-sagar',
-    name: 'Sagar Thakur',
-    phone: '6265965711',
-    email: 'sagar@gmail.com',
-    password: 'Sagar@11',
-    status: 'Active',
-    joinedDate: '2024-01-18',
-    onboardingCompleted: true,
-    onboardingStep: 'dashboard',
-    subscription: createBusinessSubscription('year-1', '2026-01-18'),
-    permissions: createCustomerPermissions([
-      'customers_list',
-      'customers_payment_list',
-      'services_access',
-      'reports_bank_counter_report',
-    ]),
-  },
-];
-
-export const ensureRequiredAppStateAccounts = (state: AppState): AppState => {
-  const missingBusinesses = REQUIRED_BUSINESS_LOGINS
-    .map((business) => normalizeBusiness(business))
-    .filter((requiredBusiness) =>
-      !state.businesses.some(
-        (existingBusiness) => existingBusiness.email.trim().toLowerCase() === requiredBusiness.email,
-      ),
-    );
-
-  if (missingBusinesses.length === 0) {
-    return state;
-  }
-
-  return {
-    ...state,
-    businesses: [...state.businesses, ...missingBusinesses],
-    businessWorkspacesById: {
-      ...state.businessWorkspacesById,
-      ...Object.fromEntries(
-        missingBusinesses.map((business) => [
-          business.id,
-          state.businessWorkspacesById[business.id] ?? createBusinessWorkspaceFromPermissions(business.permissions),
-        ]),
-      ),
-    },
-  };
-};
-
 const normalizeBusinessCustomer = (customer: Partial<BusinessCustomer> & Pick<BusinessCustomer, 'id' | 'name' | 'phone'>): BusinessCustomer => ({
   id: customer.id,
   name: customer.name,
@@ -690,7 +480,7 @@ const normalizeEmployee = (
 ): Employee => ({
   ...employee,
   email: employee.email?.trim().toLowerCase() ?? '',
-  password: employee.password ?? 'employee123',
+  password: employee.password ?? '',
   permissions: normalizeCustomerPermissions(employee.permissions ?? fallbackPermissions ?? buildDefaultCustomerPermissions()),
   departmentId: employee.departmentId || undefined,
   status: employee.status || 'Active',
@@ -918,17 +708,17 @@ const normalizeWorkspace = (
   workspace: Partial<BusinessWorkspace> | undefined,
   permissions: CustomerPermissions
 ): BusinessWorkspace => {
-  const seededWorkspace = createBusinessWorkspaceFromPermissions(normalizeCustomerPermissions(permissions));
-  const normalizedCounters = (workspace?.counters ?? seededWorkspace.counters).map((counter) =>
+  const baseWorkspace = createBusinessWorkspaceFromPermissions(normalizeCustomerPermissions(permissions));
+  const normalizedCounters = (workspace?.counters ?? baseWorkspace.counters).map((counter) =>
     normalizeCounter(counter as Counter)
   );
   const normalizedWorkspace: BusinessWorkspace = {
-    ...seededWorkspace,
+    ...baseWorkspace,
     ...workspace,
-    customers: (workspace?.customers ?? seededWorkspace.customers).map((customer) =>
+    customers: (workspace?.customers ?? baseWorkspace.customers).map((customer) =>
       normalizeBusinessCustomer(customer as Partial<BusinessCustomer> & Pick<BusinessCustomer, 'id' | 'name' | 'phone'>)
     ),
-    employees: (workspace?.employees ?? seededWorkspace.employees).map((employee) =>
+    employees: (workspace?.employees ?? baseWorkspace.employees).map((employee) =>
       normalizeEmployee(
         employee as Omit<Employee, 'email' | 'password' | 'permissions'> & {
           email?: string;
@@ -938,23 +728,23 @@ const normalizeWorkspace = (
         permissions,
       )
     ),
-    transactions: (workspace?.transactions ?? seededWorkspace.transactions).map((transaction) =>
+    transactions: (workspace?.transactions ?? baseWorkspace.transactions).map((transaction) =>
       normalizeTransaction(transaction as Partial<Transaction> & Pick<Transaction, 'id' | 'customerId' | 'customerName' | 'service'>)
     ),
-    notifications: workspace?.notifications ?? seededWorkspace.notifications,
+    notifications: workspace?.notifications ?? baseWorkspace.notifications,
     counters: normalizedCounters,
-    accounts: (workspace?.accounts ?? seededWorkspace.accounts).map((account) =>
+    accounts: (workspace?.accounts ?? baseWorkspace.accounts).map((account) =>
       normalizeAccount(account as Account)
     ),
-    services: (workspace?.services ?? seededWorkspace.services).map((service) =>
+    services: (workspace?.services ?? baseWorkspace.services).map((service) =>
       normalizeService(service as Partial<Service> & Pick<Service, 'id' | 'name'>, normalizedCounters)
     ),
-    expenses: workspace?.expenses ?? seededWorkspace.expenses,
-    historyEvents: workspace?.historyEvents ?? seededWorkspace.historyEvents,
-    reports: workspace?.reports ?? seededWorkspace.reports,
+    expenses: workspace?.expenses ?? baseWorkspace.expenses,
+    historyEvents: workspace?.historyEvents ?? baseWorkspace.historyEvents,
+    reports: workspace?.reports ?? baseWorkspace.reports,
   };
 
-  return ensureWorkspaceDefaults(normalizedWorkspace);
+  return normalizedWorkspace;
 };
 
 const normalizeAdminWorkspace = (workspace?: Partial<AdminWorkspace>): AdminWorkspace => ({
@@ -996,9 +786,9 @@ export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
     })
   );
 
-  const fallbackBusinesses = migratedBusinesses.length > 0 ? migratedBusinesses : initialState.businesses;
+  const fallbackBusinesses = migratedBusinesses;
 
-  return ensureRequiredAppStateAccounts({
+  return {
     businesses: fallbackBusinesses,
     businessWorkspacesById: Object.fromEntries(
       fallbackBusinesses.map((business) => [
@@ -1012,7 +802,7 @@ export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
       reports: legacyState.reports,
       additionOptions: legacyState.additionOptions,
     }),
-  });
+  };
 };
 
 const loadPersistedState = (): AppState => {
@@ -1027,7 +817,7 @@ const loadPersistedState = (): AppState => {
         )
       );
 
-      return ensureRequiredAppStateAccounts({
+      return {
         businesses,
         businessWorkspacesById: Object.fromEntries(
           businesses.map((business) => [
@@ -1036,7 +826,7 @@ const loadPersistedState = (): AppState => {
           ])
         ),
         adminWorkspace: normalizeAdminWorkspace(parsedState.adminWorkspace),
-      });
+      };
     }
 
     const legacyState = window.localStorage.getItem(LEGACY_APP_STATE_STORAGE_KEY);

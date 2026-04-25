@@ -2596,6 +2596,23 @@ small {
   gap: 0.5rem;
 }
 
+.table-pagination {
+  align-items: center;
+  border-top: 1px solid rgba(20, 32, 51, 0.06);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.5rem 1.25rem;
+}
+
+.table-pagination__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+}
+
 .table-empty {
   color: var(--foreground-muted);
   padding: 3rem 1rem !important;
@@ -2818,51 +2835,6 @@ small {
   display: block;
   font-size: 1.35rem;
   margin-bottom: 0.35rem;
-}
-
-.auth-demo-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  margin-top: 1.25rem;
-}
-
-.auth-demo-card {
-  align-items: flex-start;
-  background: rgba(247, 250, 255, 0.94);
-  border: 1px solid rgba(20, 32, 51, 0.06);
-  border-radius: 22px;
-  display: flex;
-  gap: 0.9rem;
-  padding: 1rem;
-  text-align: left;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  width: 100%;
-}
-
-.auth-demo-card:hover,
-.auth-demo-card:focus-visible {
-  border-color: rgba(47, 109, 246, 0.14);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.auth-demo-card.is-active {
-  background: linear-gradient(180deg, rgba(233, 240, 255, 0.98) 0%, rgba(244, 247, 255, 0.98) 100%);
-  border-color: rgba(47, 109, 246, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(47, 109, 246, 0.05);
-}
-
-.auth-demo-card__icon {
-  align-items: center;
-  background: var(--accent-soft);
-  border-radius: 18px;
-  color: var(--accent);
-  display: inline-flex;
-  flex-shrink: 0;
-  height: 3rem;
-  justify-content: center;
-  width: 3rem;
 }
 
 .auth-note {

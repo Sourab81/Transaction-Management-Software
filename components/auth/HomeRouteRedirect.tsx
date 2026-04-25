@@ -11,7 +11,8 @@ const HomeRouteRedirect = () => {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const nextPath = getStoredUser() ? getDefaultWorkspacePath() : LOGIN_ROUTE;
+      const storedUser = getStoredUser();
+      const nextPath = storedUser ? getDefaultWorkspacePath(storedUser.role) : LOGIN_ROUTE;
       router.replace(nextPath);
     });
 

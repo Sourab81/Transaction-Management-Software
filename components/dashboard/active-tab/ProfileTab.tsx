@@ -112,7 +112,7 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
     ? 'Manage the details used for business login and workspace display.'
     : currentRole === 'Employee'
       ? 'Manage the details used for employee login and workspace display.'
-      : 'Manage the local admin account used for this workspace.';
+      : 'Manage the admin profile details returned by your backend session.';
   const summaryRows = currentRole === 'Customer'
     ? [
         ['Email Address', currentBusinessProfile?.email || currentUser.email],
@@ -144,7 +144,6 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
       handleAdminProfileSave({
         name: trimmedName,
         email: trimmedEmail,
-        password: trimmedPassword || undefined,
       });
       return;
     }
@@ -219,28 +218,30 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
                 />
               </div>
 
-              <div className={currentRole === 'Admin' ? 'col-12' : 'col-12 col-md-6'}>
-                <div className="app-field">
-                  <label className="form-label">Password</label>
-                  <div className="password-field">
-                    <input
-                      className="form-control"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Leave blank to keep the current password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle"
-                      onClick={() => setShowPassword((current) => !current)}
-                    >
-                      {showPassword ? 'Hide' : 'Show'}
-                    </button>
+              {currentRole === 'Admin' ? null : (
+                <div className="col-12 col-md-6">
+                  <div className="app-field">
+                    <label className="form-label">Password</label>
+                    <div className="password-field">
+                      <input
+                        className="form-control"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Leave blank to keep the current password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        onClick={() => setShowPassword((current) => !current)}
+                      >
+                        {showPassword ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <div className="form-hint">Leave this empty if you do not want to change your current password.</div>
                   </div>
-                  <div className="form-hint">Leave this empty if you do not want to change your current password.</div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="modal-actions profile-form__actions">
@@ -276,10 +277,12 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
               <FaSignOutAlt />
               Logout
             </Button>
-            <div className="profile-security-note">
-              <FaLock />
-              <span>Password changes apply to your next login as well.</span>
-            </div>
+            {currentRole === 'Admin' ? null : (
+              <div className="profile-security-note">
+                <FaLock />
+                <span>Password changes apply to your next login as well.</span>
+              </div>
+            )}
           </div>
         </section>
       </div>

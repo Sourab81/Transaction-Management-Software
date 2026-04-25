@@ -29,9 +29,9 @@ export const getModuleDisplay = (platformModule: PlatformModule, role: UserRole)
   if (role === 'Admin' && platformModule.id === 'customers') {
     return {
       ...platformModule,
-      label: 'Business',
-      sidebarLabel: 'Business',
-      heading: 'Business',
+      label: 'Businesses',
+      sidebarLabel: 'Businesses',
+      heading: 'Businesses',
     };
   }
 

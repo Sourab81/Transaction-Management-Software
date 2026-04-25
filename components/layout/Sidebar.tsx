@@ -37,7 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
         {visibleModules.map((item) => {
           const displayItem = getModuleDisplay(item, accessContext.role);
           const Icon = displayItem.icon;
-          const sidebarLabel = getModuleLabel(displayItem.id) || displayItem.sidebarLabel;
+          const sidebarLabel = displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
 
           return (
             <Link

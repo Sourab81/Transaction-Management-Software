@@ -6,6 +6,7 @@ import { getCustomerWorkspaceViewUi, getModuleUi } from '../../../lib/module-ui'
 import { customerPermissionOptions } from '../../../lib/platform-structure';
 import { getCustomerWorkspacePath } from '../../../lib/workspace-routes';
 import EmptyState from '../../ui/state/EmptyState';
+import ErrorState from '../../ui/state/ErrorState';
 import PermissionState from '../../ui/state/PermissionState';
 import SectionHero from '../SectionHero';
 import CustomersTable from '../../tables/CustomersTable';
@@ -47,6 +48,9 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     businessPermissionFilter,
     setBusinessPermissionFilter,
     businessPermissionFilterLabel,
+    isBusinessDirectoryLoading,
+    businessDirectoryError,
+    customerDirectoryPagination,
   } = ctx;
   const customerModuleUi = getModuleUi('customers');
   const customerViewUi = getCustomerWorkspaceViewUi(customerPageView);
@@ -62,6 +66,8 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   const adminDirectoryEmptyDescription = businessPermissionFilter === 'all'
     ? 'Create a business workspace to start managing directory records from this screen.'
     : `Try a different permission filter or clear ${businessPermissionFilterLabel}.`;
+  const isAdminBusinessDirectoryLoading = currentRole === 'Admin' && isBusinessDirectoryLoading;
+  const adminBusinessDirectoryError = currentRole === 'Admin' ? businessDirectoryError : '';
 
   return (
     <div className="row g-4">
@@ -115,7 +121,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
                 <p className="panel-copy">See which business logins were granted a specific permission before you edit access.</p>
               </div>
               <div className="panel-status-chip">
-                Showing {filteredBusinesses.length} of {businesses.length}
+                Showing {filteredBusinesses.length} of {customerDirectoryPagination?.totalRecords ?? businesses.length}
               </div>
             </div>
             <div className="department-toolbar__grid">
@@ -154,7 +160,13 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
           renderCustomerRoutePermissionState()
         ) : canViewCustomerRecords ? (
           currentRole === 'Admin' || customerPageView === 'list' ? (
-            customerDirectoryRecords.length === 0 ? (
+            adminBusinessDirectoryError && customerDirectoryRecords.length === 0 ? (
+              <ErrorState
+                eyebrow="Business Directory"
+                title="Unable to load businesses"
+                description={adminBusinessDirectoryError}
+              />
+            ) : customerDirectoryRecords.length === 0 && !isAdminBusinessDirectoryLoading ? (
               <EmptyState
                 eyebrow={currentRole === 'Admin' ? 'Business Directory' : customerModuleUi?.label}
                 title={currentRole === 'Admin' ? adminDirectoryEmptyTitle : customerViewUi.emptyTitle}
@@ -171,6 +183,8 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
                   : 'Contact details and profile status used across service workflows.'}
                 entityLabel={customerEntityLabel}
                 emptyLabel={`No ${customerEntityLabel.toLowerCase()} records found.`}
+                isLoading={isAdminBusinessDirectoryLoading}
+                pagination={currentRole === 'Admin' ? customerDirectoryPagination : undefined}
                 onView={currentRole === 'Admin' ? undefined : handleViewCustomerHistory}
                 onEdit={canEditCustomerRecords ? handleEditCustomer : undefined}
                 onDelete={canDeleteCustomerRecords ? (id: string) => handleDeleteRecord(currentRole === 'Admin' ? 'DELETE_BUSINESS' : 'DELETE_CUSTOMER', id) : undefined}

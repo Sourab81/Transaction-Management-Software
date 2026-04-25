@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import type { BusinessCustomer, Counter, Employee, ReportItem, Transaction } from '../store';
+import type { Business, BusinessCustomer, Counter, Employee, ReportItem, Transaction } from '../store';
 import { AUTH_TOKEN_COOKIE_NAME } from '../auth-cookie';
 import {
   BackendApiConfigurationError,
@@ -21,6 +21,7 @@ import {
 } from '../workspace-prefetch-cookie';
 
 export interface WorkspaceInitialData {
+  businesses?: Business[];
   counters?: Counter[];
   prefetchedCounters?: boolean;
   customers?: BusinessCustomer[];

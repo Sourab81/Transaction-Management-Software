@@ -1,4 +1,6 @@
 export type BackendApiResource =
+  | 'businesses'
+  | 'businessCreate'
   | 'dashboardSummary'
   | 'departments'
   | 'customers'
@@ -10,9 +12,29 @@ interface BackendApiResourceConfig {
   label: string;
   defaultPath?: string;
   envPathKey?: string;
+  method?: 'GET' | 'POST';
+  defaultBody?: Record<string, string>;
 }
 
 const backendApiResources: Record<BackendApiResource, BackendApiResourceConfig> = {
+  businesses: {
+    label: 'businesses',
+    defaultPath: 'getUsers',
+    method: 'POST',
+    defaultBody: {
+      page_no: '1',
+      limit: '10',
+      // role 2 is the backend's Business user role. Admin customer lists should
+      // never include Admin or Employee accounts.
+      role: '2',
+    },
+  },
+  businessCreate: {
+    label: 'create business user',
+    defaultPath: 'createUserByAdmin',
+    envPathKey: 'NEXT_PUBLIC_API_BUSINESS_CREATE_PATH',
+    method: 'POST',
+  },
   dashboardSummary: {
     label: 'dashboard summary',
     envPathKey: 'NEXT_PUBLIC_API_DASHBOARD_SUMMARY_PATH',
@@ -56,6 +78,7 @@ export const getBackendApiResourceConfig = (resource: BackendApiResource) => {
   return {
     ...config,
     path: configuredPath || config.defaultPath || null,
+    method: config.method || 'GET',
+    defaultBody: config.defaultBody,
   };
 };
-

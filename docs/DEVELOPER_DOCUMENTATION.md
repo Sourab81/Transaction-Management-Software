@@ -22,7 +22,7 @@ The system already includes:
 - department, account, employee, customer, service, expense, and report management
 - multi-line service and payment transaction entry
 - department-scoped services and department-linked bank accounts
-- dummy subscription lifecycle management
+- local subscription lifecycle management
 - customer import from CSV, Excel, XML, text, and DOCX
 - reducer-based state updates with migration support for legacy saved state
 
@@ -95,8 +95,8 @@ Practical consequences:
 
 ### 4.2 State and Business Logic
 
-- [lib/store.tsx](../lib/store.tsx): types, initial seed data, reducer, normalization, migration, provider
-- [lib/auth-session.ts](../lib/auth-session.ts): dummy auth user discovery and session storage
+- [lib/store.tsx](../lib/store.tsx): types, empty initial state, reducer, normalization, migration, provider
+- [lib/auth-session.ts](../lib/auth-session.ts): backend login response mapping and session storage
 - [lib/platform-structure.ts](../lib/platform-structure.ts): module definitions, role labels, permission catalog, module access helpers
 - [lib/dashboard-controller.ts](../lib/dashboard-controller.ts): permission-aware view/edit/delete helpers, search, transaction summary
 - [lib/transaction-workflow.ts](../lib/transaction-workflow.ts): receipt and daily-closing helpers, status/amount calculations
@@ -238,7 +238,7 @@ This separation lets the app treat the business directory as a tenant registry a
 - reports
 - system addition options
 
-### 6.4 Seed Data and Workspace Creation
+### 6.4 Empty State and Workspace Creation
 
 Important store helpers:
 
@@ -247,7 +247,7 @@ Important store helpers:
 - `getBusinessWorkspace()`
 - `aggregateBusinessWorkspaces()`
 
-New businesses get a seeded workspace with default operational data, including a default department and account.
+New businesses get an empty workspace. Departments, accounts, services, customers, and employees are created by onboarding, backend imports, or normal user actions.
 
 ### 6.5 Persistence
 
@@ -310,13 +310,13 @@ A few reducer behaviors matter more than they first appear:
 
 ## 7. Authentication and Session Model
 
-Authentication is currently a demo/client-only system implemented in [lib/auth-session.ts](../lib/auth-session.ts).
+Authentication is currently backend-verified at login, with client-side session mapping implemented in [lib/auth-session.ts](../lib/auth-session.ts).
 
 Sources of login accounts:
 
-- one static admin user
-- active business directory records
-- active employee records in accessible business workspaces
+- backend login responses
+- active business directory records for local session mapping
+- active employee records in accessible business workspaces for local session mapping
 
 Session behavior:
 
@@ -448,7 +448,7 @@ Stored onboarding fields on `Business`:
 
 Implementation notes:
 
-- the onboarding flow reuses seeded default department/account records when possible
+- the onboarding flow creates real department/account records from submitted values
 - the customer import step can be skipped
 - onboarding is enforced through the dashboard before normal workspace access
 
@@ -771,7 +771,7 @@ Check all of these before merging:
 The codebase is usable, but these are the most valuable technical next steps:
 
 - move persistence to an API and database
-- replace dummy auth with real session/auth infrastructure
+- move remaining client-side session mapping into real session/auth infrastructure
 - split `Dashboard.tsx` into role-specific controllers or hooks
 - move reducer action creators into feature modules
 - add browser-based integration tests for onboarding and transactions

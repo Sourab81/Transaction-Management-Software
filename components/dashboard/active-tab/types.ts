@@ -19,6 +19,7 @@ import type {
 } from '../../../lib/store';
 import type { CustomerWorkspaceView } from '../../../lib/workspace-routes';
 import type { ServiceWorkflowDraft } from '../../forms/ServiceForm';
+import type { DataTablePagination } from '../../tables/DataTable';
 import type { CustomerOutstandingRow } from '../../tables/CustomerOutstandingTable';
 import type { SummaryCardProps } from '../SummaryCard';
 
@@ -84,6 +85,9 @@ export interface DashboardTabContext {
   customerEntityPlural: string;
   businessPermissionFilter: string;
   businessPermissionFilterLabel: string;
+  isBusinessDirectoryLoading: boolean;
+  businessDirectoryError: string;
+  customerDirectoryPagination?: DataTablePagination;
   historyStatusFilter: 'All' | 'Failed';
   departmentSearchInput: string;
   departmentAccountStatusFilter: 'All' | 'Active' | 'Inactive' | 'Unassigned';

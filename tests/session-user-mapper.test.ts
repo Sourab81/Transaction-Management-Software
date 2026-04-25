@@ -4,6 +4,62 @@ import { createCustomerPermissions } from '../lib/platform-structure';
 import { mapLoginResponseToSessionUser } from '../lib/mappers/session-user-mapper';
 
 describe('session user mapper', () => {
+  test('maps current backend business login payloads using numeric role codes', () => {
+    const sessionUser = mapLoginResponseToSessionUser('business@example.test', {
+      status: 200,
+      message: 'User login successfully.',
+      data: {
+        id: 1,
+        fullname: 'Business User',
+        nickname: 'Business',
+        gender: 'male',
+        contact_no: 9999999999,
+        email_id: 'business@example.test',
+        username: 'business@example.test',
+        user_type: 'Business',
+        role: 2,
+        token: 'test-token',
+      },
+    }, () => null);
+
+    assert.deepEqual(sessionUser, {
+      id: '1',
+      name: 'Business User',
+      email: 'business@example.test',
+      role: 'Customer',
+      businessId: '1',
+      departmentId: undefined,
+      counterId: undefined,
+      counterName: undefined,
+      permissions: undefined,
+    });
+  });
+
+  test('maps numeric admin and employee role codes', () => {
+    const adminUser = mapLoginResponseToSessionUser('admin@enest.com', {
+      data: {
+        id: 10,
+        fullname: 'Admin User',
+        email_id: 'admin@enest.com',
+        role: 1,
+      },
+    }, () => null);
+    const employeeUser = mapLoginResponseToSessionUser('operator@enest.com', {
+      data: {
+        id: 20,
+        fullname: 'Counter Operator',
+        email_id: 'operator@enest.com',
+        role: 3,
+        business_id: 1,
+      },
+    }, () => null);
+
+    assert.equal(adminUser?.role, 'Admin');
+    assert.equal(adminUser?.businessId, undefined);
+    assert.equal(employeeUser?.role, 'Employee');
+    assert.equal(employeeUser?.businessId, '1');
+  });
+
   test('maps legacy employee login payloads into a session user with normalized permissions', () => {
     const sessionUser = mapLoginResponseToSessionUser('aarav@enest.com', {
       data: {

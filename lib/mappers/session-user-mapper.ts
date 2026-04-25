@@ -23,13 +23,13 @@ export interface SessionUserCandidate {
 }
 
 const apiRoleKeys = ['role', 'user_role', 'userRole', 'userType', 'user_type', 'login_type'];
-const apiEmailKeys = ['email', 'user_email', 'login_email', 'username'];
+const apiEmailKeys = ['email', 'email_id', 'user_email', 'login_email', 'username'];
 const apiBusinessIdKeys = ['businessId', 'business_id', 'workspaceId', 'workspace_id', 'company_id'];
 const apiDepartmentIdKeys = ['departmentId', 'department_id'];
 const apiCounterIdKeys = ['counterId', 'counter_id'];
 const apiCounterNameKeys = ['counterName', 'counter_name', 'departmentName', 'department_name'];
 const apiIdKeys = ['id', 'user_id', 'admin_id', 'employee_id'];
-const apiNameKeys = ['name', 'full_name', 'fullName', 'user_name', 'username', 'business_name', 'company_name'];
+const apiNameKeys = ['name', 'fullname', 'full_name', 'fullName', 'nickname', 'user_name', 'username', 'business_name', 'company_name'];
 
 const normalizeApiRole = (value: string | null): UserRole | null => {
   if (!value) {
@@ -38,9 +38,9 @@ const normalizeApiRole = (value: string | null): UserRole | null => {
 
   const normalizedValue = value.trim().toLowerCase().replace(/\s+/g, '_');
 
-  if (normalizedValue === 'admin') return 'Admin';
-  if (['employee', 'staff', 'operator', 'staff_user', 'employee_user'].includes(normalizedValue)) return 'Employee';
-  if (['customer', 'business', 'business_user', 'owner', 'business_owner', 'merchant', 'client'].includes(normalizedValue)) {
+  if (normalizedValue === '1' || normalizedValue === 'admin') return 'Admin';
+  if (['3', 'employee', 'staff', 'operator', 'staff_user', 'employee_user'].includes(normalizedValue)) return 'Employee';
+  if (['2', 'customer', 'business', 'business_user', 'owner', 'business_owner', 'merchant', 'client'].includes(normalizedValue)) {
     return 'Customer';
   }
 
@@ -135,10 +135,13 @@ const extractResponseUserRecord = (body: unknown): UnknownRecord | null => {
       'user_id',
       'name',
       'full_name',
+      'fullname',
       'email',
+      'email_id',
       'user_email',
       'role',
       'user_role',
+      'user_type',
       'business_id',
       'workspace_id',
     ],
@@ -175,10 +178,16 @@ export const mapLoginResponseToSessionUser = (
       || normalizedEmail,
   );
   const resolvedRole = resolveApiRole(responseBody, userRecord, tokenPayload, tokenUserRecord);
+  const resolvedUserId = readStringValue(userRecord, apiIdKeys)
+    || readStringValue(tokenUserRecord, apiIdKeys)
+    || readStringValue(dataRecord, apiIdKeys)
+    || readStringValue(tokenPayload, apiIdKeys)
+    || resolvedEmail;
   const resolvedBusinessId = readStringValue(userRecord, apiBusinessIdKeys)
     || readStringValue(tokenUserRecord, apiBusinessIdKeys)
     || readStringValue(dataRecord, apiBusinessIdKeys)
     || readStringValue(tokenPayload, apiBusinessIdKeys)
+    || (resolvedRole === 'Customer' ? resolvedUserId : undefined)
     || undefined;
   const resolvedDepartmentId = readStringValue(userRecord, apiDepartmentIdKeys)
     || readStringValue(tokenUserRecord, apiDepartmentIdKeys)
@@ -230,11 +239,7 @@ export const mapLoginResponseToSessionUser = (
   }
 
   return {
-    id: readStringValue(userRecord, apiIdKeys)
-      || readStringValue(tokenUserRecord, apiIdKeys)
-      || readStringValue(dataRecord, apiIdKeys)
-      || readStringValue(tokenPayload, apiIdKeys)
-      || resolvedEmail,
+    id: resolvedUserId,
     name: readStringValue(userRecord, apiNameKeys)
       || readStringValue(tokenUserRecord, apiNameKeys)
       || readStringValue(dataRecord, apiNameKeys)

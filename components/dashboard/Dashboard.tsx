@@ -3,7 +3,7 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar } from 'react-icons/fa';
-import { getAvailableUsers, updateAdminCredentials, type SessionUser } from '../../lib/auth-session';
+import { getAvailableUsers, type SessionUser } from '../../lib/auth-session';
 import { buildCsv } from '../../lib/csv';
 import {
   canPerformModuleActionForSession,
@@ -29,7 +29,6 @@ import {
 import {
   useAdminWorkspaceData,
   useBusinesses,
-  useBusinessRecord,
   useBusinessWorkspacesById,
   useFilteredBusinesses,
   useFilteredTransactionRecords,
@@ -45,6 +44,7 @@ import {
 } from '../../lib/dashboard-selectors';
 import { useCustomers } from '../../lib/hooks/useCustomers';
 import { useDashboardSummary } from '../../lib/hooks/useDashboardSummary';
+import { useBackendBusinesses } from '../../lib/hooks/useBackendBusinesses';
 import { useDepartments } from '../../lib/hooks/useDepartments';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useReports } from '../../lib/hooks/useReports';
@@ -113,15 +113,6 @@ const getSubscriptionStatusClass = (status?: BusinessSubscription['status']) => 
   if (status === 'cancelled') return 'status-chip status-chip--inactive';
   return 'status-chip status-chip--active';
 };
-
-const isDefaultSeedAccount = (account: Account) => (
-  account.accountHolder === 'Primary Account' &&
-  account.bankName === 'Default Bank' &&
-  account.accountNumber === '000000000001' &&
-  account.ifsc === 'ENST0000001' &&
-  account.openingBalance === 0 &&
-  account.currentBalance === 0
-);
 
 const getNextOnboardingStep = (
   currentStep: Exclude<BusinessOnboardingStep, 'dashboard'>,
@@ -358,8 +349,57 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const dispatch = useAppDispatch();
   const currentRole = currentUser.role;
-  const businesses = useBusinesses();
-  const currentBusiness = useBusinessRecord(currentUser.businessId);
+  const storedBusinesses = useBusinesses();
+  // Admin customer management is the platform business-user directory. The
+  // backend remains the source of truth so pagination and role filtering stay
+  // aligned with the server response instead of local placeholder data.
+  const shouldLoadAdminBusinessDirectory = currentRole === 'Admin' && activeTab === 'customers';
+  const {
+    businesses: backendBusinesses,
+    pagination: backendBusinessPagination,
+    isLoading: isBackendBusinessesLoading,
+    error: backendBusinessesError,
+    setPage: setBackendBusinessPage,
+    reload: reloadBackendBusinesses,
+  } = useBackendBusinesses(
+    shouldLoadAdminBusinessDirectory,
+    initialWorkspaceData?.businesses,
+    10,
+  );
+  const businesses = useMemo(
+    () => currentRole === 'Admin'
+      ? backendBusinesses
+      : currentRole === 'Customer'
+        ? mergeWorkspaceRecords(storedBusinesses, initialWorkspaceData?.businesses ?? [])
+      : storedBusinesses,
+    [backendBusinesses, currentRole, initialWorkspaceData?.businesses, storedBusinesses],
+  );
+  const currentBusiness = useMemo(() => {
+    if (!currentUser.businessId) {
+      return null;
+    }
+
+    const matchedBusiness = businesses.find((business) => business.id === currentUser.businessId);
+    if (matchedBusiness) {
+      return matchedBusiness;
+    }
+
+    if (currentRole !== 'Customer') {
+      return null;
+    }
+
+    return {
+      id: currentUser.businessId,
+      name: currentUser.name,
+      phone: 'Not added',
+      email: currentUser.email,
+      password: '',
+      status: 'Active' as const,
+      onboardingCompleted: true,
+      onboardingStep: 'dashboard' as const,
+      permissions: currentUser.permissions ?? buildDefaultCustomerPermissions(),
+    };
+  }, [businesses, currentRole, currentUser.businessId, currentUser.email, currentUser.name, currentUser.permissions]);
   const workspace = useRoleScopedWorkspace(currentRole, currentUser.businessId);
   const shouldLoadWorkspaceApi = currentRole !== 'Admin' && Boolean(currentUser.businessId);
   const initialWorkspaceApiData = currentRole === 'Admin' ? undefined : initialWorkspaceData;
@@ -593,7 +633,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       ? currentUser
       : getAvailableUsers().find((user) => user.role === 'Admin');
 
-    return (adminUser?.email || 'admin@enest.com').trim().toLowerCase();
+    return (adminUser?.email || '').trim().toLowerCase();
   }, [currentRole, currentUser]);
   const sessionPermissions = useMemo(() => {
     if (currentRole === 'Employee') {
@@ -712,6 +752,16 @@ const Dashboard: React.FC<DashboardProps> = ({
     currentRole === 'Admin' ? emptyTransactionRecords : transactionHistory,
   );
   const customerDirectoryRecords = currentRole === 'Admin' ? filteredBusinesses : visibleCustomers;
+  const customerDirectoryPagination = currentRole === 'Admin'
+    ? {
+        currentPage: backendBusinessPagination.currentPage,
+        totalPages: backendBusinessPagination.totalPages,
+        totalRecords: backendBusinessPagination.totalRecords,
+        limit: backendBusinessPagination.limit,
+        isLoading: isBackendBusinessesLoading,
+        onPageChange: setBackendBusinessPage,
+      }
+    : undefined;
   const customerOutstandingRows: CustomerOutstandingRow[] = currentRole === 'Admin'
     ? []
     : (() => {
@@ -792,7 +842,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const customerEntityLabel = currentRole === 'Admin' ? 'Business' : 'Customer';
   const customerEntityPlural = currentRole === 'Admin' ? 'Businesses' : 'Customers';
-  const customerDirectoryCount = currentRole === 'Admin' ? filteredBusinesses.length : visibleCustomers.length;
+  const customerDirectoryCount = currentRole === 'Admin' ? backendBusinessPagination.totalRecords : visibleCustomers.length;
   const customerSectionTitle = currentRole === 'Admin'
     ? customerPageView === 'list'
       ? 'Manage the business directory'
@@ -835,9 +885,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       const inactiveBusinesses = businesses.length - activeBusinesses;
 
       return [
-        { title: 'Total Businesses', value: `${businesses.length}`, detail: 'All registered business logins', icon: <FaUsers />, colorClass: 'bg-primary' },
-        { title: 'Active Businesses', value: `${activeBusinesses}`, detail: 'Can sign in and use the workspace', icon: <FaUsersCog />, colorClass: 'bg-success' },
-        { title: 'Inactive Businesses', value: `${inactiveBusinesses}`, detail: 'Blocked from logging in until reactivated', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
+        { title: 'Total Businesses', value: `${customerDirectoryCount}`, detail: 'All registered business logins', icon: <FaUsers />, colorClass: 'bg-primary' },
+        { title: 'Active Businesses', value: `${activeBusinesses}`, detail: 'Active records on this page', icon: <FaUsersCog />, colorClass: 'bg-success' },
+        { title: 'Inactive Businesses', value: `${inactiveBusinesses}`, detail: 'Inactive records on this page', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
         { title: 'Permission Match', value: `${filteredBusinesses.length}`, detail: `Filter: ${businessPermissionFilterLabel}`, icon: <FaChartLine />, colorClass: 'bg-info' },
       ];
     }
@@ -1404,7 +1454,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const getModuleLabel = (moduleId: string) =>
-    getModuleUiLabel(moduleId) || getModuleDisplayById(moduleId, currentRole)?.label || 'this module';
+    getModuleDisplayById(moduleId, currentRole)?.label || getModuleUiLabel(moduleId) || 'this module';
 
   function canPerformModuleAction(moduleId: string, action: 'add' | 'edit' | 'delete') {
     return canPerformModuleActionForSession(accessContext, moduleId, action);
@@ -2299,7 +2349,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     closeModal();
   };
 
-  const handleBusinessSubmit = (values: BusinessFormValues) => {
+  const handleBusinessSubmit = async (values: BusinessFormValues) => {
     if (!requireModuleAction('customers', editingBusiness ? 'edit' : 'add')) return;
 
     if (Object.values(values.permissions).every((enabled) => enabled === 0)) {
@@ -2309,6 +2359,36 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     if (isBusinessEmailTaken(values.email, editingBusiness?.id)) {
       addNotification('error', 'That business email is already assigned to another login.');
+      return;
+    }
+
+    if (currentRole === 'Admin' && !editingBusiness) {
+      const response = await fetch('/api/businesses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: values.email,
+          password: values.password,
+          fullname: values.name,
+          role: '2',
+          email_id: values.email,
+          contact_no: values.phone,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        addNotification('error', result?.message || 'Unable to create business.');
+        return;
+      }
+
+      addHistoryEvent(`${values.name} business added`, 'Customers');
+      addNotification('success', 'Business added successfully.');
+      reloadBackendBusinesses();
+      closeModal();
       return;
     }
 
@@ -2375,12 +2455,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
-    const currentAdminPassword = getAvailableUsers().find((user) => user.role === 'Admin' && user.id === currentUser.id)?.password || 'admin123';
-    updateAdminCredentials({
-      name: nextName,
-      email: nextEmail,
-      password: values.password || currentAdminPassword,
-    });
     updateSessionUser({
       name: nextName,
       email: nextEmail,
@@ -2567,25 +2641,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   }) => {
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
-
-    const placeholderAccount = accounts.find(isDefaultSeedAccount);
-    const hasConfiguredAccount = accounts.some((account) => !isDefaultSeedAccount(account));
-
-    if (!hasConfiguredAccount && placeholderAccount) {
-      dispatch({
-        type: 'UPDATE_ACCOUNT',
-        businessId,
-        payload: {
-          ...placeholderAccount,
-          ...values,
-          openingBalance: 0,
-          currentBalance: 0,
-          status: 'Active',
-          date: placeholderAccount.date,
-        },
-      });
-      return;
-    }
 
     const newAccountId = createRecordId();
     dispatch({
@@ -3783,6 +3838,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     customerEntityPlural,
     businessPermissionFilter,
     businessPermissionFilterLabel,
+    isBusinessDirectoryLoading: isBackendBusinessesLoading,
+    businessDirectoryError: backendBusinessesError,
+    customerDirectoryPagination,
     historyStatusFilter,
     departmentSearchInput,
     departmentAccountStatusFilter,

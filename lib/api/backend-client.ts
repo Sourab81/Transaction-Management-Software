@@ -44,13 +44,37 @@ export const requestBackendCollection = async (
   resource: BackendApiResource,
   token: string,
   searchParams?: URLSearchParams,
+  bodyValues?: Record<string, string | number | undefined>,
 ): Promise<BackendApiResult> => {
-  const response = await fetch(buildBackendApiUrl(resource, searchParams), {
-    method: 'GET',
+  const config = getBackendApiResourceConfig(resource);
+  const requestBody = bodyValues
+    ? new URLSearchParams(Object.entries(bodyValues).reduce<Record<string, string>>((output, [key, value]) => {
+        if (typeof value !== 'undefined' && value !== null) {
+          output[key] = String(value);
+        }
+        return output;
+      }, {}))
+    : config.method === 'POST'
+      ? new URLSearchParams(config.defaultBody ?? {})
+      : undefined;
+
+  // Some backend list endpoints, such as getUsers, are POST endpoints that still
+  // expect pagination values as form fields. Keep GET query strings and POST form
+  // bodies separate so the same local proxy can support both styles.
+  if (requestBody && searchParams) {
+    searchParams.forEach((value, key) => {
+      requestBody.set(key, value);
+    });
+  }
+
+  const response = await fetch(buildBackendApiUrl(resource, requestBody ? undefined : searchParams), {
+    method: config.method,
     headers: {
       Accept: 'application/json',
       Authorization: token,
+      ...(requestBody ? { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' } : {}),
     },
+    body: requestBody?.toString(),
     cache: 'no-store',
   });
 
@@ -61,4 +85,3 @@ export const requestBackendCollection = async (
     body: parseJsonText(rawBody),
   };
 };
-

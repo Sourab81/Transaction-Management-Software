@@ -116,22 +116,16 @@ High-level flow:
 Important implementation notes:
 
 - Session handling lives in [lib/auth-session.ts](lib/auth-session.ts)
-- Global app state, reducer logic, demo data, and persistence live in [lib/store.tsx](lib/store.tsx)
+- Global app state, reducer logic, and persistence live in [lib/store.tsx](lib/store.tsx)
 - Dashboard orchestration lives in [components/dashboard/Dashboard.tsx](components/dashboard/Dashboard.tsx)
 - Utility workflow logic such as receipts and day-closing summaries lives in [lib/transaction-workflow.ts](lib/transaction-workflow.ts)
 
-## Demo Access
+## Login Access
 
-Pre-seeded admin access:
-
-- Email: `admin@enest.com`
-- Password: `admin123`
-
-Business and employee logins are derived from the current app state:
+All logins are verified through the backend login service. Business and employee records in local state are used only for session mapping:
 
 - Business users come from the business directory records
 - Employee users come from each business workspace
-- If an employee password is blank, the app falls back to `employee123`
 
 ## Getting Started
 
@@ -286,7 +280,7 @@ There is also a migration path for older stored data, handled in `migrateLegacyS
 
 - This is not yet a backend-connected production system
 - Data is browser-local, so changing browsers/devices will not share state
-- Authentication is demo/session-based, not secure server auth
+- Authentication uses backend login verification with client-side session mapping
 - Permissions are enforced in the frontend application layer
 - Some operational modules are already scaffolded while deeper business rules are still evolving
 

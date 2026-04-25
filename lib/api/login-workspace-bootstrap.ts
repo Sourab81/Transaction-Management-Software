@@ -4,10 +4,7 @@ import {
   LoginApiError,
   loginWithApi,
 } from './auth';
-import {
-  DepartmentsApiError,
-  getDepartmentsWithToken,
-} from './departments';
+import { getDepartmentsWithToken } from './departments';
 import { extractAccessToken } from '../mappers/session-user-mapper';
 
 export interface LoginWorkspaceBootstrapResult {
@@ -74,19 +71,11 @@ export const loginAndLoadWorkspaceBootstrap = async (
       accessToken,
       counters,
     };
-  } catch (error) {
-    if (error instanceof DepartmentsApiError) {
-      throw new LoginWorkspaceBootstrapError(
-        error.message,
-        error.statusCode ?? 502,
-        error.body,
-      );
-    }
-
-    throw new LoginWorkspaceBootstrapError(
-      'Unable to load departments right now.',
-      502,
-      null,
-    );
+  } catch {
+    return {
+      ...loginResult,
+      accessToken,
+      counters: [],
+    };
   }
 };

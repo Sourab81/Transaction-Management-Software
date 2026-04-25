@@ -14,9 +14,9 @@ It is currently a frontend-first Next.js application with client-side state mana
 
 ## Current Login Model
 
-- Admin uses a static demo login.
-- Business users log in from the business directory records.
-- Employees log in from the employee records inside each business workspace.
+- Login requests are verified through the backend login service.
+- Business users are mapped from the business directory records.
+- Employees are mapped from the employee records inside each business workspace.
 - Sessions are stored in browser `localStorage`.
 
 ## Main Features Built So Far
@@ -71,7 +71,7 @@ The transaction flow currently supports:
 
 ## Subscription Feature
 
-Business users currently use a dummy subscription system.
+Business users currently use the local subscription lifecycle system until the backend owns plan state.
 
 Available plans:
 
@@ -135,7 +135,7 @@ Purpose:
   Role, module, and permission structure.
 
 - [lib/auth-session.ts](../lib/auth-session.ts)
-  Dummy login and session logic.
+  Backend login response mapping and session logic.
 
 - [lib/subscription.ts](../lib/subscription.ts)
   Subscription plans and access-state logic.
@@ -178,7 +178,7 @@ npm run build
 ## Recommended Next Steps
 
 - move state to backend APIs and a database
-- replace dummy auth with real authentication
+- move remaining client-side session mapping into real authentication
 - split large dashboard logic into smaller feature modules
 - add browser-level workflow testing
 - improve production-ready reporting and exports

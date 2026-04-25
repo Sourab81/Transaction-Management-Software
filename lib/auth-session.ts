@@ -8,7 +8,6 @@ import {
 } from './api/auth';
 import {
   APP_STATE_STORAGE_KEY,
-  ensureRequiredAppStateAccounts,
   getInitialAppState,
   type AppState,
   type Business,
@@ -23,8 +22,6 @@ import {
   getSessionUserClientCookie,
   setSessionUserClientCookie,
 } from './session-user-cookie';
-
-export type LoginRole = 'Admin' | 'Employee' | 'Customer';
 
 export interface AuthUser {
   id: string;
@@ -48,29 +45,7 @@ export interface SessionUser {
   permissions?: CustomerPermissions;
 }
 
-interface StoredAdminProfile {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-}
-
-const STATIC_AUTH_USERS: AuthUser[] = [
-  {
-    id: 'admin-1',
-    name: 'Admin User',
-    email: 'admin@enest.com',
-    password: 'admin123',
-    role: 'Admin',
-  },
-];
-
 const SESSION_KEY = 'enest-auth-user';
-const ADMIN_PROFILE_STORAGE_KEY = 'enest-admin-profile';
-const TEMPORARY_LOGIN_ROLE_OVERRIDES: Record<string, UserRole> = {
-  // TODO: Remove this frontend-only override after the backend returns role/business info for this login.
-  'sagar@gmail.com': 'Customer',
-};
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -86,66 +61,6 @@ const createSessionUserFromAuthUser = (user: AuthUser): SessionUser => ({
   permissions: user.permissions,
 });
 
-const readStoredAdminProfile = (): StoredAdminProfile | null => {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const rawProfile = localStorage.getItem(ADMIN_PROFILE_STORAGE_KEY);
-    if (!rawProfile) return null;
-
-    const parsedProfile = JSON.parse(rawProfile) as Partial<StoredAdminProfile>;
-    if (!parsedProfile.id || !parsedProfile.name || !parsedProfile.email || !parsedProfile.password) {
-      localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY);
-      return null;
-    }
-
-    return {
-      id: parsedProfile.id,
-      name: parsedProfile.name,
-      email: normalizeEmail(parsedProfile.email),
-      password: parsedProfile.password,
-    };
-  } catch {
-    localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY);
-    return null;
-  }
-};
-
-const getStaticAuthUsers = (): AuthUser[] => {
-  const storedAdminProfile = readStoredAdminProfile();
-
-  return STATIC_AUTH_USERS.map((user) => {
-    if (!storedAdminProfile || user.role !== 'Admin' || user.id !== storedAdminProfile.id) {
-      return user;
-    }
-
-    return {
-      ...user,
-      name: storedAdminProfile.name,
-      email: storedAdminProfile.email,
-      password: storedAdminProfile.password,
-    };
-  });
-};
-
-const getLocalAdminUsers = (): AuthUser[] => {
-  const adminUsers = [...getStaticAuthUsers(), ...STATIC_AUTH_USERS].filter(
-    (user) => user.role === 'Admin',
-  );
-  const seenCredentials = new Set<string>();
-
-  return adminUsers.filter((user) => {
-    const credentialKey = `${normalizeEmail(user.email)}:${user.password}`;
-
-    if (seenCredentials.has(credentialKey)) {
-      return false;
-    }
-
-    seenCredentials.add(credentialKey);
-    return true;
-  });
-};
-
 const readAppState = (): AppState | null => {
   if (typeof window === 'undefined') return null;
 
@@ -153,7 +68,7 @@ const readAppState = (): AppState | null => {
     const rawState = localStorage.getItem(APP_STATE_STORAGE_KEY);
     if (!rawState) return null;
 
-    return ensureRequiredAppStateAccounts(JSON.parse(rawState) as AppState);
+    return JSON.parse(rawState) as AppState;
   } catch {
     return null;
   }
@@ -190,7 +105,7 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
       if (!workspace) return;
 
       workspace.employees
-        .filter((employee): employee is Employee => Boolean(employee?.id && employee?.name && employee?.email))
+        .filter((employee): employee is Employee => Boolean(employee?.id && employee?.name && employee?.email && employee?.password))
         .forEach((employee) => {
           const normalizedEmail = normalizeEmail(employee.email);
           if (!normalizedEmail || seenEmails.has(normalizedEmail)) return;
@@ -200,7 +115,7 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
             id: employee.id,
             name: employee.name,
             email: normalizedEmail,
-            password: employee.password || 'employee123',
+            password: employee.password,
             role: 'Employee',
             businessId: business.id,
             permissions: employee.permissions,
@@ -271,39 +186,15 @@ const resolveStoredSessionUser = (sessionUser: SessionUser): SessionUser | null 
   return sessionUser;
 };
 
-const resolveTemporaryLoginOverrideUser = (email: string): AuthUser | null => {
-  const forcedRole = TEMPORARY_LOGIN_ROLE_OVERRIDES[email];
-  if (!forcedRole) {
-    return null;
-  }
-
-  const matchingUsers = getAvailableUsers().filter((user) => user.email === email);
-  if (matchingUsers.length === 0) {
-    return null;
-  }
-
-  return matchingUsers.find((user) => user.role === forcedRole) || null;
-};
-
 const resolveSessionUserFromApiLogin = (
   normalizedEmail: string,
   body: LoginApiResponseBody | null,
 ): SessionUser => {
-  const mappedSessionUser = mapLoginResponseToSessionUser(
+  const sessionUser = mapLoginResponseToSessionUser(
     normalizedEmail,
     body,
     (sessionEmail, role, businessId) => resolveLocalUserBySessionFields(sessionEmail, role, businessId),
   );
-  const temporaryOverrideUser = resolveTemporaryLoginOverrideUser(normalizedEmail);
-  const sessionUser = temporaryOverrideUser
-    ? {
-        ...createSessionUserFromAuthUser(temporaryOverrideUser),
-        departmentId: mappedSessionUser?.departmentId,
-        counterId: mappedSessionUser?.counterId,
-        counterName: mappedSessionUser?.counterName,
-        permissions: mappedSessionUser?.permissions || temporaryOverrideUser.permissions,
-      }
-    : mappedSessionUser;
 
   if (!sessionUser) {
     throw new Error(
@@ -331,7 +222,7 @@ export const clearServerAuthSession = async () => {
 };
 
 export const getAvailableUsersFromState = (state: AppState): AuthUser[] => {
-  const authUsers = getStaticAuthUsers();
+  const authUsers: AuthUser[] = [];
   const businessUsers = readBusinessUsers(state);
   const employeeUsers = readEmployeeUsers(state);
 
@@ -357,7 +248,7 @@ export const getAvailableUsersFromState = (state: AppState): AuthUser[] => {
 export const getAvailableUsers = (): AuthUser[] => {
   const state = readAppState();
   if (!state) {
-    return getAvailableUsersFromState(ensureRequiredAppStateAccounts(getInitialAppState()));
+    return getAvailableUsersFromState(getInitialAppState());
   }
 
   return getAvailableUsersFromState(state);
@@ -378,47 +269,6 @@ export const updateStoredUser = (sessionUser: SessionUser | null) => {
 
 export const getStoredAccessToken = () => {
   return null;
-};
-
-export const updateAdminCredentials = (updates: Partial<Pick<AuthUser, 'name' | 'email' | 'password'>>) => {
-  if (typeof window === 'undefined') return;
-
-  const currentAdminUser = getStaticAuthUsers().find((user) => user.role === 'Admin');
-  if (!currentAdminUser) return;
-
-  const nextProfile: StoredAdminProfile = {
-    id: currentAdminUser.id,
-    name: updates.name?.trim() || currentAdminUser.name,
-    email: updates.email ? normalizeEmail(updates.email) : currentAdminUser.email,
-    password: updates.password || currentAdminUser.password,
-  };
-
-  localStorage.setItem(ADMIN_PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
-};
-
-export const loginWithDummyCredentials = (role: LoginRole, email: string, password: string): SessionUser | null => {
-  const normalizedEmail = normalizeEmail(email);
-  const matchedUser = role === 'Admin'
-    ? getLocalAdminUsers().find(
-        (user) =>
-          user.email === normalizedEmail &&
-          user.password === password,
-      )
-    : getAvailableUsers().find(
-        (user) =>
-          user.role === role &&
-          user.email === normalizedEmail &&
-          user.password === password,
-      );
-
-  if (!matchedUser) {
-    return null;
-  }
-
-  const sessionUser = createSessionUserFromAuthUser(matchedUser);
-  updateStoredUser(sessionUser);
-
-  return sessionUser;
 };
 
 export const loginWithApiCredentials = async (

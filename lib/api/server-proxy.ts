@@ -70,3 +70,61 @@ export const proxyAuthenticatedGetRequest = async (
   }
 };
 
+export const proxyAuthenticatedPostRequest = async (
+  resource: BackendApiResource,
+  request: Request,
+) => {
+  const config = getBackendApiResourceConfig(resource);
+
+  if (!config.path) {
+    return Response.json(
+      {
+        message: `The ${config.label} endpoint is not configured yet.`,
+        envKey: config.envPathKey,
+      },
+      { status: 501 },
+    );
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_TOKEN_COOKIE_NAME)?.value?.trim();
+
+  if (!token) {
+    return Response.json(
+      { message: `No auth token cookie is available for the ${config.label} request.` },
+      { status: 401 },
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const bodyValues = {
+      username: payload.username,
+      password: payload.password,
+      fullname: payload.fullname,
+      role: payload.role,
+      email_id: payload.email_id,
+      contact_no: payload.contact_no,
+    } as Record<string, string | undefined>;
+
+    const response = await requestBackendCollection(resource, token, undefined, bodyValues);
+
+    return Response.json(
+      normalizeResponseBody(response.body, `Unable to create ${config.label} in the backend.`),
+      { status: response.statusCode },
+    );
+  } catch (error) {
+    if (error instanceof BackendApiConfigurationError) {
+      return Response.json(
+        { message: error.message, envKey: config.envPathKey },
+        { status: error.statusCode },
+      );
+    }
+
+    return Response.json(
+      { message: `Unable to reach the ${config.label} service right now.` },
+      { status: 502 },
+    );
+  }
+};
+

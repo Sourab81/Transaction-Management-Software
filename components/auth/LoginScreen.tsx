@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FaArrowRight,
@@ -10,15 +10,46 @@ import {
   FaShieldAlt,
 } from 'react-icons/fa';
 import {
-  clearServerAuthSession,
   completeApiLogin,
-  loginWithDummyCredentials,
   updateStoredUser,
 } from '../../lib/auth-session';
-import { loginWithServerAction } from '../../app/login/actions';
+import type { LoginApiResponseBody } from '../../lib/api/auth';
 import { getRoleLabel } from '../../lib/platform-structure';
 import { getDefaultWorkspacePath } from '../../lib/workspace-routes';
 import styles from './LoginScreen.module.css';
+
+const readLoginErrorMessage = (body: LoginApiResponseBody | null) => {
+  const message = body?.message;
+
+  if (typeof message === 'string' && message.trim()) {
+    return message.trim();
+  }
+
+  if (message && typeof message === 'object') {
+    return Object.values(message)
+      .map((value) => typeof value === 'string' ? value.trim() : '')
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return 'Unable to sign in right now. Please try again in a moment.';
+};
+
+const isFailedLoginBody = (body: LoginApiResponseBody | null) => {
+  if (body?.status === false || body?.status === 'false') {
+    return true;
+  }
+
+  if (typeof body?.status === 'number') {
+    return body.status >= 400;
+  }
+
+  if (typeof body?.status === 'string' && /^\d+$/.test(body.status)) {
+    return Number(body.status) >= 400;
+  }
+
+  return false;
+};
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -27,6 +58,10 @@ const LoginScreen = () => {
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    updateStoredUser(null);
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -45,49 +80,30 @@ const LoginScreen = () => {
     setStatus('Verifying your credentials and loading departments.');
 
     try {
-      const temporaryAdminUser = loginWithDummyCredentials(
-        'Admin',
-        normalizedEmail,
-        normalizedPassword,
-      );
-
-      if (temporaryAdminUser) {
-        event.preventDefault();
-        await clearServerAuthSession();
-        updateStoredUser(temporaryAdminUser);
-        setStatus('Temporary admin access granted. Opening the admin workspace.');
-        setError('');
-        router.replace(getDefaultWorkspacePath());
-        return;
-      }
-
       setIsSubmitting(true);
-      const formData = new FormData();
-      formData.set('email', normalizedEmail);
-      formData.set('password', normalizedPassword);
-
-      const loginResult = await loginWithServerAction(
-        {
-          ok: false,
-          body: null,
-          message: '',
-          statusCode: undefined,
-          email: '',
-          submitted: false,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
         },
-        formData,
-      );
+        body: JSON.stringify({
+          username: normalizedEmail,
+          email: normalizedEmail,
+          password: normalizedPassword,
+        }),
+        cache: 'no-store',
+      });
+      const body = await response.json().catch(() => null) as LoginApiResponseBody | null;
 
-      if (!loginResult.ok) {
-        throw new Error(
-          loginResult.message || 'Unable to sign in right now. Please try again in a moment.',
-        );
+      if (!response.ok || isFailedLoginBody(body)) {
+        throw new Error(readLoginErrorMessage(body));
       }
 
-      const user = completeApiLogin(loginResult.email, loginResult.body);
+      const user = completeApiLogin(normalizedEmail, body);
       setError('');
       setStatus(`Verified. Departments loaded. Opening the ${getRoleLabel(user.role).toLowerCase()} workspace.`);
-      router.replace(getDefaultWorkspacePath());
+      router.replace(getDefaultWorkspacePath(user.role));
     } catch (loginError) {
       setStatus('');
       setError(
@@ -168,7 +184,7 @@ const LoginScreen = () => {
           <section className={styles.footnote} aria-label="Login notes">
             <div className={styles.footnoteItem}>
               <FaShieldAlt className={styles.footnoteIcon} />
-              <span>Business and employee credentials use backend verification. Admin access stays available through a temporary local login.</span>
+              <span>Credentials are verified through the backend before workspace access is opened.</span>
             </div>
             <div className={styles.footnoteItem}>
               <FaCheckCircle className={styles.footnoteIcon} />

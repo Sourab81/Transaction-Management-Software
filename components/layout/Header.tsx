@@ -55,7 +55,9 @@ const Header: React.FC<HeaderProps> = ({
   const [isCompactMenuOpen, setIsCompactMenuOpen] = useState(false);
   const [isCompactSearchOpen, setIsCompactSearchOpen] = useState(false);
   const currentModule = getModuleDisplayById(activeTab, currentUser.role);
-  const headerTitle = activeTab === 'customers' && customerPageView
+  const headerTitle = activeTab === 'customers' && currentUser.role === 'Admin'
+    ? currentModule?.label || 'Businesses'
+    : activeTab === 'customers' && customerPageView
     ? getCustomerWorkspaceViewUi(customerPageView).label
     : getModuleLabel(activeTab) || currentModule?.label || 'Dashboard';
   const roleLabel = getRoleLabel(currentUser.role);
