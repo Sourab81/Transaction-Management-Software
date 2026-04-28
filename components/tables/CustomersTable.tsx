@@ -19,6 +19,7 @@ interface CustomersTableProps {
   emptyLabel?: string;
   isLoading?: boolean;
   pagination?: DataTablePagination;
+  headerAction?: React.ReactNode;
 }
 
 const CustomersTable: React.FC<CustomersTableProps> = ({
@@ -33,6 +34,7 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
   emptyLabel = 'No customer records found.',
   isLoading = false,
   pagination,
+  headerAction,
 }) => {
   const hasActions = Boolean(onView || onEdit || onDelete);
 
@@ -44,6 +46,7 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       title={title}
       copy={copy}
       emptyLabel={emptyLabel}
+      headerAction={headerAction}
       isLoading={isLoading}
       pagination={pagination}
       columns={[

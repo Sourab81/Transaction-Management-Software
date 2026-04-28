@@ -1,4 +1,5 @@
 import React from 'react';
+import DataTable from './DataTable';
 
 interface Counter {
   id: string;
@@ -13,46 +14,30 @@ interface CountersTableProps {
   counters: Counter[];
 }
 
-const CountersTable: React.FC<CountersTableProps> = ({ counters }) => {
-  return (
-    <section className="table-panel">
-      <div className="table-panel__header">
-        <div>
-          <p className="eyebrow">Counters</p>
-          <h3 className="table-panel__title">Counter overview</h3>
-          <p className="table-panel__copy">Balances and status across active service counters.</p>
-        </div>
-      </div>
-      <div className="data-table-wrapper">
-        <table className="table data-table align-middle mobile-card-table">
-          <thead>
-            <tr>
-              <th>Counter</th>
-              <th>Code</th>
-              <th>Opening Balance</th>
-              <th>Current Balance</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {counters.map((counter) => (
-              <tr key={counter.id}>
-                <td data-label="Counter"><span className="data-table__primary">{counter.name}</span></td>
-                <td data-label="Code">{counter.code}</td>
-                <td data-label="Opening Balance">Rs. {counter.openingBalance.toLocaleString('en-IN')}</td>
-                <td data-label="Current Balance">Rs. {counter.currentBalance.toLocaleString('en-IN')}</td>
-                <td data-label="Status">
-                  <span className={`status-chip ${counter.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
-                    {counter.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-};
+const CountersTable: React.FC<CountersTableProps> = ({ counters }) => (
+  <DataTable
+    rows={counters}
+    getRowKey={(counter) => counter.id}
+    eyebrow="Counters"
+    title="Counter overview"
+    copy="Balances and status across active service counters."
+    emptyLabel="No counter records found."
+    columns={[
+      { key: 'counter', header: 'Counter', render: (counter) => <span className="data-table__primary">{counter.name}</span> },
+      { key: 'code', header: 'Code', render: (counter) => counter.code },
+      { key: 'opening', header: 'Opening Balance', render: (counter) => `Rs. ${counter.openingBalance.toLocaleString('en-IN')}` },
+      { key: 'current', header: 'Current Balance', render: (counter) => `Rs. ${counter.currentBalance.toLocaleString('en-IN')}` },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (counter) => (
+          <span className={`status-chip ${counter.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
+            {counter.status}
+          </span>
+        ),
+      },
+    ]}
+  />
+);
 
 export default CountersTable;

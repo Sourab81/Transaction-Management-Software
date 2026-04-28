@@ -30,7 +30,6 @@ import {
   useAdminWorkspaceData,
   useBusinesses,
   useBusinessWorkspacesById,
-  useFilteredBusinesses,
   useFilteredTransactionRecords,
   useRecentServices,
   useRoleScopedWorkspace,
@@ -58,7 +57,6 @@ import {
 import {
   buildDefaultCustomerPermissions,
   canAccessModuleForSession,
-  customerPermissionOptions,
   getModuleDisplayById,
   getRoleLabel,
   intersectCustomerPermissions,
@@ -78,7 +76,14 @@ import SubscriptionPlanForm from '../forms/SubscriptionPlanForm';
 import TransactionEditForm, { type TransactionEditorValues } from '../forms/TransactionEditForm';
 import { type SummaryCardProps } from './SummaryCard';
 import SummaryGrid from './SummaryGrid';
+import ReusableListTable from '../common/ReusableListTable';
 import type { CustomerOutstandingRow } from '../tables/CustomerOutstandingTable';
+import {
+  readDataTableDateRangeFilter,
+  readDataTableMultiSelectFilter,
+  readDataTableSingleSelectFilter,
+  type DataTableFiltersValue,
+} from '../common/DataTableFilters';
 import SubscriptionTransactionsTable from '../tables/SubscriptionTransactionsTable';
 import ActionModal from '../ui/ActionModal';
 import DetailList from '../ui/DetailList';
@@ -254,7 +259,7 @@ interface AdminPlanFilterState {
 
 interface DashboardFilterState {
   historyStatus: HistoryStatusFilter;
-  businessPermission: string;
+  businessDirectory: DataTableFiltersValue;
   transaction: TransactionFilterState;
   department: DepartmentFilterState;
   adminPlan: AdminPlanFilterState;
@@ -325,9 +330,18 @@ const initialAdminPlanFilterState: AdminPlanFilterState = {
   isOpen: false,
 };
 
+const initialBusinessDirectoryFilterState: DataTableFiltersValue = {
+  search: '',
+  fields: {
+    permissions: [],
+    status: '',
+    joinedDate: { from: '', to: '' },
+  },
+};
+
 const initialDashboardFilterState: DashboardFilterState = {
   historyStatus: 'All',
-  businessPermission: 'all',
+  businessDirectory: initialBusinessDirectoryFilterState,
   transaction: initialTransactionFilterState,
   department: initialDepartmentFilterState,
   adminPlan: initialAdminPlanFilterState,
@@ -501,7 +515,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
   const {
     historyStatus: historyStatusFilter,
-    businessPermission: businessPermissionFilter,
+    businessDirectory: businessDirectoryFilters,
     transaction: transactionFilters,
     department: departmentFilters,
     adminPlan: adminPlanFilters,
@@ -605,8 +619,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateFilterState('historyStatus', value);
   };
 
-  const setBusinessPermissionFilter: React.Dispatch<React.SetStateAction<string>> = (value) => {
-    updateFilterState('businessPermission', value);
+  const setBusinessDirectoryFilters: React.Dispatch<React.SetStateAction<DataTableFiltersValue>> = (value) => {
+    updateFilterState('businessDirectory', value);
   };
 
   const setIsTransactionFiltersOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
@@ -723,10 +737,60 @@ const Dashboard: React.FC<DashboardProps> = ({
     transactions: transactionHistory,
   });
 
-  const filteredBusinesses = useFilteredBusinesses(businesses, businessPermissionFilter);
-  const businessPermissionFilterLabel = businessPermissionFilter === 'all'
-    ? 'All permissions'
-    : customerPermissionOptions.find((option) => option.id === businessPermissionFilter)?.label || 'Selected permission';
+  const deferredBusinessSearchQuery = useDeferredValue(businessDirectoryFilters.search.trim().toLowerCase());
+  const businessPermissionFilterValues = useMemo(
+    () => readDataTableMultiSelectFilter(businessDirectoryFilters, 'permissions'),
+    [businessDirectoryFilters],
+  );
+  const businessStatusFilterValue = useMemo(
+    () => readDataTableSingleSelectFilter(businessDirectoryFilters, 'status'),
+    [businessDirectoryFilters],
+  );
+  const businessJoinedDateFilter = useMemo(
+    () => readDataTableDateRangeFilter(businessDirectoryFilters, 'joinedDate'),
+    [businessDirectoryFilters],
+  );
+  const activeBusinessFilterCount = [
+    deferredBusinessSearchQuery ? 1 : 0,
+    businessPermissionFilterValues.length > 0 ? 1 : 0,
+    businessStatusFilterValue ? 1 : 0,
+    businessJoinedDateFilter.from || businessJoinedDateFilter.to ? 1 : 0,
+  ].filter(Boolean).length;
+  const hasActiveBusinessDirectoryFilters = activeBusinessFilterCount > 0;
+  const businessPermissionFilterLabel = hasActiveBusinessDirectoryFilters
+    ? `${activeBusinessFilterCount} active filter${activeBusinessFilterCount === 1 ? '' : 's'}`
+    : 'All businesses';
+  const filteredBusinesses = useMemo(() => {
+    const selectedPermissionIds = businessPermissionFilterValues.map(String);
+    const selectedStatus = businessStatusFilterValue ? String(businessStatusFilterValue) : '';
+
+    return businesses.filter((business) => {
+      const joinedDate = (business.joinedDate || '').slice(0, 10);
+      const searchText = [
+        business.name,
+        business.phone,
+        business.email,
+        business.status || 'Active',
+        joinedDate,
+      ].join(' ').toLowerCase();
+      const matchesSearch = !deferredBusinessSearchQuery || searchText.includes(deferredBusinessSearchQuery);
+      const matchesPermissions = selectedPermissionIds.length === 0 || selectedPermissionIds.some((permissionId) =>
+        isPermissionEnabled(business.permissions, permissionId)
+      );
+      const matchesStatus = !selectedStatus || selectedStatus === (business.status || 'Active');
+      const matchesFromDate = !businessJoinedDateFilter.from || (joinedDate && joinedDate >= businessJoinedDateFilter.from);
+      const matchesToDate = !businessJoinedDateFilter.to || (joinedDate && joinedDate <= businessJoinedDateFilter.to);
+
+      return matchesSearch && matchesPermissions && matchesStatus && matchesFromDate && matchesToDate;
+    });
+  }, [
+    businessJoinedDateFilter.from,
+    businessJoinedDateFilter.to,
+    businessPermissionFilterValues,
+    businessStatusFilterValue,
+    businesses,
+    deferredBusinessSearchQuery,
+  ]);
   const customerListPageUi = getCustomerWorkspaceViewUi('list');
   const customerPaymentsPageUi = getCustomerWorkspaceViewUi('payments');
   const customerOutstandingPageUi = getCustomerWorkspaceViewUi('outstanding');
@@ -752,11 +816,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     currentRole === 'Admin' ? emptyTransactionRecords : transactionHistory,
   );
   const customerDirectoryRecords = currentRole === 'Admin' ? filteredBusinesses : visibleCustomers;
+  const adminBusinessTotalRecords = currentRole === 'Admin'
+    ? Math.max(filteredBusinesses.length, backendBusinessPagination.totalRecords - 1)
+    : visibleCustomers.length;
+  const adminBusinessTotalPages = currentRole === 'Admin'
+    ? Math.max(1, Math.ceil(adminBusinessTotalRecords / backendBusinessPagination.limit))
+    : 1;
   const customerDirectoryPagination = currentRole === 'Admin'
     ? {
         currentPage: backendBusinessPagination.currentPage,
-        totalPages: backendBusinessPagination.totalPages,
-        totalRecords: backendBusinessPagination.totalRecords,
+        totalPages: adminBusinessTotalPages,
+        totalRecords: adminBusinessTotalRecords,
         limit: backendBusinessPagination.limit,
         isLoading: isBackendBusinessesLoading,
         onPageChange: setBackendBusinessPage,
@@ -842,7 +912,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const customerEntityLabel = currentRole === 'Admin' ? 'Business' : 'Customer';
   const customerEntityPlural = currentRole === 'Admin' ? 'Businesses' : 'Customers';
-  const customerDirectoryCount = currentRole === 'Admin' ? backendBusinessPagination.totalRecords : visibleCustomers.length;
+  const customerDirectoryCount = currentRole === 'Admin' ? adminBusinessTotalRecords : visibleCustomers.length;
   const customerSectionTitle = currentRole === 'Admin'
     ? customerPageView === 'list'
       ? 'Manage the business directory'
@@ -888,7 +958,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         { title: 'Total Businesses', value: `${customerDirectoryCount}`, detail: 'All registered business logins', icon: <FaUsers />, colorClass: 'bg-primary' },
         { title: 'Active Businesses', value: `${activeBusinesses}`, detail: 'Active records on this page', icon: <FaUsersCog />, colorClass: 'bg-success' },
         { title: 'Inactive Businesses', value: `${inactiveBusinesses}`, detail: 'Inactive records on this page', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
-        { title: 'Permission Match', value: `${filteredBusinesses.length}`, detail: `Filter: ${businessPermissionFilterLabel}`, icon: <FaChartLine />, colorClass: 'bg-info' },
+        { title: 'Filter Match', value: `${filteredBusinesses.length}`, detail: `Filter: ${businessPermissionFilterLabel}`, icon: <FaChartLine />, colorClass: 'bg-info' },
       ];
     }
 
@@ -3619,49 +3689,25 @@ const Dashboard: React.FC<DashboardProps> = ({
               ]} />
             </div>
           </div>
-          <div className="table-panel mb-4">
-            <div className="table-panel__header">
-              <div>
-                <p className="eyebrow">Customer Ledger</p>
-                <h3 className="table-panel__title">Transaction history</h3>
-                <p className="table-panel__copy">All saved service transactions for this customer.</p>
-              </div>
-            </div>
-            <div className="data-table-wrapper">
-              <table className="table data-table align-middle">
-                <thead>
-                  <tr>
-                    <th>Txn No.</th>
-                    <th>Service</th>
-                    <th>Total</th>
-                    <th>Paid</th>
-                    <th>Due</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedCustomerTransactions.length === 0 ? (
-                    <tr>
-                      <td className="table-empty" colSpan={7}>No transaction history found for this customer.</td>
-                    </tr>
-                  ) : (
-                    selectedCustomerTransactions.map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td>{transaction.transactionNumber}</td>
-                        <td>{transaction.service}</td>
-                        <td>Rs. {transaction.totalAmount.toLocaleString('en-IN')}</td>
-                        <td>Rs. {transaction.paidAmount.toLocaleString('en-IN')}</td>
-                        <td>Rs. {transaction.dueAmount.toLocaleString('en-IN')}</td>
-                        <td>{transaction.status}</td>
-                        <td>{transaction.date}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <ReusableListTable
+            data={selectedCustomerTransactions}
+            rowKey={(transaction) => transaction.id}
+            eyebrow="Customer Ledger"
+            title="Transaction history"
+            copy="All saved service transactions for this customer."
+            emptyMessage="No transaction history found for this customer."
+            className="mb-4"
+            mobileCards={false}
+            columns={[
+              { key: 'transactionNumber', header: 'Txn No.', render: (transaction) => transaction.transactionNumber },
+              { key: 'service', header: 'Service', render: (transaction) => transaction.service },
+              { key: 'total', header: 'Total', render: (transaction) => `Rs. ${transaction.totalAmount.toLocaleString('en-IN')}` },
+              { key: 'paid', header: 'Paid', render: (transaction) => `Rs. ${transaction.paidAmount.toLocaleString('en-IN')}` },
+              { key: 'due', header: 'Due', render: (transaction) => `Rs. ${transaction.dueAmount.toLocaleString('en-IN')}` },
+              { key: 'status', header: 'Status', render: (transaction) => transaction.status },
+              { key: 'date', header: 'Date', render: (transaction) => transaction.date },
+            ]}
+          />
           <div className="modal-actions">
             <button type="button" className="btn-app btn-app-secondary" onClick={closeModal}>Close</button>
             <button
@@ -3836,8 +3882,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     customerSectionDescription,
     customerEntityLabel,
     customerEntityPlural,
-    businessPermissionFilter,
+    businessDirectoryFilters,
     businessPermissionFilterLabel,
+    hasActiveBusinessDirectoryFilters,
     isBusinessDirectoryLoading: isBackendBusinessesLoading,
     businessDirectoryError: backendBusinessesError,
     customerDirectoryPagination,
@@ -3906,7 +3953,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     setIsTransactionFiltersOpen,
     setDepartmentSearchInput,
     setDepartmentAccountStatusFilter,
-    setBusinessPermissionFilter,
+    setBusinessDirectoryFilters,
   };
 
   const renderModuleDataState = () => {

@@ -20,6 +20,7 @@ import type {
 import type { CustomerWorkspaceView } from '../../../lib/workspace-routes';
 import type { ServiceWorkflowDraft } from '../../forms/ServiceForm';
 import type { DataTablePagination } from '../../tables/DataTable';
+import type { DataTableFiltersValue } from '../../common/DataTableFilters';
 import type { CustomerOutstandingRow } from '../../tables/CustomerOutstandingTable';
 import type { SummaryCardProps } from '../SummaryCard';
 
@@ -83,8 +84,9 @@ export interface DashboardTabContext {
   customerSectionDescription: string;
   customerEntityLabel: string;
   customerEntityPlural: string;
-  businessPermissionFilter: string;
+  businessDirectoryFilters: DataTableFiltersValue;
   businessPermissionFilterLabel: string;
+  hasActiveBusinessDirectoryFilters: boolean;
   isBusinessDirectoryLoading: boolean;
   businessDirectoryError: string;
   customerDirectoryPagination?: DataTablePagination;
@@ -153,5 +155,5 @@ export interface DashboardTabContext {
   setIsTransactionFiltersOpen: Dispatch<SetStateAction<boolean>>;
   setDepartmentSearchInput: Dispatch<SetStateAction<string>>;
   setDepartmentAccountStatusFilter: Dispatch<SetStateAction<'All' | 'Active' | 'Inactive' | 'Unassigned'>>;
-  setBusinessPermissionFilter: Dispatch<SetStateAction<string>>;
+  setBusinessDirectoryFilters: Dispatch<SetStateAction<DataTableFiltersValue>>;
 }

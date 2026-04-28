@@ -1755,11 +1755,86 @@ small {
   padding: 1.25rem;
 }
 
+.business-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.business-form__intro,
+.business-form__section {
+  border-radius: 8px;
+}
+
+.business-form__intro {
+  margin-bottom: 0;
+}
+
+.business-form__section {
+  padding: 1rem;
+}
+
+.business-form__section-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+
+.business-form__section-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.business-form__dropdown-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 2.25rem;
+  min-width: 7.5rem;
+  padding: 0.45rem 0.75rem;
+}
+
+.business-form__button-icon {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+}
+
+.business-form__button-chevron {
+  color: var(--foreground-muted);
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  margin-left: 0.1rem;
+}
+
+.business-form__summary {
+  margin-bottom: 0;
+}
+
+.business-form__inline-panel {
+  background: rgba(247, 250, 255, 0.78);
+  border: 1px solid rgba(20, 32, 51, 0.06);
+  border-radius: 8px;
+  margin: 0.9rem 0 0;
+  padding: 0.9rem;
+}
+
+.business-form__permissions {
+  border-top: 1px solid rgba(20, 32, 51, 0.06);
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+}
+
 .subscription-plan-preview {
   align-items: flex-start;
   background: rgba(247, 250, 255, 0.96);
   border: 1px solid rgba(20, 32, 51, 0.08);
-  border-radius: 18px;
+  border-radius: 8px;
   display: flex;
   gap: 1rem;
   justify-content: space-between;
@@ -2382,6 +2457,11 @@ small {
   padding: 1rem;
 }
 
+.business-form .permission-section {
+  border-radius: 8px;
+  padding: 0.85rem;
+}
+
 .permission-section__header {
   align-items: center;
   display: flex;
@@ -2427,6 +2507,11 @@ small {
   gap: 1rem;
   justify-content: space-between;
   padding: 0.75rem 0.85rem;
+}
+
+.business-form .permission-row {
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
 }
 
 .permission-row--child {
@@ -2509,6 +2594,154 @@ small {
   margin: 0 auto 0 0;
 }
 
+.table-filter-panel {
+  padding: 1.25rem;
+}
+
+.table-filter-panel--modal {
+  padding: 0;
+}
+
+.table-filter-panel__header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.table-filter-panel__meta {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.table-filter-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(13rem, 1.15fr) repeat(3, minmax(12rem, 1fr)) auto;
+}
+
+.table-filter-panel--modal .table-filter-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.table-filter-panel--modal .table-filter-search,
+.table-filter-panel--modal .table-filter-actions {
+  grid-column: 1 / -1;
+}
+
+.table-filter-search__control {
+  position: relative;
+}
+
+.table-filter-search__control .form-control {
+  padding-left: 2.35rem;
+}
+
+.table-filter-search__icon {
+  color: var(--foreground-muted);
+  font-size: 0.9rem;
+  left: 0.95rem;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.table-filter-options {
+  background: rgba(247, 250, 255, 0.88);
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 9.5rem;
+  overflow-y: auto;
+  padding: 0.55rem;
+}
+
+.table-filter-dropdown {
+  position: relative;
+}
+
+.table-filter-dropdown__button {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  text-align: left;
+  width: 100%;
+}
+
+.table-filter-dropdown__menu {
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 20;
+}
+
+.table-filter-option {
+  align-items: center;
+  color: var(--foreground);
+  display: flex;
+  font-size: 0.86rem;
+  gap: 0.45rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.table-filter-option input {
+  flex-shrink: 0;
+}
+
+.table-filter-date-range {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.table-filter-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  min-width: 9rem;
+}
+
+.table-filter-actions__hint {
+  align-items: center;
+  color: var(--foreground-muted);
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 0.35rem;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.table-filter-actions--compact {
+  justify-content: flex-end;
+}
+
+.table-filter-trigger {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.table-filter-trigger .btn-app {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+}
+
 .table-panel {
   overflow: hidden;
   overflow-y: auto;
@@ -2575,6 +2808,15 @@ small {
 
 .data-table tbody tr:hover td {
   background: rgba(247, 250, 255, 0.72);
+}
+
+.data-table__clickable-row {
+  cursor: pointer;
+}
+
+.history-table-panel {
+  height: 50rem;
+  overflow-y: auto;
 }
 
 .data-table__primary {
@@ -3157,8 +3399,17 @@ small {
   .hero-panel__meta,
   .auth-metrics,
   .quick-action-grid,
-  .department-toolbar__grid {
+  .department-toolbar__grid,
+  .table-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .table-filter-panel__header {
+    flex-direction: column;
+  }
+
+  .table-filter-panel__meta {
+    justify-content: flex-start;
   }
 
   .business-plan-card__grid {
@@ -3271,8 +3522,34 @@ small {
   .hero-panel__meta,
   .auth-metrics,
   .quick-action-grid,
-  .department-toolbar__grid {
+  .department-toolbar__grid,
+  .table-filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  .table-filter-panel {
+    padding: 1rem;
+  }
+
+  .table-filter-panel--modal {
+    padding: 0;
+  }
+
+  .table-filter-panel--modal .table-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-filter-date-range {
+    grid-template-columns: 1fr;
+  }
+
+  .table-filter-actions {
+    align-items: stretch;
+    min-width: 0;
+  }
+
+  .table-filter-actions__hint {
+    text-align: left;
   }
 
   .subscription-plan-preview,

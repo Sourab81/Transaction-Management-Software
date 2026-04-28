@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { FaPlusCircle } from 'react-icons/fa';
+import { FaFilter, FaPlusCircle } from 'react-icons/fa';
 import { getCustomerWorkspaceViewUi, getModuleUi } from '../../../lib/module-ui';
 import { customerPermissionOptions } from '../../../lib/platform-structure';
 import { getCustomerWorkspacePath } from '../../../lib/workspace-routes';
+import ActionModal from '../../ui/ActionModal';
 import EmptyState from '../../ui/state/EmptyState';
 import ErrorState from '../../ui/state/ErrorState';
 import PermissionState from '../../ui/state/PermissionState';
@@ -12,6 +14,7 @@ import SectionHero from '../SectionHero';
 import CustomersTable from '../../tables/CustomersTable';
 import CustomerPaymentsTable from '../../tables/CustomerPaymentsTable';
 import CustomerOutstandingTable from '../../tables/CustomerOutstandingTable';
+import DataTableFilters, { type DataTableFiltersConfig } from '../../common/DataTableFilters';
 import type { DashboardTabContext } from './types';
 
 interface CustomersTabProps {
@@ -43,15 +46,48 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     canDeleteCustomerRecords,
     renderCustomerRoutePermissionState,
     handleQuickAction,
-    filteredBusinesses,
-    businesses,
-    businessPermissionFilter,
-    setBusinessPermissionFilter,
+    businessDirectoryFilters,
+    setBusinessDirectoryFilters,
     businessPermissionFilterLabel,
+    hasActiveBusinessDirectoryFilters,
     isBusinessDirectoryLoading,
     businessDirectoryError,
     customerDirectoryPagination,
   } = ctx;
+  const [isBusinessFilterOpen, setIsBusinessFilterOpen] = useState(false);
+  const [draftBusinessFilters, setDraftBusinessFilters] = useState(businessDirectoryFilters);
+  const businessDirectoryFiltersConfig: DataTableFiltersConfig = {
+    search: {
+      enabled: true,
+      fields: ['name', 'phone', 'email'],
+      label: 'Search',
+    },
+    fields: [
+      {
+        field: 'permissions',
+        label: 'Permissions',
+        type: 'multi-select',
+        options: customerPermissionOptions.map((option) => ({
+          label: option.label,
+          value: option.id,
+        })),
+      },
+      {
+        field: 'status',
+        label: 'Status',
+        type: 'single-select',
+        options: [
+          { label: 'Active', value: 'Active' },
+          { label: 'Inactive', value: 'Inactive' },
+        ],
+      },
+      {
+        field: 'joinedDate',
+        label: 'Joined date',
+        type: 'date-range',
+      },
+    ],
+  };
   const customerModuleUi = getModuleUi('customers');
   const customerViewUi = getCustomerWorkspaceViewUi(customerPageView);
   const emptyAction = canAddCustomerRecords
@@ -60,17 +96,62 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
         onClick: () => handleQuickAction('add-customer'),
       }
     : undefined;
-  const adminDirectoryEmptyTitle = businessPermissionFilter === 'all'
+  const adminDirectoryEmptyTitle = !hasActiveBusinessDirectoryFilters
     ? 'No business records yet'
-    : 'No businesses match this permission filter';
-  const adminDirectoryEmptyDescription = businessPermissionFilter === 'all'
+    : 'No businesses match these filters';
+  const adminDirectoryEmptyDescription = !hasActiveBusinessDirectoryFilters
     ? 'Create a business workspace to start managing directory records from this screen.'
-    : `Try a different permission filter or clear ${businessPermissionFilterLabel}.`;
+    : `Try different filters or clear ${businessPermissionFilterLabel}.`;
   const isAdminBusinessDirectoryLoading = currentRole === 'Admin' && isBusinessDirectoryLoading;
   const adminBusinessDirectoryError = currentRole === 'Admin' ? businessDirectoryError : '';
+  const openBusinessFilter = () => {
+    setDraftBusinessFilters(businessDirectoryFilters);
+    setIsBusinessFilterOpen(true);
+  };
+  const applyBusinessFilter = () => {
+    setBusinessDirectoryFilters(draftBusinessFilters);
+    setIsBusinessFilterOpen(false);
+  };
+  const businessFilterAction = currentRole === 'Admin' ? (
+    <div className="table-filter-trigger">
+      <button type="button" className="btn-app btn-app-secondary" onClick={openBusinessFilter}>
+        <FaFilter />
+        Filter
+      </button>
+      {hasActiveBusinessDirectoryFilters ? (
+        <span className="status-chip status-chip--info">{businessPermissionFilterLabel}</span>
+      ) : null}
+    </div>
+  ) : undefined;
 
   return (
     <div className="row g-4">
+      {isBusinessFilterOpen ? (
+        <ActionModal
+          title="Filter Businesses"
+          eyebrow="Business Filters"
+          description="Choose filters, then click Filter to update the business user list."
+          onClose={() => setIsBusinessFilterOpen(false)}
+        >
+          <DataTableFilters
+            filters={businessDirectoryFiltersConfig}
+            value={draftBusinessFilters}
+            onChange={setDraftBusinessFilters}
+            showHeader={false}
+            showFooterHint={false}
+            className="table-filter-panel--modal"
+          />
+          <div className="modal-actions">
+            <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsBusinessFilterOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-app btn-app-primary" onClick={applyBusinessFilter}>
+              Filter
+            </button>
+          </div>
+        </ActionModal>
+      ) : null}
+
       <div className="col-12">
         <SectionHero
           eyebrow={currentRole === 'Admin' ? 'Business Hub' : 'Customer Hub'}
@@ -111,50 +192,6 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
         </div>
       ) : null}
 
-      {currentRole === 'Admin' ? (
-        <div className="col-12">
-          <section className="panel department-toolbar">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Business Filters</p>
-                <h2 className="panel-title">Filter businesses by permission</h2>
-                <p className="panel-copy">See which business logins were granted a specific permission before you edit access.</p>
-              </div>
-              <div className="panel-status-chip">
-                Showing {filteredBusinesses.length} of {customerDirectoryPagination?.totalRecords ?? businesses.length}
-              </div>
-            </div>
-            <div className="department-toolbar__grid">
-              <div className="app-field mb-0">
-                <label className="form-label">Permission</label>
-                <select
-                  className="form-select"
-                  value={businessPermissionFilter}
-                  onChange={(event) => setBusinessPermissionFilter(event.target.value)}
-                >
-                  <option value="all">All permissions</option>
-                  {customerPermissionOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="department-toolbar__actions">
-                <button
-                  type="button"
-                  className="btn-app btn-app-secondary"
-                  onClick={() => setBusinessPermissionFilter('all')}
-                  disabled={businessPermissionFilter === 'all'}
-                >
-                  Clear Filter
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
       <div className="col-12">
         {!hasRequestedCustomerPageAccess ? (
           renderCustomerRoutePermissionState()
@@ -185,9 +222,10 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
                 emptyLabel={`No ${customerEntityLabel.toLowerCase()} records found.`}
                 isLoading={isAdminBusinessDirectoryLoading}
                 pagination={currentRole === 'Admin' ? customerDirectoryPagination : undefined}
+                headerAction={businessFilterAction}
                 onView={currentRole === 'Admin' ? undefined : handleViewCustomerHistory}
                 onEdit={canEditCustomerRecords ? handleEditCustomer : undefined}
-                onDelete={canDeleteCustomerRecords ? (id: string) => handleDeleteRecord(currentRole === 'Admin' ? 'DELETE_BUSINESS' : 'DELETE_CUSTOMER', id) : undefined}
+                onDelete={currentRole !== 'Admin' && canDeleteCustomerRecords ? (id: string) => handleDeleteRecord('DELETE_CUSTOMER', id) : undefined}
               />
             )
           ) : customerPageView === 'payments' ? (

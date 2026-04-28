@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaCog, FaTrashAlt } from 'react-icons/fa';
 import type { AdditionOption } from '../../lib/store';
+import DataTable from './DataTable';
 
 interface AdditionsTableProps {
   options: AdditionOption[];
@@ -12,69 +13,47 @@ const AdditionsTable: React.FC<AdditionsTableProps> = ({ options, onConfigure, o
   const hasActions = Boolean(onConfigure || onDelete);
 
   return (
-    <section className="table-panel">
-      <div className="table-panel__header">
-        <div>
-          <p className="eyebrow">Settings</p>
-          <h3 className="table-panel__title">Configuration options</h3>
-          <p className="table-panel__copy">Operational rules, integrations, and system-level preferences.</p>
+    <DataTable
+      rows={options}
+      getRowKey={(option) => option.id}
+      eyebrow="Settings"
+      title="Configuration options"
+      copy="Operational rules, integrations, and system-level preferences."
+      emptyLabel="No configuration records found."
+      columns={[
+        { key: 'serial', header: 'S.No', render: (_option, index) => index + 1 },
+        { key: 'option', header: 'Option', render: (option) => <span className="data-table__primary">{option.title}</span> },
+        { key: 'category', header: 'Category', render: (option) => option.category },
+        { key: 'description', header: 'Description', render: (option) => <span className="data-table__secondary">{option.description}</span> },
+        {
+          key: 'status',
+          header: 'Status',
+          render: (option) => (
+            <span className={`status-chip ${option.status === 'Enabled' ? 'status-chip--enabled' : 'status-chip--disabled'}`}>
+              {option.status}
+            </span>
+          ),
+        },
+        { key: 'date', header: 'Date', render: (option) => option.date },
+      ]}
+      renderActions={(option) => (
+        <div className="table-actions">
+          {onConfigure && (
+            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onConfigure(option)}>
+              <FaCog size={12} />
+              Configure
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => onDelete(option.id)}>
+              <FaTrashAlt size={12} />
+              Delete
+            </button>
+          )}
+          {!hasActions && <span className="page-muted small">View only</span>}
         </div>
-      </div>
-      <div className="data-table-wrapper">
-        <table className="table data-table align-middle mobile-card-table">
-          <thead>
-            <tr>
-              <th>S.No</th>
-              <th>Option</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Status</th>
-              <th>Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {options.length === 0 ? (
-              <tr className="data-table__empty-row">
-                <td className="table-empty" colSpan={7}>No configuration records found.</td>
-              </tr>
-            ) : (
-              options.map((option, index) => (
-                <tr key={option.id}>
-                  <td data-label="S.No">{index + 1}</td>
-                  <td data-label="Option"><span className="data-table__primary">{option.title}</span></td>
-                  <td data-label="Category">{option.category}</td>
-                  <td data-label="Description"><span className="data-table__secondary">{option.description}</span></td>
-                  <td data-label="Status">
-                    <span className={`status-chip ${option.status === 'Enabled' ? 'status-chip--enabled' : 'status-chip--disabled'}`}>
-                      {option.status}
-                    </span>
-                  </td>
-                  <td data-label="Date">{option.date}</td>
-                  <td data-label="Actions">
-                    <div className="table-actions">
-                      {onConfigure && (
-                        <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onConfigure(option)}>
-                          <FaCog size={12} />
-                          Configure
-                        </button>
-                      )}
-                      {onDelete && (
-                        <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => onDelete(option.id)}>
-                          <FaTrashAlt size={12} />
-                          Delete
-                        </button>
-                      )}
-                      {!hasActions && <span className="page-muted small">View only</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
+      )}
+    />
   );
 };
 

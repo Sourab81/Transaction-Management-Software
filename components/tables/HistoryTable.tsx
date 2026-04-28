@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaEye, FaTrashAlt } from 'react-icons/fa';
 import type { HistoryEvent } from '../../lib/store';
+import ReusableListTable from '../common/ReusableListTable';
 
 interface HistoryTableProps {
   events: HistoryEvent[];
@@ -18,65 +19,40 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ events, onView, onDelete })
   const hasActions = Boolean(onView || onDelete);
 
   return (
-    <section className="table-panel" style={{height: '50rem', overflowY: 'auto'}}>
-      <div className="table-panel__header">
-        <div>
-          <p className="eyebrow">History</p>
-          <h3 className="table-panel__title">Audit timeline</h3>
-          <p className="table-panel__copy">Events, actors, and statuses for every important workflow update.</p>
+    <ReusableListTable
+      data={events}
+      rowKey={(event) => event.id}
+      eyebrow="History"
+      title="Audit timeline"
+      copy="Events, actors, and statuses for every important workflow update."
+      emptyMessage="No history records found."
+      className="history-table-panel"
+      columns={[
+        { key: 'serial', header: 'S.No', render: (_event, index) => index + 1 },
+        { key: 'event', header: 'Event', render: (event) => <span className="data-table__primary">{event.title}</span> },
+        { key: 'module', header: 'Module', render: (event) => event.module },
+        { key: 'actor', header: 'Actor', render: (event) => event.actor },
+        { key: 'status', header: 'Status', render: (event) => <span className={getStatusClass(event.status)}>{event.status}</span> },
+        { key: 'date', header: 'Date', render: (event) => event.date },
+      ]}
+      renderActions={(event) => (
+        <div className="table-actions">
+          {onView && (
+            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onView(event)}>
+              <FaEye size={12} />
+              View
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => onDelete(event.id)}>
+              <FaTrashAlt size={12} />
+              Delete
+            </button>
+          )}
+          {!hasActions && <span className="page-muted small">View only</span>}
         </div>
-      </div>
-      <div className="data-table-wrapper">
-        <table className="table data-table align-middle mobile-card-table">
-          <thead>
-            <tr>
-              <th>S.No</th>
-              <th>Event</th>
-              <th>Module</th>
-              <th>Actor</th>
-              <th>Status</th>
-              <th>Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.length === 0 ? (
-              <tr className="data-table__empty-row">
-                <td className="table-empty" colSpan={7}>No history records found.</td>
-              </tr>
-            ) : (
-              events.map((event, index) => (
-                <tr key={event.id}>
-                  <td data-label="S.No">{index + 1}</td>
-                  <td data-label="Event"><span className="data-table__primary">{event.title}</span></td>
-                  <td data-label="Module">{event.module}</td>
-                  <td data-label="Actor">{event.actor}</td>
-                  <td data-label="Status"><span className={getStatusClass(event.status)}>{event.status}</span></td>
-                  <td data-label="Date">{event.date}</td>
-                  <td data-label="Actions">
-                    <div className="table-actions">
-                      {onView && (
-                        <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onView(event)}>
-                          <FaEye size={12} />
-                          View
-                        </button>
-                      )}
-                      {onDelete && (
-                        <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => onDelete(event.id)}>
-                          <FaTrashAlt size={12} />
-                          Delete
-                        </button>
-                      )}
-                      {!hasActions && <span className="page-muted small">View only</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
+      )}
+    />
   );
 };
 
