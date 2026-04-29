@@ -105,6 +105,9 @@ export const proxyAuthenticatedPostRequest = async (
       role: payload.role,
       email_id: payload.email_id,
       contact_no: payload.contact_no,
+      role_template_id: payload.role_template_id,
+      permission: payload.permission,
+      privileges: payload.privileges,
     } as Record<string, string | undefined>;
 
     const response = await requestBackendCollection(resource, token, undefined, bodyValues);
@@ -127,4 +130,3 @@ export const proxyAuthenticatedPostRequest = async (
     );
   }
 };
-

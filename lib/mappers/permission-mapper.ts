@@ -2,7 +2,7 @@ import {
   createCustomerPermissions,
   normalizeCustomerPermissions,
   type CustomerPermissions,
-} from '../platform-structure';
+} from '../permissions';
 import {
   isRecord,
   readArrayValue,

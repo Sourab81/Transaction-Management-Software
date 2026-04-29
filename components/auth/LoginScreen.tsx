@@ -77,7 +77,7 @@ const LoginScreen = () => {
     }
 
     setError('');
-    setStatus('Verifying your credentials and loading departments.');
+    setStatus('Verifying your credentials and loading permissions.');
 
     try {
       setIsSubmitting(true);
@@ -102,7 +102,7 @@ const LoginScreen = () => {
 
       const user = completeApiLogin(normalizedEmail, body);
       setError('');
-      setStatus(`Verified. Departments loaded. Opening the ${getRoleLabel(user.role).toLowerCase()} workspace.`);
+      setStatus(`Verified. Permissions loaded. Opening the ${getRoleLabel(user.role).toLowerCase()} workspace.`);
       router.replace(getDefaultWorkspacePath(user.role));
     } catch (loginError) {
       setStatus('');

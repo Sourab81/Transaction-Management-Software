@@ -2,7 +2,7 @@
 
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar } from 'react-icons/fa';
+import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar, FaFilter } from 'react-icons/fa';
 import { getAvailableUsers, type SessionUser } from '../../lib/auth-session';
 import { buildCsv } from '../../lib/csv';
 import {
@@ -47,8 +47,10 @@ import { useBackendBusinesses } from '../../lib/hooks/useBackendBusinesses';
 import { useDepartments } from '../../lib/hooks/useDepartments';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useReports } from '../../lib/hooks/useReports';
+import { useRoleTemplates } from '../../lib/hooks/useRoleTemplates';
 import { useTransactions } from '../../lib/hooks/useTransactions';
 import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
+import { buildRoleTemplatePrivilegesPayload } from '../../lib/mappers/role-template-mapper';
 import {
   getCustomerWorkspaceViewUi,
   getModuleLabel as getModuleUiLabel,
@@ -79,11 +81,14 @@ import SummaryGrid from './SummaryGrid';
 import ReusableListTable from '../common/ReusableListTable';
 import type { CustomerOutstandingRow } from '../tables/CustomerOutstandingTable';
 import {
+  buildEmptyDataTableFiltersValue,
   readDataTableDateRangeFilter,
   readDataTableMultiSelectFilter,
   readDataTableSingleSelectFilter,
+  type DataTableFiltersConfig,
   type DataTableFiltersValue,
 } from '../common/DataTableFilters';
+import DataTableFilters from '../common/DataTableFilters';
 import SubscriptionTransactionsTable from '../tables/SubscriptionTransactionsTable';
 import ActionModal from '../ui/ActionModal';
 import DetailList from '../ui/DetailList';
@@ -260,9 +265,9 @@ interface AdminPlanFilterState {
 interface DashboardFilterState {
   historyStatus: HistoryStatusFilter;
   businessDirectory: DataTableFiltersValue;
-  transaction: TransactionFilterState;
+  transaction: DataTableFiltersValue;
   department: DepartmentFilterState;
-  adminPlan: AdminPlanFilterState;
+  adminPlan: DataTableFiltersValue;
 }
 
 interface DashboardUiState {
@@ -304,15 +309,15 @@ const resolveStateValue = <T,>(current: T, value: T | ((previous: T) => T)) => (
     : value
 );
 
-const initialTransactionFilterState: TransactionFilterState = {
-  query: '',
-  status: 'All',
-  paymentMode: 'All',
-  department: 'All',
-  handler: 'All',
-  dateFrom: '',
-  dateTo: '',
-  isOpen: false,
+const initialTransactionFilterState: DataTableFiltersValue = {
+  search: '',
+  fields: {
+    status: '',
+    paymentMode: '',
+    department: '',
+    handler: '',
+    date: { from: '', to: '' },
+  },
 };
 
 const initialDepartmentFilterState: DepartmentFilterState = {
@@ -321,13 +326,14 @@ const initialDepartmentFilterState: DepartmentFilterState = {
   accountStatus: 'All',
 };
 
-const initialAdminPlanFilterState: AdminPlanFilterState = {
-  searchQuery: '',
-  planId: 'All',
-  status: 'All',
-  workspace: 'All',
-  expiry: 'All',
-  isOpen: false,
+const initialAdminPlanFilterState: DataTableFiltersValue = {
+  search: '',
+  fields: {
+    planId: '',
+    status: '',
+    workspace: '',
+    expiry: '',
+  },
 };
 
 const initialBusinessDirectoryFilterState: DataTableFiltersValue = {
@@ -395,6 +401,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     const matchedBusiness = businesses.find((business) => business.id === currentUser.businessId);
     if (matchedBusiness) {
+      if (currentRole === 'Customer' && currentUser.permissions) {
+        return {
+          ...matchedBusiness,
+          permissions: currentUser.permissions,
+        };
+      }
+
       return matchedBusiness;
     }
 
@@ -454,6 +467,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   const {
     summary: apiDashboardSummary,
   } = useDashboardSummary(shouldLoadWorkspaceApi, initialWorkspaceApiData?.dashboardSummary);
+  const {
+    roles: roleTemplates,
+    isLoading: isRoleTemplatesLoading,
+    error: roleTemplatesError,
+    reload: reloadRoleTemplates,
+  } = useRoleTemplates(currentRole === 'Admin');
   const adminWorkspace = useAdminWorkspaceData();
   const businessWorkspacesById = useBusinessWorkspacesById();
   const accounts = workspace.accounts;
@@ -513,6 +532,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     favoriteServiceIds: ['service-1', 'service-3'],
   });
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
+  const [isTransactionFiltersOpen, setIsTransactionFiltersOpen] = useState(false);
+  const [isAdminPlanFiltersOpen, setIsAdminPlanFiltersOpen] = useState(false);
   const {
     historyStatus: historyStatusFilter,
     businessDirectory: businessDirectoryFilters,
@@ -521,28 +542,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     adminPlan: adminPlanFilters,
   } = filterState;
   const {
-    query: transactionFilterQuery,
-    status: transactionStatusFilter,
-    paymentMode: transactionPaymentModeFilter,
-    department: transactionDepartmentFilter,
-    handler: transactionHandlerFilter,
-    dateFrom: transactionDateFrom,
-    dateTo: transactionDateTo,
-    isOpen: isTransactionFiltersOpen,
-  } = transactionFilters;
-  const {
     searchInput: departmentSearchInput,
     searchQuery: departmentSearchQuery,
     accountStatus: departmentAccountStatusFilter,
   } = departmentFilters;
-  const {
-    searchQuery: adminPlanSearchQuery,
-    planId: adminPlanIdFilter,
-    status: adminPlanStatusFilter,
-    workspace: adminPlanWorkspaceFilter,
-    expiry: adminPlanExpiryFilter,
-    isOpen: isAdminPlanFiltersOpen,
-  } = adminPlanFilters;
   const {
     activeModal,
     editingService,
@@ -585,14 +588,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     }));
   };
 
-  const updateTransactionFilters = <K extends keyof TransactionFilterState>(
-    key: K,
-    value: TransactionFilterState[K] | ((previous: TransactionFilterState[K]) => TransactionFilterState[K]),
-  ) => {
-    updateFilterState('transaction', (current) => ({
-      ...current,
-      [key]: resolveStateValue(current[key], value),
-    }));
+  const updateTransactionFilters = (value: DataTableFiltersValue) => {
+    updateFilterState('transaction', value);
   };
 
   const updateDepartmentFilters = <K extends keyof DepartmentFilterState>(
@@ -605,14 +602,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     }));
   };
 
-  const updateAdminPlanFilters = <K extends keyof AdminPlanFilterState>(
-    key: K,
-    value: AdminPlanFilterState[K] | ((previous: AdminPlanFilterState[K]) => AdminPlanFilterState[K]),
-  ) => {
-    updateFilterState('adminPlan', (current) => ({
-      ...current,
-      [key]: resolveStateValue(current[key], value),
-    }));
+  const updateAdminPlanFilters = (value: DataTableFiltersValue) => {
+    updateFilterState('adminPlan', value);
   };
 
   const setHistoryStatusFilter: React.Dispatch<React.SetStateAction<HistoryStatusFilter>> = (value) => {
@@ -621,14 +612,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const setBusinessDirectoryFilters: React.Dispatch<React.SetStateAction<DataTableFiltersValue>> = (value) => {
     updateFilterState('businessDirectory', value);
-  };
-
-  const setIsTransactionFiltersOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
-    updateTransactionFilters('isOpen', value);
-  };
-
-  const setIsAdminPlanFiltersOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
-    updateAdminPlanFilters('isOpen', value);
   };
 
   const setDepartmentSearchInput: React.Dispatch<React.SetStateAction<string>> = (value) => {
@@ -655,6 +638,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         currentBusiness?.permissions ?? currentUser.permissions ?? buildDefaultCustomerPermissions(),
         currentEmployee?.permissions ?? currentUser.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
       );
+    }
+
+    if (currentRole === 'Customer') {
+      return currentUser.permissions ?? currentBusiness?.permissions ?? null;
     }
 
     return currentBusiness?.permissions ?? currentUser.permissions ?? null;
@@ -910,18 +897,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   const canEditAccountRecords = canPerformModuleAction('accounts', 'edit');
   const canDeleteAccountRecords = canPerformModuleAction('accounts', 'delete');
 
-  const customerEntityLabel = currentRole === 'Admin' ? 'Business' : 'Customer';
-  const customerEntityPlural = currentRole === 'Admin' ? 'Businesses' : 'Customers';
+  const customerEntityLabel = currentRole === 'Admin' ? 'User' : 'Customer';
+  const customerEntityPlural = currentRole === 'Admin' ? 'Users' : 'Customers';
   const customerDirectoryCount = currentRole === 'Admin' ? adminBusinessTotalRecords : visibleCustomers.length;
   const customerSectionTitle = currentRole === 'Admin'
     ? customerPageView === 'list'
-      ? 'Manage the business directory'
+      ? 'Manage users'
       : requestedCustomerPageCopy.label
     : requestedCustomerPageCopy.label;
   const customerSectionDescription = currentRole === 'Admin'
     ? customerPageView === 'list'
-      ? 'Monitor the businesses managed in the platform from one place.'
-      : 'The admin workspace only supports the business directory on customer routes.'
+      ? 'Monitor the users managed in the platform from one place.'
+      : 'The admin workspace only supports the user directory on customer routes.'
     : requestedCustomerPageCopy.emptyDescription;
   const activeVisibleServiceCount = visibleServices.filter((service) => service.status === 'Active').length;
   const serviceCategoryCount = new Set(visibleServices.map((service) => service.category)).size;
@@ -955,9 +942,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       const inactiveBusinesses = businesses.length - activeBusinesses;
 
       return [
-        { title: 'Total Businesses', value: `${customerDirectoryCount}`, detail: 'All registered business logins', icon: <FaUsers />, colorClass: 'bg-primary' },
-        { title: 'Active Businesses', value: `${activeBusinesses}`, detail: 'Active records on this page', icon: <FaUsersCog />, colorClass: 'bg-success' },
-        { title: 'Inactive Businesses', value: `${inactiveBusinesses}`, detail: 'Inactive records on this page', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
+        { title: 'Total Users', value: `${customerDirectoryCount}`, detail: 'All registered user logins', icon: <FaUsers />, colorClass: 'bg-primary' },
+        { title: 'Active Users', value: `${activeBusinesses}`, detail: 'Active records on this page', icon: <FaUsersCog />, colorClass: 'bg-success' },
+        { title: 'Inactive Users', value: `${inactiveBusinesses}`, detail: 'Inactive records on this page', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
         { title: 'Filter Match', value: `${filteredBusinesses.length}`, detail: `Filter: ${businessPermissionFilterLabel}`, icon: <FaChartLine />, colorClass: 'bg-info' },
       ];
     }
@@ -995,14 +982,128 @@ const Dashboard: React.FC<DashboardProps> = ({
     handlers: transactionHandlerOptions,
   } = useTransactionFilterOptions(visibleTransactionHistory);
   const filteredTransactionRecords = useFilteredTransactionRecords(visibleTransactionHistory, {
-    query: transactionFilterQuery,
-    status: transactionStatusFilter,
-    paymentMode: transactionPaymentModeFilter,
-    department: transactionDepartmentFilter,
-    handler: transactionHandlerFilter,
-    dateFrom: transactionDateFrom,
-    dateTo: transactionDateTo,
+    query: transactionFilters.search,
+    status: (transactionFilters.fields.status as TransactionStatusFilter) || 'All',
+    paymentMode: (transactionFilters.fields.paymentMode as TransactionPaymentModeFilter) || 'All',
+    department: typeof transactionFilters.fields.department === 'string' ? transactionFilters.fields.department : 'All',
+    handler: typeof transactionFilters.fields.handler === 'string' ? transactionFilters.fields.handler : 'All',
+    dateFrom: (transactionFilters.fields.date as any)?.from || '',
+    dateTo: (transactionFilters.fields.date as any)?.to || '',
   });
+
+  const transactionFiltersConfig: DataTableFiltersConfig = {
+    search: {
+      enabled: true,
+      fields: ['transactionNumber', 'customerName', 'customerPhone', 'service', 'paymentMode', 'departmentName', 'handledByName'],
+      label: 'Search',
+    },
+    fields: [
+      {
+        field: 'status',
+        label: 'Status',
+        type: 'single-select',
+        options: [
+          { label: 'All', value: 'All' },
+          { label: 'Completed', value: 'completed' },
+          { label: 'Pending', value: 'pending' },
+          { label: 'Cancelled', value: 'cancelled' },
+          { label: 'Refunded', value: 'refunded' },
+        ],
+      },
+      {
+        field: 'paymentMode',
+        label: 'Payment Mode',
+        type: 'single-select',
+        options: [
+          { label: 'All', value: 'All' },
+          { label: 'Cash', value: 'cash' },
+          { label: 'UPI', value: 'upi' },
+          { label: 'Bank', value: 'bank' },
+          { label: 'Card', value: 'card' },
+        ],
+      },
+      {
+        field: 'department',
+        label: 'Department',
+        type: 'single-select',
+        options: [{ label: 'All', value: 'All' }, ...transactionDepartmentOptions.map(d => ({ label: d, value: d }))],
+      },
+      {
+        field: 'handler',
+        label: 'Handled By',
+        type: 'single-select',
+        options: [{ label: 'All', value: 'All' }, ...transactionHandlerOptions.map(h => ({ label: h, value: h }))],
+      },
+      {
+        field: 'date',
+        label: 'Date',
+        type: 'date-range',
+      },
+    ],
+  };
+
+  const adminPlanFiltersConfig: DataTableFiltersConfig = {
+    search: {
+      enabled: true,
+      fields: ['businessName', 'businessPhone', 'businessEmail', 'planLabel'],
+      label: 'Search',
+    },
+    fields: [
+      {
+        field: 'planId',
+        label: 'Plan',
+        type: 'single-select',
+        options: [{ label: 'All', value: 'All' }, ...businessSubscriptionPlans.map(p => ({ label: p.label, value: p.id }))],
+      },
+      {
+        field: 'status',
+        label: 'Plan Status',
+        type: 'single-select',
+        options: [
+          { label: 'All', value: 'All' },
+          { label: 'Trial', value: 'trial' },
+          { label: 'Active', value: 'active' },
+          { label: 'Expired', value: 'expired' },
+          { label: 'Cancelled', value: 'cancelled' },
+        ],
+      },
+      {
+        field: 'workspace',
+        label: 'Workspace Access',
+        type: 'single-select',
+        options: [
+          { label: 'All', value: 'All' },
+          { label: 'Active', value: 'Active' },
+          { label: 'Locked', value: 'Locked' },
+        ],
+      },
+      {
+        field: 'expiry',
+        label: 'Expiry Window',
+        type: 'single-select',
+        options: [
+          { label: 'All', value: 'All' },
+          { label: 'Expiring Soon', value: 'Expiring Soon' },
+          { label: 'Expired', value: 'Expired' },
+          { label: 'Cancelled', value: 'Cancelled' },
+        ],
+      },
+    ],
+  };
+
+  const hasActiveTransactionFilters = transactionFilters.search.trim() !== '' ||
+    transactionFilters.fields.status !== '' ||
+    transactionFilters.fields.paymentMode !== '' ||
+    transactionFilters.fields.department !== '' ||
+    transactionFilters.fields.handler !== '' ||
+    (transactionFilters.fields.date as any)?.from !== '' ||
+    (transactionFilters.fields.date as any)?.to !== '';
+
+  const hasActiveAdminPlanFilters = adminPlanFilters.search.trim() !== '' ||
+    adminPlanFilters.fields.planId !== '' ||
+    adminPlanFilters.fields.status !== '' ||
+    adminPlanFilters.fields.workspace !== '' ||
+    adminPlanFilters.fields.expiry !== '';
 
   const transactionSummary = useMemo(() => [
     { title: 'Total Volume', value: `Rs. ${transactionStats.totalVolume.toLocaleString('en-IN')}`, detail: 'Transactions this month', icon: <FaReceipt />, colorClass: 'bg-primary' },
@@ -1077,35 +1178,31 @@ const Dashboard: React.FC<DashboardProps> = ({
   const notifications = currentRole === 'Admin'
     ? [...adminGeneratedNotifications, ...baseNotifications]
     : baseNotifications;
-  const deferredAdminPlanSearchQuery = useDeferredValue(adminPlanSearchQuery.trim().toLowerCase());
-
   const filteredAdminPlanRows = useMemo(() => {
     return adminBusinessPlanRows.filter((row) => {
-      const matchesQuery = !deferredAdminPlanSearchQuery || [
+      const searchQuery = adminPlanFilters.search.trim().toLowerCase();
+      const matchesQuery = !searchQuery || [
         row.businessName,
         row.businessPhone,
         row.businessEmail,
         row.planLabel,
-      ].join(' ').toLowerCase().includes(deferredAdminPlanSearchQuery);
-      const matchesPlan = adminPlanIdFilter === 'All' || row.planId === adminPlanIdFilter;
-      const matchesPlanStatus = adminPlanStatusFilter === 'All' || row.planStatus === adminPlanStatusFilter;
-      const matchesWorkspace = adminPlanWorkspaceFilter === 'All'
-        || (adminPlanWorkspaceFilter === 'Active' ? row.workspaceStatus === 'Active' : row.workspaceStatus !== 'Active');
-      const matchesExpiry = adminPlanExpiryFilter === 'All'
-        || (adminPlanExpiryFilter === 'Expiring Soon' ? row.isExpiringSoon : false)
-        || (adminPlanExpiryFilter === 'Expired' ? row.planStatus === 'expired' : false)
-        || (adminPlanExpiryFilter === 'Cancelled' ? row.planStatus === 'cancelled' : false);
+      ].join(' ').toLowerCase().includes(searchQuery);
+      const planId = adminPlanFilters.fields.planId || 'All';
+      const matchesPlan = planId === 'All' || row.planId === planId;
+      const status = adminPlanFilters.fields.status || 'All';
+      const matchesPlanStatus = status === 'All' || row.planStatus === status;
+      const workspace = adminPlanFilters.fields.workspace || 'All';
+      const matchesWorkspace = workspace === 'All'
+        || (workspace === 'Active' ? row.workspaceStatus === 'Active' : row.workspaceStatus !== 'Active');
+      const expiry = adminPlanFilters.fields.expiry || 'All';
+      const matchesExpiry = expiry === 'All'
+        || (expiry === 'Expiring Soon' ? row.isExpiringSoon : false)
+        || (expiry === 'Expired' ? row.planStatus === 'expired' : false)
+        || (expiry === 'Cancelled' ? row.planStatus === 'cancelled' : false);
 
       return matchesQuery && matchesPlan && matchesPlanStatus && matchesWorkspace && matchesExpiry;
     });
-  }, [
-    adminBusinessPlanRows,
-    deferredAdminPlanSearchQuery,
-    adminPlanExpiryFilter,
-    adminPlanIdFilter,
-    adminPlanStatusFilter,
-    adminPlanWorkspaceFilter,
-  ]);
+  }, [adminBusinessPlanRows, adminPlanFilters]);
 
   const adminDashboardSummary = useMemo(() => [
     { title: 'Businesses', value: `${businesses.length}`, detail: 'Managed in the admin workspace', icon: <FaUsers />, colorClass: 'bg-primary' },
@@ -1251,227 +1348,63 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const clearTransactionFilters = () => {
-    updateFilterState('transaction', (current) => ({
-      ...initialTransactionFilterState,
-      isOpen: current.isOpen,
-    }));
+    updateFilterState('transaction', buildEmptyDataTableFiltersValue(transactionFiltersConfig));
   };
 
   const clearAdminPlanFilters = () => {
-    updateFilterState('adminPlan', (current) => ({
-      ...initialAdminPlanFilterState,
-      isOpen: current.isOpen,
-    }));
+    updateFilterState('adminPlan', buildEmptyDataTableFiltersValue(adminPlanFiltersConfig));
   };
 
   const renderTransactionFilters = () => (
-    <div id="transaction-filter-panel" className="col-12">
-      <section className="panel department-toolbar">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Transaction Filters</p>
-            <h2 className="panel-title">Find the right transaction quickly</h2>
-            <p className="panel-copy">Search by transaction number, customer, service, payment mode, department, or employee, then narrow by status and date.</p>
-          </div>
-          <div className="panel-status-chip">
-            Showing {filteredTransactionRecords.length} of {visibleTransactionHistory.length}
-          </div>
-        </div>
-
-        <div className="department-toolbar__grid">
-          <div className="app-field mb-0">
-            <label className="form-label">Search</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Search transaction number, customer, service, department, or employee"
-              value={transactionFilterQuery}
-              onChange={(event) => updateTransactionFilters('query', event.target.value)}
-            />
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Status</label>
-            <select
-              className="form-select"
-              value={transactionStatusFilter}
-              onChange={(event) => updateTransactionFilters('status', event.target.value as TransactionStatusFilter)}
-            >
-              <option value="All">All</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="refunded">Refunded</option>
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Payment Mode</label>
-            <select
-              className="form-select"
-              value={transactionPaymentModeFilter}
-              onChange={(event) => updateTransactionFilters('paymentMode', event.target.value as TransactionPaymentModeFilter)}
-            >
-              <option value="All">All</option>
-              <option value="cash">Cash</option>
-              <option value="upi">UPI</option>
-              <option value="bank">Bank</option>
-              <option value="card">Card</option>
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Department</label>
-            <select
-              className="form-select"
-              value={transactionDepartmentFilter}
-              onChange={(event) => updateTransactionFilters('department', event.target.value)}
-            >
-              <option value="All">All</option>
-              {transactionDepartmentOptions.map((department) => (
-                <option key={department} value={department}>
-                  {department}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Handled By</label>
-            <select
-              className="form-select"
-              value={transactionHandlerFilter}
-              onChange={(event) => updateTransactionFilters('handler', event.target.value)}
-            >
-              <option value="All">All</option>
-              {transactionHandlerOptions.map((handler) => (
-                <option key={handler} value={handler}>
-                  {handler}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Date From</label>
-            <input
-              type="date"
-              className="form-control"
-              value={transactionDateFrom}
-              onChange={(event) => updateTransactionFilters('dateFrom', event.target.value)}
-            />
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Date To</label>
-            <input
-              type="date"
-              className="form-control"
-              value={transactionDateTo}
-              onChange={(event) => updateTransactionFilters('dateTo', event.target.value)}
-            />
-          </div>
-          <div className="department-toolbar__actions">
-            {canManageModule('transactions') ? (
-              <button type="button" className="btn-app btn-app-primary" onClick={() => handleQuickAction('new-transaction')}>
-                Add Transaction
-              </button>
-            ) : null}
-            {canManageModule('transactions') ? (
-              <button type="button" className="btn-app btn-app-secondary" onClick={() => handleQuickAction('export-transactions')}>
-                Export
-              </button>
-            ) : null}
-            <button type="button" className="btn-app btn-app-secondary" onClick={clearTransactionFilters}>
-              Clear
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
+    <ActionModal
+      title="Filter Transactions"
+      eyebrow="Transaction Filters"
+      description="Choose filters, then click Filter to update the transaction list."
+      onClose={() => setIsTransactionFiltersOpen(false)}
+    >
+      <DataTableFilters
+        filters={transactionFiltersConfig}
+        value={transactionFilters}
+        onChange={updateTransactionFilters}
+        showHeader={false}
+        showFooterHint={false}
+        className="table-filter-panel--modal"
+      />
+      <div className="modal-actions">
+        <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsTransactionFiltersOpen(false)}>
+          Cancel
+        </button>
+        <button type="button" className="btn-app btn-app-primary" onClick={() => setIsTransactionFiltersOpen(false)}>
+          Filter
+        </button>
+      </div>
+    </ActionModal>
   );
 
   const renderAdminPlanFilters = () => (
-    <div id="admin-plan-filter-panel" className="col-12">
-      <section className="panel department-toolbar">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Plan Filters</p>
-            <h2 className="panel-title">Find the right subscription quickly</h2>
-            <p className="panel-copy">Search by business, then narrow plan purchases by plan type, plan status, workspace access, and expiry window.</p>
-          </div>
-          <div className="panel-status-chip">
-            Showing {filteredAdminPlanRows.length} of {adminBusinessPlanRows.length}
-          </div>
-        </div>
-
-        <div className="department-toolbar__grid">
-          <div className="app-field mb-0">
-            <label className="form-label">Search</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Search business name, phone, email, or plan"
-              value={adminPlanSearchQuery}
-              onChange={(event) => updateAdminPlanFilters('searchQuery', event.target.value)}
-            />
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Plan</label>
-            <select
-              className="form-select"
-              value={adminPlanIdFilter}
-              onChange={(event) => updateAdminPlanFilters('planId', event.target.value)}
-            >
-              <option value="All">All</option>
-              {businessSubscriptionPlans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Plan Status</label>
-            <select
-              className="form-select"
-              value={adminPlanStatusFilter}
-              onChange={(event) => updateAdminPlanFilters('status', event.target.value as 'All' | BusinessSubscription['status'])}
-            >
-              <option value="All">All</option>
-              <option value="trial">Trial</option>
-              <option value="active">Active</option>
-              <option value="expired">Expired</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Workspace Access</label>
-            <select
-              className="form-select"
-              value={adminPlanWorkspaceFilter}
-              onChange={(event) => updateAdminPlanFilters('workspace', event.target.value as AdminPlanWorkspaceFilter)}
-            >
-              <option value="All">All</option>
-              <option value="Active">Active</option>
-              <option value="Locked">Locked</option>
-            </select>
-          </div>
-          <div className="app-field mb-0">
-            <label className="form-label">Expiry Window</label>
-            <select
-              className="form-select"
-              value={adminPlanExpiryFilter}
-              onChange={(event) => updateAdminPlanFilters('expiry', event.target.value as AdminPlanExpiryFilter)}
-            >
-              <option value="All">All</option>
-              <option value="Expiring Soon">Expiring Soon</option>
-              <option value="Expired">Expired</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-          <div className="department-toolbar__actions">
-            <button type="button" className="btn-app btn-app-secondary" onClick={clearAdminPlanFilters}>
-              Clear
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
+    <ActionModal
+      title="Filter Subscriptions"
+      eyebrow="Subscription Filters"
+      description="Choose filters, then click Filter to update the subscription list."
+      onClose={() => setIsAdminPlanFiltersOpen(false)}
+    >
+      <DataTableFilters
+        filters={adminPlanFiltersConfig}
+        value={adminPlanFilters}
+        onChange={updateAdminPlanFilters}
+        showHeader={false}
+        showFooterHint={false}
+        className="table-filter-panel--modal"
+      />
+      <div className="modal-actions">
+        <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsAdminPlanFiltersOpen(false)}>
+          Cancel
+        </button>
+        <button type="button" className="btn-app btn-app-primary" onClick={() => setIsAdminPlanFiltersOpen(false)}>
+          Filter
+        </button>
+      </div>
+    </ActionModal>
   );
 
   function startWorkflowWithDraft(
@@ -1749,7 +1682,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <h1 className="hero-panel__headline">Monitor business performance, subscriptions, and renewal.</h1>
             <div className="section-hero__actions">
               <button type="button" className="btn-app btn-app-primary" onClick={() => openModule('customers')}>
-                Open Business Directory
+                Open Users
               </button>
               <button type="button" className="btn-app btn-app-secondary" onClick={() => openModule('reports')}>
                 Open Reports
@@ -1758,7 +1691,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             <div className="hero-panel__meta">
               <div className="hero-stat">
-                <span className="hero-stat__label">Businesses</span>
+                <span className="hero-stat__label">Users</span>
                 <span className="hero-stat__value">{businesses.length}</span>
                 <span className="hero-stat__hint">Managed from the admin workspace</span>
               </div>
@@ -1767,7 +1700,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <span className="hero-stat__value">
                   {adminBusinessPlanRows.filter((row) => row.planStatus === 'active' || row.planStatus === 'trial').length}
                 </span>
-                <span className="hero-stat__hint">Businesses with software access</span>
+                <span className="hero-stat__hint">Users with software access</span>
               </div>
               <div className="hero-stat">
                 <span className="hero-stat__label">Expiring Soon</span>
@@ -1887,8 +1820,17 @@ const Dashboard: React.FC<DashboardProps> = ({
           rows={filteredAdminPlanRows}
           onManagePlan={handleManageBusinessPlan}
           onEditBusiness={handleEditCustomer}
-          onToggleFilters={() => setIsAdminPlanFiltersOpen((current) => !current)}
-          isFilterOpen={isAdminPlanFiltersOpen}
+          headerAction={
+            <div className="table-filter-trigger">
+              <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsAdminPlanFiltersOpen((current) => !current)}>
+                <FaFilter />
+                Filter
+              </button>
+              {hasActiveAdminPlanFilters ? (
+                <span className="status-chip status-chip--info">Filtered</span>
+              ) : null}
+            </div>
+          }
         />
       </div>
     </div>
@@ -2433,6 +2375,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (currentRole === 'Admin' && !editingBusiness) {
+      const privilegesPayload = JSON.stringify(buildRoleTemplatePrivilegesPayload(values.permissions));
       const response = await fetch('/api/businesses', {
         method: 'POST',
         headers: {
@@ -2445,6 +2388,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           role: '2',
           email_id: values.email,
           contact_no: values.phone,
+          role_template_id: values.roleTemplateId,
+          permission: privilegesPayload,
+          privileges: privilegesPayload,
         }),
       });
 
@@ -3070,7 +3016,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const renderCustomerRoutePermissionState = () => {
     const message = currentRole === 'Admin'
-      ? 'The admin workspace only supports the business directory on customer routes. Open the directory list to keep working in this section.'
+      ? 'The admin workspace only supports the user directory on customer routes. Open the directory list to keep working in this section.'
       : customerPageOptions.length > 0
         ? 'This URL points to a customer view your current permissions do not allow. Choose one of the customer pages available to your role.'
         : 'This business can still add customers, but the customer list views stay hidden until their permissions are turned on.';
@@ -3434,8 +3380,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           description={
             currentRole === 'Admin'
               ? editingBusiness
-                ? 'Update business contact details, credentials, and workspace permissions.'
-                : 'Create a business profile, assign login credentials, and choose the workspace permissions it should receive.'
+                ? 'Update user contact details, credentials, and workspace permissions.'
+                : 'Create a user profile, assign login credentials, and choose the workspace permissions it should receive.'
               : editingCustomer
                 ? 'Update customer details used inside the business workspace.'
                 : 'Save customer details once and reuse them during service processing.'
@@ -3445,7 +3391,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           {currentRole === 'Admin' ? (
             <BusinessForm
               initialValues={editingBusiness || undefined}
-              submitLabel={editingBusiness ? 'Update Business' : 'Add Business'}
+              roleTemplates={roleTemplates}
+              isRoleTemplatesLoading={isRoleTemplatesLoading}
+              roleTemplatesError={roleTemplatesError}
+              submitLabel={editingBusiness ? 'Update User' : 'Add User'}
               onCancel={closeModal}
               onSubmit={handleBusinessSubmit}
             />
@@ -3866,6 +3815,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     reports,
     expenses,
     additionOptions,
+    roleTemplates,
+    isRoleTemplatesLoading,
+    roleTemplatesError,
     workflowDraft,
     employeeAssignedDepartment,
     displayUserName,
@@ -3892,6 +3844,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     departmentSearchInput,
     departmentAccountStatusFilter,
     isTransactionFiltersOpen,
+    transactionFilters,
+    hasActiveTransactionFilters,
     serviceSummary,
     customerSummary,
     reminderSummary,
@@ -3928,6 +3882,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     canPerformModuleAction,
     canAccessModuleForSession,
     getRoleLabel,
+    showNotification: addNotification,
+    reloadRoleTemplates,
     handleLogout: onLogout,
     handleAdminProfileSave,
     handleBusinessProfileSave,
@@ -4139,8 +4095,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         accounts={accounts}
         services={services}
         customers={workspace.customers}
-        canAddMoreDepartments={isPermissionEnabled(sessionPermissions, 'master_department_manage')}
-        canAddMoreAccounts={isPermissionEnabled(sessionPermissions, 'master_account_manage')}
+        canAddMoreDepartments={isPermissionEnabled(accessContext.permissions, 'master_department_manage')}
+        canAddMoreAccounts={isPermissionEnabled(accessContext.permissions, 'master_account_manage')}
         canAccessServices={canAccessOnboardingServices}
         onLogout={onLogout}
         onSaveBusinessName={handleOnboardingBusinessNameSave}

@@ -23,6 +23,7 @@ interface SubscriptionTransactionsTableProps {
   onEditBusiness?: (businessId: string) => void;
   onToggleFilters?: () => void;
   isFilterOpen?: boolean;
+  headerAction?: React.ReactNode;
 }
 
 const SubscriptionTransactionsTable: React.FC<SubscriptionTransactionsTableProps> = ({
@@ -31,6 +32,7 @@ const SubscriptionTransactionsTable: React.FC<SubscriptionTransactionsTableProps
   onEditBusiness,
   onToggleFilters,
   isFilterOpen = false,
+  headerAction,
 }) => {
   const hasActions = Boolean(onManagePlan || onEditBusiness);
 
@@ -42,7 +44,7 @@ const SubscriptionTransactionsTable: React.FC<SubscriptionTransactionsTableProps
       title="Manage subscriptions and workspace access."
       copy="Track purchases, renewals, and access by business"
       emptyLabel="No subscription transactions found."
-      headerAction={onToggleFilters ? (
+      headerAction={headerAction || (onToggleFilters ? (
         <button
           type="button"
           className="btn-app btn-app-secondary"
@@ -53,7 +55,7 @@ const SubscriptionTransactionsTable: React.FC<SubscriptionTransactionsTableProps
           <FaFilter />
           {isFilterOpen ? 'Hide Filters' : 'Filter'}
         </button>
-      ) : null}
+      ) : null)}
       columns={[
         { key: 'serial', header: 'S.No', render: (_row, index) => index + 1 },
         {

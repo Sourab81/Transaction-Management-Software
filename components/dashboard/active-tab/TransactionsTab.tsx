@@ -3,7 +3,7 @@
 import SectionHero from '../SectionHero';
 import ServiceForm from '../../forms/ServiceForm';
 import TransactionTable from '../../tables/TransactionTable';
-import { FaPlusCircle } from 'react-icons/fa';
+import { FaPlusCircle, FaFilter } from 'react-icons/fa';
 import { getModuleUi } from '../../../lib/module-ui';
 import EmptyState from '../../ui/state/EmptyState';
 import PermissionState from '../../ui/state/PermissionState';
@@ -27,6 +27,8 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     displayUserName,
     handleQuickAction,
     isTransactionFiltersOpen,
+    transactionFilters,
+    hasActiveTransactionFilters,
     renderTransactionFilters,
     filteredTransactionRecords,
     handleViewTransaction,
@@ -45,6 +47,17 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
         onClick: () => handleQuickAction('new-transaction'),
       }
     : undefined;
+  const transactionFilterAction = (
+    <div className="table-filter-trigger">
+      <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsTransactionFiltersOpen((current) => !current)}>
+        <FaFilter />
+        Filter
+      </button>
+      {hasActiveTransactionFilters ? (
+        <span className="status-chip status-chip--info">Filtered</span>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="row g-4">
@@ -116,8 +129,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
             onEdit={canPerformModuleAction('transactions', 'edit') ? handleEditTransaction : undefined}
             onView={handleViewTransaction}
             onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-            onToggleFilters={() => setIsTransactionFiltersOpen((current) => !current)}
-            isFilterOpen={isTransactionFiltersOpen}
+            headerAction={transactionFilterAction}
           />
         )}
       </div>

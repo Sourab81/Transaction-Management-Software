@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { SessionUser } from '../../../lib/auth-session';
 import type { DashboardSummary } from '../../../lib/mappers/dashboard-summary-mapper';
 import type { SessionAccessContext } from '../../../lib/platform-structure';
+import type { RoleTemplate } from '../../../lib/types/role-template';
 import type {
   Account,
   AdditionOption,
@@ -68,6 +69,9 @@ export interface DashboardTabContext {
   reports: ReportItem[];
   expenses: Expense[];
   additionOptions: AdditionOption[];
+  roleTemplates: RoleTemplate[];
+  isRoleTemplatesLoading: boolean;
+  roleTemplatesError: string;
   workflowDraft: ServiceWorkflowDraft | null;
   employeeAssignedDepartment: Counter | null | undefined;
   displayUserName: string;
@@ -94,6 +98,8 @@ export interface DashboardTabContext {
   departmentSearchInput: string;
   departmentAccountStatusFilter: 'All' | 'Active' | 'Inactive' | 'Unassigned';
   isTransactionFiltersOpen: boolean;
+  transactionFilters: DataTableFiltersValue;
+  hasActiveTransactionFilters: boolean;
   serviceSummary: SummaryCardProps[];
   customerSummary: SummaryCardProps[];
   reminderSummary: SummaryCardProps[];
@@ -130,6 +136,8 @@ export interface DashboardTabContext {
   canPerformModuleAction: (moduleId: string, action: 'add' | 'edit' | 'delete') => boolean;
   canAccessModuleForSession: (context: SessionAccessContext, moduleId: string) => boolean;
   getRoleLabel: (role: SessionUser['role']) => string;
+  showNotification: (type: 'success' | 'warning' | 'error' | 'info', message: string) => void;
+  reloadRoleTemplates: () => void;
   handleLogout: () => void;
   handleAdminProfileSave: (values: { name: string; email: string; password?: string }) => void;
   handleBusinessProfileSave: (values: { name: string; phone: string; email: string; password?: string }) => void;

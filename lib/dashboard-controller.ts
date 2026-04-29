@@ -1,51 +1,19 @@
-import {
-  canAccessModuleForSession,
-  canUseBusinessFeature,
-  hasAnyEnabledPermission,
-  type BusinessFeatureAction,
-  type SessionAccessContext,
+import type {
+  BusinessFeatureAction,
+  SessionAccessContext,
 } from './platform-structure';
+import {
+  canDeleteModuleForSession as canDeleteModuleForSessionCore,
+  canDeleteRecordsForRole as canDeleteRecordsForRoleCore,
+  canManageModuleForSession as canManageModuleForSessionCore,
+  canPerformModuleActionForSession as canPerformModuleActionForSessionCore,
+  canViewModuleRecordsForSession as canViewModuleRecordsForSessionCore,
+} from './permissions/module-actions';
+import { canAccessModuleForSession } from './permissions/session-access';
 import type { Business, BusinessCustomer, Service, Transaction } from './store';
 
-const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'transactions', 'history', 'reports']);
-const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'expense', 'reports', 'transactions']);
-const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'expense', 'reports']);
-const adminManageableModules = new Set(['customers', 'reports', 'additions']);
-const adminDeletableModules = new Set(['customers', 'history', 'reports', 'additions']);
-
-const canViewBusinessRecords = (context: SessionAccessContext, moduleId: string) => {
-  switch (moduleId) {
-    case 'customers':
-      return hasAnyEnabledPermission(context.permissions, [
-        'customers_list',
-        'customers_payment_list',
-        'customers_outstanding',
-      ]);
-    case 'employee':
-      return hasAnyEnabledPermission(context.permissions, [
-        'employee_list',
-        'employee_salary',
-        'employee_outstanding',
-      ]);
-    case 'services':
-    case 'accounts':
-    case 'departments':
-    case 'reports':
-    case 'expense':
-      return canUseBusinessFeature(context.permissions, moduleId, 'view');
-    default:
-      return false;
-  }
-};
-
 export const canViewModuleRecordsForSession = (context: SessionAccessContext, moduleId: string) => {
-  if (!canAccessModuleForSession(context, moduleId)) return false;
-  if (context.role === 'Admin') return true;
-  if (context.role === 'Customer' || context.role === 'Employee') {
-    return canViewBusinessRecords(context, moduleId);
-  }
-
-  return false;
+  return canViewModuleRecordsForSessionCore(context, moduleId);
 };
 
 export const canPerformModuleActionForSession = (
@@ -53,51 +21,19 @@ export const canPerformModuleActionForSession = (
   moduleId: string,
   action: Exclude<BusinessFeatureAction, 'view'>,
 ) => {
-  if (!canAccessModuleForSession(context, moduleId)) return false;
-
-  if (context.role === 'Admin') {
-    return action === 'delete'
-      ? adminDeletableModules.has(moduleId)
-      : adminManageableModules.has(moduleId);
-  }
-
-  if (context.role === 'Customer') {
-    if (businessManageableModules.has(moduleId) || businessDeletableModules.has(moduleId)) {
-      if (action === 'delete' && !businessDeletableModules.has(moduleId)) return false;
-      if (action !== 'delete' && !businessManageableModules.has(moduleId)) return false;
-
-      return canUseBusinessFeature(context.permissions, moduleId, action);
-    }
-
-    return false;
-  }
-
-  if (context.role === 'Employee') {
-    if (action === 'delete') return false;
-    if (!employeeManageableModules.has(moduleId)) return false;
-
-    if (businessManageableModules.has(moduleId)) {
-      return canUseBusinessFeature(context.permissions, moduleId, action);
-    }
-
-    return true;
-  }
-
-  return false;
+  return canPerformModuleActionForSessionCore(context, moduleId, action);
 };
 
 export const canManageModuleForSession = (context: SessionAccessContext, moduleId: string) => {
-  return (
-    canPerformModuleActionForSession(context, moduleId, 'add') ||
-    canPerformModuleActionForSession(context, moduleId, 'edit')
-  );
+  return canManageModuleForSessionCore(context, moduleId);
 };
 
 export const canDeleteModuleForSession = (context: SessionAccessContext, moduleId: string) => {
-  return canPerformModuleActionForSession(context, moduleId, 'delete');
+  return canDeleteModuleForSessionCore(context, moduleId);
 };
 
-export const canDeleteRecordsForRole = (role: SessionAccessContext['role']) => role === 'Admin';
+export const canDeleteRecordsForRole = (role: SessionAccessContext['role']) =>
+  canDeleteRecordsForRoleCore(role);
 
 const getActiveTransactions = (transactions: Transaction[]) =>
   transactions.filter((transaction) => !transaction.isDeleted);

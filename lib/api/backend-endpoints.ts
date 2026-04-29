@@ -6,7 +6,11 @@ export type BackendApiResource =
   | 'customers'
   | 'employees'
   | 'transactions'
-  | 'reports';
+  | 'reports'
+  | 'roles'
+  | 'roleCreate'
+  | 'roleUpdate'
+  | 'roleDelete';
 
 interface BackendApiResourceConfig {
   label: string;
@@ -58,6 +62,30 @@ const backendApiResources: Record<BackendApiResource, BackendApiResourceConfig> 
   reports: {
     label: 'reports',
     envPathKey: 'NEXT_PUBLIC_API_REPORTS_PATH',
+  },
+  roles: {
+    label: 'roles',
+    defaultPath: 'getRoles',
+    envPathKey: 'NEXT_PUBLIC_API_ROLES_PATH',
+    method: 'POST',
+  },
+  roleCreate: {
+    label: 'create role',
+    defaultPath: 'createRoleByAdmin',
+    envPathKey: 'NEXT_PUBLIC_API_ROLE_CREATE_PATH',
+    method: 'POST',
+  },
+  roleUpdate: {
+    label: 'update role',
+    defaultPath: 'updateRoleByAdmin',
+    envPathKey: 'NEXT_PUBLIC_API_ROLE_UPDATE_PATH',
+    method: 'POST',
+  },
+  roleDelete: {
+    label: 'delete role',
+    defaultPath: 'deleteRoleByAdmin',
+    envPathKey: 'NEXT_PUBLIC_API_ROLE_DELETE_PATH',
+    method: 'POST',
   },
 };
 

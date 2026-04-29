@@ -11,6 +11,7 @@ export type ModuleUiId =
   | 'expense'
   | 'history'
   | 'reports'
+  | 'role'
   | 'profile'
   | 'additions';
 
@@ -111,6 +112,14 @@ export const moduleUi: Record<ModuleUiId, ModuleUiConfig> = {
     emptyDescription: 'Generate a report to review exports, summaries, and audit snapshots.',
     permissionTitle: 'Report access is restricted',
     permissionDescription: 'Your current permissions do not allow you to open reports.',
+  },
+  role: {
+    id: 'role',
+    label: 'Role',
+    emptyTitle: 'No role templates yet',
+    emptyDescription: 'Create predefined roles to apply reusable permission sets during user creation.',
+    permissionTitle: 'Role access is restricted',
+    permissionDescription: 'Your signed-in role cannot manage predefined roles.',
   },
   profile: {
     id: 'profile',

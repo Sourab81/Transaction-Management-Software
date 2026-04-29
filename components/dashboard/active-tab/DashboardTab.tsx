@@ -8,7 +8,7 @@ import WelcomeHero from '../WelcomeHero';
 import CountersTable from '../../tables/CountersTable';
 import RecentServicesTable from '../../tables/RecentServicesTable';
 import TransactionTable from '../../tables/TransactionTable';
-import { FaPlusCircle, FaDollarSign, FaHourglassHalf, FaUsers, FaCog } from 'react-icons/fa';
+import { FaPlusCircle, FaDollarSign, FaHourglassHalf, FaUsers, FaCog, FaFilter } from 'react-icons/fa';
 import type { DashboardTabContext } from './types';
 
 interface DashboardTabProps {
@@ -30,6 +30,8 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
     handleDeleteRecord,
     renderTransactionFilters,
     isTransactionFiltersOpen,
+    transactionFilters,
+    hasActiveTransactionFilters,
     filteredTransactionRecords,
     canManageModule,
     canDeleteModule,
@@ -51,6 +53,18 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   const customerCount = dashboardSummary?.customerCount ?? customerDirectoryRecords.length;
   const activeServiceCount = dashboardSummary?.activeServiceCount
     ?? visibleServices.filter((service) => service.status === 'Active').length;
+
+  const transactionFilterAction = (
+    <div className="table-filter-trigger">
+      <button type="button" className="btn-app btn-app-secondary" onClick={() => ctx.setIsTransactionFiltersOpen((current) => !current)}>
+        <FaFilter />
+        Filter
+      </button>
+      {hasActiveTransactionFilters ? (
+        <span className="status-chip status-chip--info">Filtered</span>
+      ) : null}
+    </div>
+  );
 
   if (currentRole === 'Admin') {
     return renderAdminDashboard();
@@ -188,27 +202,13 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
           {isBusinessWorkspace ? null : serviceSnapshotSection}
           {isBusinessWorkspace ? null : recentActivitySection}
 
-          <div className="dashboard-section-block">
-            <SectionHero
-              eyebrow="Transactions"
-              title="Transaction history"
-              description="Review recent customer activity and open a record when you need more detail."
-              action={canManageModule('transactions') && canEmployeeOperateOnDepartment ? {
-                label: 'Add Transaction',
-                icon: <FaPlusCircle />,
-                onClick: () => handleQuickAction('new-transaction'),
-              } : undefined}
-            />
-          </div>
-
           {isTransactionFiltersOpen ? renderTransactionFilters() : null}
 
           <TransactionTable
             transactions={filteredTransactionRecords}
             onView={handleViewTransaction}
             onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
-            onToggleFilters={() => ctx.setIsTransactionFiltersOpen((current) => !current)}
-            isFilterOpen={isTransactionFiltersOpen}
+            headerAction={transactionFilterAction}
           />
 
           {isBusinessWorkspace ? serviceSnapshotSection : null}

@@ -35,6 +35,49 @@ describe('session user mapper', () => {
     });
   });
 
+  test('maps mixed-case backend permission keys from the business login payload', () => {
+    const sessionUser = mapLoginResponseToSessionUser('sagar@gmail.com', {
+      status: 200,
+      message: 'User login successfully.',
+      data: {
+        id: 1,
+        fullname: 'Sagar Thakur',
+        contact_no: 6265965711,
+        email_id: 'sagar@gmail.com',
+        username: 'sagar@gmail.com',
+        user_type: 'Business',
+        role: 2,
+        token: 'test-token',
+        permission: {
+          Master_account_manage: 1,
+          Master_department_manage: 1,
+          Customers_add: 1,
+          Customers_list: 1,
+          Customers_payment_list: 1,
+          Customers_outstanding: 1,
+          Services_access: 1,
+          accounts_cash_deposit: 1,
+          Accounts_department_transfer: 1,
+          Reports_bank_counter_report: 0,
+          Employee_add: 1,
+          Employee_list: 1,
+          Employee_salary: 1,
+          Employee_outstanding: 1,
+          Expense_access: 1,
+        },
+      },
+    }, () => null);
+
+    assert.equal(sessionUser?.permissions?.master_account_manage, 1);
+    assert.equal(sessionUser?.permissions?.master_department_manage, 1);
+    assert.equal(sessionUser?.permissions?.customers_list, 1);
+    assert.equal(sessionUser?.permissions?.services_access, 1);
+    assert.equal(sessionUser?.permissions?.accounts_department_transfer, 1);
+    assert.equal(sessionUser?.permissions?.employee_list, 1);
+    assert.equal(sessionUser?.permissions?.expense_access, 1);
+    assert.equal(sessionUser?.permissions?.reports_bank_counter_report, 0);
+  });
+
   test('maps numeric admin and employee role codes', () => {
     const adminUser = mapLoginResponseToSessionUser('admin@enest.com', {
       data: {

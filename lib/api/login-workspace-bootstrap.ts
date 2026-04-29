@@ -63,19 +63,11 @@ export const loginAndLoadWorkspaceBootstrap = async (
     );
   }
 
-  try {
-    const counters = await getDepartmentsWithToken(accessToken);
+  const counters = await getDepartmentsWithToken(accessToken).catch(() => []);
 
-    return {
-      ...loginResult,
-      accessToken,
-      counters,
-    };
-  } catch {
-    return {
-      ...loginResult,
-      accessToken,
-      counters: [],
-    };
-  }
+  return {
+    ...loginResult,
+    accessToken,
+    counters,
+  };
 };

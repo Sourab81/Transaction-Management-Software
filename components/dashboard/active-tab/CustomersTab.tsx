@@ -97,10 +97,10 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
       }
     : undefined;
   const adminDirectoryEmptyTitle = !hasActiveBusinessDirectoryFilters
-    ? 'No business records yet'
-    : 'No businesses match these filters';
+    ? 'No user records yet'
+    : 'No users match these filters';
   const adminDirectoryEmptyDescription = !hasActiveBusinessDirectoryFilters
-    ? 'Create a business workspace to start managing directory records from this screen.'
+    ? 'Create a user workspace to start managing directory records from this screen.'
     : `Try different filters or clear ${businessPermissionFilterLabel}.`;
   const isAdminBusinessDirectoryLoading = currentRole === 'Admin' && isBusinessDirectoryLoading;
   const adminBusinessDirectoryError = currentRole === 'Admin' ? businessDirectoryError : '';
@@ -128,9 +128,9 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     <div className="row g-4">
       {isBusinessFilterOpen ? (
         <ActionModal
-          title="Filter Businesses"
-          eyebrow="Business Filters"
-          description="Choose filters, then click Filter to update the business user list."
+          title="Filter Users"
+          eyebrow="User Filters"
+          description="Choose filters, then click Filter to update the user list."
           onClose={() => setIsBusinessFilterOpen(false)}
         >
           <DataTableFilters
@@ -154,7 +154,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
 
       <div className="col-12">
         <SectionHero
-          eyebrow={currentRole === 'Admin' ? 'Business Hub' : 'Customer Hub'}
+          eyebrow={currentRole === 'Admin' ? 'User Hub' : 'Customer Hub'}
           title={customerSectionTitle}
           description={customerSectionDescription}
           action={canAddCustomerRecords ? {
@@ -199,13 +199,13 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
           currentRole === 'Admin' || customerPageView === 'list' ? (
             adminBusinessDirectoryError && customerDirectoryRecords.length === 0 ? (
               <ErrorState
-                eyebrow="Business Directory"
-                title="Unable to load businesses"
+                eyebrow="User Directory"
+                title="Unable to load users"
                 description={adminBusinessDirectoryError}
               />
             ) : customerDirectoryRecords.length === 0 && !isAdminBusinessDirectoryLoading ? (
               <EmptyState
-                eyebrow={currentRole === 'Admin' ? 'Business Directory' : customerModuleUi?.label}
+                eyebrow={currentRole === 'Admin' ? 'User Directory' : customerModuleUi?.label}
                 title={currentRole === 'Admin' ? adminDirectoryEmptyTitle : customerViewUi.emptyTitle}
                 description={currentRole === 'Admin' ? adminDirectoryEmptyDescription : customerViewUi.emptyDescription}
                 action={emptyAction}
@@ -214,9 +214,9 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               <CustomersTable
                 customers={customerDirectoryRecords}
                 eyebrow={customerEntityPlural}
-                title={currentRole === 'Admin' ? 'Business directory' : 'Customer directory'}
+                title={currentRole === 'Admin' ? 'User directory' : 'Customer directory'}
                 copy={currentRole === 'Admin'
-                  ? `Business records, login status, and permission access. Current filter: ${businessPermissionFilterLabel}.`
+                  ? `User records, login status, and permission access. Current filter: ${businessPermissionFilterLabel}.`
                   : 'Contact details and profile status used across service workflows.'}
                 entityLabel={customerEntityLabel}
                 emptyLabel={`No ${customerEntityLabel.toLowerCase()} records found.`}

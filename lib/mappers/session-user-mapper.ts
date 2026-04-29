@@ -213,7 +213,13 @@ export const mapLoginResponseToSessionUser = (
     || readStringValue(dataRecord, apiCounterNameKeys)
     || readStringValue(tokenPayload, apiCounterNameKeys)
     || undefined;
-  const resolvedPermissions = readPermissionsFromSources(userRecord, tokenUserRecord, dataRecord, tokenPayload);
+  const resolvedPermissions = readPermissionsFromSources(
+    userRecord,
+    tokenUserRecord,
+    dataRecord,
+    tokenPayload,
+    responseBody as UnknownRecord | null,
+  );
   const matchedKnownUser = resolveKnownUser?.(resolvedEmail, resolvedRole, resolvedBusinessId);
 
   if (matchedKnownUser) {

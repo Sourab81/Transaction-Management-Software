@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { FaChevronDown, FaChevronUp, FaPlus, FaSlidersH } from 'react-icons/fa';
 import {
   buildDefaultCustomerPermissions,
-  customerPermissionSections,
   normalizeCustomerPermissions,
 } from '../../lib/platform-structure';
 import type { Business } from '../../lib/store';
+import type { RoleTemplate } from '../../lib/types/role-template';
 import {
   businessSubscriptionPlans,
   calculateBusinessSubscriptionEndDate,
@@ -16,17 +16,31 @@ import {
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
+import PermissionEditor from './PermissionEditor';
 
-export type BusinessFormValues = Omit<Business, 'id'>;
+export type BusinessFormValues = Omit<Business, 'id'> & {
+  roleTemplateId?: string;
+};
 
 interface BusinessFormProps {
   initialValues?: Business;
+  roleTemplates?: RoleTemplate[];
+  isRoleTemplatesLoading?: boolean;
+  roleTemplatesError?: string;
   submitLabel: string;
   onCancel: () => void;
   onSubmit: (values: BusinessFormValues) => void;
 }
 
-const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel, onCancel, onSubmit }) => {
+const BusinessForm: React.FC<BusinessFormProps> = ({
+  initialValues,
+  roleTemplates = [],
+  isRoleTemplatesLoading = false,
+  roleTemplatesError = '',
+  submitLabel,
+  onCancel,
+  onSubmit,
+}) => {
   const today = new Date().toISOString().split('T')[0];
   const [name, setName] = useState(initialValues?.name || '');
   const [phone, setPhone] = useState(initialValues?.phone || '');
@@ -43,38 +57,25 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
   const [isAddingPlan, setIsAddingPlan] = useState(false);
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedRoleTemplateId, setSelectedRoleTemplateId] = useState('');
 
   const enabledPermissionCount = Object.values(permissions).filter((enabled) => enabled === 1).length;
   const selectedPlan = getBusinessSubscriptionPlan(planId);
   const previewEndDate = calculateBusinessSubscriptionEndDate(planId, subscriptionStartDate);
   const activePlan = subscription ? getBusinessSubscriptionPlan(subscription.planId) : null;
 
-  const togglePermission = (permissionId: string) => {
-    setPermissions((current) => ({
-      ...current,
-      [permissionId]: current[permissionId] === 1 ? 0 : 1,
-    }));
-  };
+  const handleRoleTemplateChange = (roleTemplateId: string) => {
+    setSelectedRoleTemplateId(roleTemplateId);
 
-  const toggleSectionPermissions = (sectionId: string) => {
-    const section = customerPermissionSections.find((permissionSection) => permissionSection.id === sectionId);
-
-    if (!section) {
+    const selectedTemplate = roleTemplates.find((roleTemplate) => roleTemplate.id === roleTemplateId);
+    if (!selectedTemplate) {
       return;
     }
 
-    const toggleItems = section.items.filter((item) => item.kind !== 'label');
-
-    setPermissions((current) => {
-      const shouldEnableAll = !toggleItems.every((item) => current[item.id] === 1);
-      const nextPermissions = { ...current };
-
-      toggleItems.forEach((item) => {
-        nextPermissions[item.id] = shouldEnableAll ? 1 : 0;
-      });
-
-      return nextPermissions;
-    });
+    // Selecting a predefined role intentionally overwrites the current draft
+    // permissions. Admin can still manually edit the toggles before saving.
+    setPermissions(selectedTemplate.privileges);
+    setIsPermissionsOpen(true);
   };
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -89,6 +90,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
       joinedDate,
       permissions,
       subscription,
+      roleTemplateId: selectedRoleTemplateId || undefined,
     });
   };
 
@@ -103,9 +105,9 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
     <form className="business-form" onSubmit={handleSubmit}>
       <div className="form-workflow-panel business-form__intro">
         <div>
-          <p className="eyebrow mb-2">Business</p>
-          <h3 className="h5 fw-semibold mb-1">{initialValues ? 'Update business profile' : 'Create business profile'}</h3>
-          <p className="page-muted small mb-0">Business profiles control login credentials, contact details, and which modules the workspace can use.</p>
+          <p className="eyebrow mb-2">User</p>
+          <h3 className="h5 fw-semibold mb-1">{initialValues ? 'Update user profile' : 'Create user profile'}</h3>
+          <p className="page-muted small mb-0">User profiles control login credentials, contact details, and which modules the workspace can use.</p>
         </div>
         <span className={`status-chip ${(status || 'Active') === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
           {status || 'Active'}
@@ -115,13 +117,13 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
       <div className="form-section-card business-form__section">
         <div className="business-form__section-header">
           <div>
-            <div className="form-section-title mb-1">Business Details</div>
+            <div className="form-section-title mb-1">User Details</div>
             <p className="page-muted small mb-0">Core profile, contact, login, and account status.</p>
           </div>
         </div>
         <div className="row g-3">
           <div className="col-12 col-md-6">
-            <Input label="Business Name" placeholder="Example: Riya Services" value={name} onChange={(event) => setName(event.target.value)} required />
+            <Input label="User Name" placeholder="Example: Riya Services" value={name} onChange={(event) => setName(event.target.value)} required />
           </div>
           <div className="col-12 col-md-6">
             <Input label="Phone" placeholder="Enter mobile number" value={phone} onChange={(event) => setPhone(event.target.value)} required />
@@ -170,6 +172,33 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
               ]}
             />
           </div>
+          {!initialValues ? (
+            <div className="col-12 col-md-6">
+              <Select
+                label="Predefined Role"
+                value={selectedRoleTemplateId}
+                onChange={(event) => handleRoleTemplateChange(event.target.value)}
+                options={[
+                  {
+                    value: '',
+                    label: isRoleTemplatesLoading ? 'Loading roles...' : 'Choose a role template',
+                  },
+                  ...roleTemplates.map((roleTemplate) => ({
+                    value: roleTemplate.id,
+                    label: roleTemplate.roleName,
+                  })),
+                ]}
+                disabled={isRoleTemplatesLoading || roleTemplates.length === 0}
+              />
+              {roleTemplatesError ? (
+                <div className="form-hint text-warning">
+                  Role templates are unavailable. You can still set permissions manually.
+                </div>
+              ) : (
+                <div className="form-hint">Selecting a role fills permissions; you can still edit them below.</div>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -280,65 +309,11 @@ const BusinessForm: React.FC<BusinessFormProps> = ({ initialValues, submitLabel,
         </div>
 
         {isPermissionsOpen ? (
-          <div className="permission-builder business-form__permissions" id="business-permissions-list">
-            {customerPermissionSections.map((section) => {
-              const toggleItems = section.items.filter((item) => item.kind !== 'label');
-              const enabledCount = toggleItems.filter((item) => permissions[item.id] === 1).length;
-              const isSectionEnabled = toggleItems.length > 0 && enabledCount === toggleItems.length;
-
-              return (
-                <div key={section.id} className="permission-section">
-                  <div className="permission-section__header">
-                    <div>
-                      <h4 className="permission-section__title">{section.label}</h4>
-                      <p className="permission-section__meta mb-0">{enabledCount} of {toggleItems.length} enabled</p>
-                    </div>
-                    <button
-                      type="button"
-                      className={`permission-toggle permission-toggle--section ${isSectionEnabled ? 'is-enabled' : ''}`}
-                      aria-pressed={isSectionEnabled}
-                      aria-label={`Toggle all ${section.label} permissions`}
-                      onClick={() => toggleSectionPermissions(section.id)}
-                    >
-                      <span className="permission-toggle__thumb" />
-                      <span className="permission-toggle__text">{isSectionEnabled ? 'On' : 'Off'}</span>
-                    </button>
-                  </div>
-                  <div className="permission-list">
-                    {section.items.map((item) => {
-                      if (item.kind === 'label') {
-                        return (
-                          <div
-                            key={item.id}
-                            className={`permission-group-label ${item.indent ? 'permission-group-label--child' : ''}`}
-                          >
-                            {item.label}
-                          </div>
-                        );
-                      }
-
-                      const isEnabled = permissions[item.id] === 1;
-
-                      return (
-                        <div key={item.id} className={`permission-row ${item.indent ? 'permission-row--child' : ''}`}>
-                          <span className="permission-label">{item.label}</span>
-                          <button
-                            type="button"
-                            className={`permission-toggle ${isEnabled ? 'is-enabled' : ''}`}
-                            aria-pressed={isEnabled}
-                            onClick={() => togglePermission(item.id)}
-                          >
-                            <span className="permission-toggle__thumb" />
-                            <span className="permission-toggle__text">{isEnabled ? 'On' : 'Off'}</span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <PermissionEditor
+            permissions={permissions}
+            onChange={setPermissions}
+            className="business-form__permissions"
+          />
         ) : null}
       </div>
 
