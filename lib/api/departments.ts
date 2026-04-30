@@ -1,13 +1,25 @@
 import type { Counter } from '../store';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 import { mapCountersResponse } from '../mappers/counter-mapper';
-import { requestAppApi } from './app-client';
+import { AppApiError, requestAppApi } from './app-client';
 import {
   BackendApiConfigurationError,
   requestBackendCollection,
 } from './backend-client';
 
-export const getDepartmentsResponse = () => requestAppApi('/api/departments');
+export const demoDepartmentCounters: Counter[] = [
+  {
+    id: 'demo-department-1',
+    name: 'Demo Department',
+    code: 'DEMO-001',
+    openingBalance: 0,
+    currentBalance: 0,
+    status: 'Active',
+  },
+];
+
+const createDemoDepartmentCounters = () =>
+  demoDepartmentCounters.map((counter) => ({ ...counter }));
 
 export class DepartmentsApiError extends Error {
   readonly statusCode: number | null;
@@ -34,6 +46,23 @@ const readDepartmentsApiErrorMessage = (
   }
 
   return fallbackMessage;
+};
+
+const isNoDataFoundBody = (body: unknown) =>
+  readDepartmentsApiErrorMessage(body, '').trim().toLowerCase() === 'no data found';
+
+export const getDepartmentsResponse = async () => {
+  try {
+    const payload = await requestAppApi('/api/departments');
+
+    return isNoDataFoundBody(payload) ? createDemoDepartmentCounters() : payload;
+  } catch (error) {
+    if (error instanceof AppApiError && isNoDataFoundBody(error.body)) {
+      return createDemoDepartmentCounters();
+    }
+
+    throw error;
+  }
 };
 
 export const getDepartmentsWithToken = async (
@@ -66,6 +95,10 @@ export const getDepartmentsWithToken = async (
   }
 
   if (response.statusCode >= 400) {
+    if (isNoDataFoundBody(response.body)) {
+      return createDemoDepartmentCounters();
+    }
+
     throw new DepartmentsApiError(
       readDepartmentsApiErrorMessage(
         response.body,
@@ -76,6 +109,10 @@ export const getDepartmentsWithToken = async (
       response.statusCode,
       response.body,
     );
+  }
+
+  if (isNoDataFoundBody(response.body)) {
+    return createDemoDepartmentCounters();
   }
 
   return mapCountersResponse(response.body);

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { logoutUser, updateStoredUser, type SessionUser } from '../../lib/auth-session';
 import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
+import { canAccessModuleForSession } from '../../lib/platform-structure';
 import {
   DEFAULT_WORKSPACE_MODULE_ID,
   LOGIN_ROUTE,
@@ -65,6 +66,28 @@ const WorkspaceLayoutShell = ({
     setCurrentUser(initialUser);
   }, [initialUser]);
 
+  const routeAccessContext = useMemo(
+    () => currentUser
+      ? {
+          role: currentUser.role,
+          businessId: currentUser.businessId,
+          permissions: currentUser.permissions,
+        }
+      : null,
+    [currentUser],
+  );
+  const canOpenActiveRoute = routeAccessContext
+    ? canAccessModuleForSession(routeAccessContext, routeState.activeTab)
+    : false;
+
+  useEffect(() => {
+    if (!currentUser || canOpenActiveRoute || routeState.activeTab === DEFAULT_WORKSPACE_MODULE_ID) {
+      return;
+    }
+
+    router.replace(getWorkspaceModulePath(DEFAULT_WORKSPACE_MODULE_ID));
+  }, [canOpenActiveRoute, currentUser, routeState.activeTab, router]);
+
   const handleLogout = () => {
     logoutUser();
     setCurrentUser(null);
@@ -90,6 +113,16 @@ const WorkspaceLayoutShell = ({
         eyebrow="Redirecting"
         title="Returning to Login"
         copy="This workspace route requires an active session."
+      />
+    );
+  }
+
+  if (!canOpenActiveRoute) {
+    return (
+      <AppLoadingScreen
+        eyebrow="Access Restricted"
+        title="Opening Dashboard"
+        copy="Your current permissions do not allow this workspace page."
       />
     );
   }

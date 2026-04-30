@@ -2375,7 +2375,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (currentRole === 'Admin' && !editingBusiness) {
-      const privilegesPayload = JSON.stringify(buildRoleTemplatePrivilegesPayload(values.permissions));
+      const privilegesPayload = JSON.stringify(
+        buildRoleTemplatePrivilegesPayload(values.permissions, values.roleTemplateBackendPrivileges),
+      );
       const response = await fetch('/api/businesses', {
         method: 'POST',
         headers: {
@@ -2385,10 +2387,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           username: values.email,
           password: values.password,
           fullname: values.name,
-          role: '2',
+          role: values.roleTemplateId,
           email_id: values.email,
           contact_no: values.phone,
-          role_template_id: values.roleTemplateId,
+          // role_template_id: values.roleTemplateId,
           permission: privilegesPayload,
           privileges: privilegesPayload,
         }),

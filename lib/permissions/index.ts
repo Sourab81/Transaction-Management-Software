@@ -36,13 +36,24 @@ export {
 } from './normalize';
 export {
   hasAnyEnabledPermission,
+  hasAnyPermission,
   hasEnabledPermissionPrefix,
   isPermissionEnabled,
 } from './checks';
+export {
+  canViewModuleByPermissions,
+  getCanonicalPermissionModuleId,
+  getModulePermissionKeys,
+  hasAnyModulePermission,
+  modulePermissionMap,
+  moduleRequiresPermissions,
+  safeBaseModules,
+} from './module-permissions';
 export { canUseBusinessFeature } from './feature-access';
 export {
   canAccessModuleForSession,
   getBusinessEnabledModules,
+  getPermissionBasedSidebarModules,
   getSidebarModulesForSession,
 } from './session-access';
 export {

@@ -11,8 +11,11 @@ import {
   getSidebarModules as getSidebarModulesCore,
   getSidebarModulesForSession as getSidebarModulesForSessionCore,
   hasAnyEnabledPermission as hasAnyEnabledPermissionCore,
+  hasAnyPermission as hasAnyPermissionCore,
   hasEnabledPermissionPrefix as hasEnabledPermissionPrefixCore,
   isPermissionEnabled as isPermissionEnabledCore,
+  canViewModuleByPermissions as canViewModuleByPermissionsCore,
+  getPermissionBasedSidebarModules as getPermissionBasedSidebarModulesCore,
   normalizeCustomerPermissions as normalizeCustomerPermissionsCore,
   createCustomerPermissions as createCustomerPermissionsCore,
   intersectCustomerPermissions as intersectCustomerPermissionsCore,
@@ -43,6 +46,7 @@ export {
   customerPermissionOptions,
   customerPermissionSections,
   customerPermissionToggleItems,
+  modulePermissionMap,
   pageHeadings,
   roleLabels,
   userDashboardModules,
@@ -67,15 +71,34 @@ export const intersectCustomerPermissions = (
   scopedPermissions: CustomerPermissions | null | undefined,
 ) => intersectCustomerPermissionsCore(basePermissions, scopedPermissions);
 
-export const isPermissionEnabled = (
+export function isPermissionEnabled(value: unknown): boolean;
+export function isPermissionEnabled(
   permissions: CustomerPermissions | null | undefined,
   permissionId: string,
-) => isPermissionEnabledCore(permissions, permissionId);
+): boolean;
+export function isPermissionEnabled(
+  permissionsOrValue: CustomerPermissions | null | undefined | unknown,
+  permissionId?: string,
+) {
+  if (typeof permissionId === 'string') {
+    return isPermissionEnabledCore(
+      permissionsOrValue as CustomerPermissions | null | undefined,
+      permissionId,
+    );
+  }
+
+  return isPermissionEnabledCore(permissionsOrValue);
+}
 
 export const hasAnyEnabledPermission = (
   permissions: CustomerPermissions | null | undefined,
   permissionIds: string[],
 ) => hasAnyEnabledPermissionCore(permissions, permissionIds);
+
+export const hasAnyPermission = (
+  permissions: CustomerPermissions | null | undefined,
+  permissionIds: readonly string[],
+) => hasAnyPermissionCore(permissions, permissionIds);
 
 export const hasEnabledPermissionPrefix = (
   permissions: CustomerPermissions | null | undefined,
@@ -105,6 +128,12 @@ export const getBusinessEnabledModules = (permissions: CustomerPermissions | nul
 
 export const canAccessModuleForSession = (context: SessionAccessContext, moduleId: string) =>
   canAccessModuleForSessionCore(context, moduleId);
+
+export const canViewModuleByPermissions = (context: SessionAccessContext, moduleId: string) =>
+  canViewModuleByPermissionsCore(context, moduleId);
+
+export const getPermissionBasedSidebarModules = (context: SessionAccessContext) =>
+  getPermissionBasedSidebarModulesCore(context);
 
 export const getSidebarModulesForSession = (context: SessionAccessContext) =>
   getSidebarModulesForSessionCore(context);

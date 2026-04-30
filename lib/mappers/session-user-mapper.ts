@@ -30,6 +30,20 @@ const apiCounterIdKeys = ['counterId', 'counter_id'];
 const apiCounterNameKeys = ['counterName', 'counter_name', 'departmentName', 'department_name'];
 const apiIdKeys = ['id', 'user_id', 'admin_id', 'employee_id'];
 const apiNameKeys = ['name', 'fullname', 'full_name', 'fullName', 'nickname', 'user_name', 'username', 'business_name', 'company_name'];
+const apiTokenKeys = [
+  'token',
+  'access_token',
+  'accessToken',
+  'auth_token',
+  'authToken',
+  'api_token',
+  'apiToken',
+  'bearer_token',
+  'bearerToken',
+  'authorization',
+  'Authorization',
+  'jwt',
+];
 
 const normalizeApiRole = (value: string | null): UserRole | null => {
   if (!value) {
@@ -149,10 +163,33 @@ const extractResponseUserRecord = (body: unknown): UnknownRecord | null => {
 };
 
 export const extractAccessToken = (body: LoginApiResponseBody | null) => {
-  const dataRecord = isRecord(body?.data) ? body.data : null;
+  const queue: unknown[] = [body];
 
-  return readStringValue(body as UnknownRecord | null, ['token', 'access_token', 'accessToken', 'auth_token', 'jwt'])
-    || readStringValue(dataRecord, ['token', 'access_token', 'accessToken', 'auth_token', 'jwt']);
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    if (!isRecord(current)) {
+      continue;
+    }
+
+    const token = readStringValue(current, apiTokenKeys);
+    if (token) {
+      return token;
+    }
+
+    Object.values(current).forEach((value) => {
+      if (Array.isArray(value) || isRecord(value)) {
+        queue.push(value);
+      }
+    });
+  }
+
+  return null;
 };
 
 export const mapLoginResponseToSessionUser = (

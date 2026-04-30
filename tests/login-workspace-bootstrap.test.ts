@@ -60,4 +60,39 @@ describe('login workspace bootstrap', () => {
       'https://api.example.test/getCounters',
     ]);
   });
+
+  test('accepts nested auth token fields from backend login responses', async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.test';
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.endsWith('/login')) {
+        return new Response(JSON.stringify({
+          status: 200,
+          message: 'User login successfully.',
+          data: {
+            user: {
+              id: 4,
+              fullname: 'Business User',
+              email_id: 'business@example.test',
+              user_type: 'Business',
+              role: 2,
+              authToken: 'nested-login-token',
+            },
+          },
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/getCounters')) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+
+    const result = await loginAndLoadWorkspaceBootstrap('business@example.test', 'test-password');
+
+    assert.equal(result.accessToken, 'nested-login-token');
+  });
 });

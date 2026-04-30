@@ -15,11 +15,15 @@ import {
 const permissionValueKeys = [
   'permissions',
   'permission',
+  'privileges',
+  'privilege',
   'user_permissions',
   'permission_map',
   'permissionMap',
   'module_permissions',
   'modulePermissions',
+  'role_privileges',
+  'rolePrivileges',
   'access',
 ];
 
@@ -48,6 +52,15 @@ const normalizePermissionIdList = (value: unknown): string[] => {
 };
 
 export const mapPermissionValue = (value: unknown): CustomerPermissions | undefined => {
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsedValue = JSON.parse(value) as unknown;
+      return mapPermissionValue(parsedValue);
+    } catch {
+      return undefined;
+    }
+  }
+
   const permissionIds = normalizePermissionIdList(value);
   if (permissionIds.length > 0) {
     return createCustomerPermissions(permissionIds);

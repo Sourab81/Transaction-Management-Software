@@ -145,11 +145,22 @@ const businessPermissions = createCustomerPermissions([
 const restrictedPermissions = createCustomerPermissions([]);
 const addOnlyCustomerPermissions = createCustomerPermissions(['customers_add']);
 const employeeCustomerOnlyPermissions = createCustomerPermissions(['customers_list']);
+const cashCounterPermissions = createCustomerPermissions([
+  'master_account_manage',
+  'master_department_manage',
+  'customers_add',
+  'customers_list',
+  'customers_payment_list',
+  'customers_outstanding',
+  'services_access',
+  'expense_access',
+]);
 
 const adminContext = { role: 'Admin' as const };
 const businessContext = { role: 'Customer' as const, businessId: 'business-1', permissions: businessPermissions };
 const restrictedBusinessContext = { role: 'Customer' as const, businessId: 'business-2', permissions: restrictedPermissions };
 const addOnlyBusinessContext = { role: 'Customer' as const, businessId: 'business-3', permissions: addOnlyCustomerPermissions };
+const cashCounterContext = { role: 'Customer' as const, businessId: 'business-4', permissions: cashCounterPermissions };
 const employeeContext = { role: 'Employee' as const, businessId: 'business-1', permissions: businessPermissions };
 const restrictedEmployeeContext = { role: 'Employee' as const, businessId: 'business-2', permissions: restrictedPermissions };
 const customerOnlyEmployeeContext = { role: 'Employee' as const, businessId: 'business-1', permissions: employeeCustomerOnlyPermissions };
@@ -199,10 +210,16 @@ describe('dashboard controller permissions', () => {
     assert.equal(canViewModuleRecordsForSession(addOnlyBusinessContext, 'customers'), false);
   });
 
+  test('denies employee module actions when cash counter employee permissions are all disabled', () => {
+    assert.equal(canAccessModuleForSession(cashCounterContext, 'employee'), false);
+    assert.equal(canPerformModuleActionForSession(cashCounterContext, 'employee', 'add'), false);
+    assert.equal(canViewModuleRecordsForSession(cashCounterContext, 'employee'), false);
+  });
+
   test('lets account management follow the new master account permission', () => {
     assert.equal(canPerformModuleActionForSession(employeeContext, 'accounts', 'edit'), true);
     assert.equal(canPerformModuleActionForSession(restrictedEmployeeContext, 'accounts', 'edit'), false);
-    assert.equal(canAccessModuleForSession(restrictedEmployeeContext, 'accounts'), true);
+    assert.equal(canAccessModuleForSession(restrictedEmployeeContext, 'accounts'), false);
   });
 
   test('makes delete permission Admin-only for role-level checks', () => {

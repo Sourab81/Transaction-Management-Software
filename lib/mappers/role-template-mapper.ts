@@ -110,6 +110,12 @@ export const mapRoleTemplatesResponse = (payload: unknown): RoleTemplate[] =>
 export const isEditableRoleTemplate = (role: Pick<RoleTemplate, 'id' | 'roleName'>) =>
   role.id !== '1' && role.roleName.trim().toLowerCase() !== 'super admin';
 
+export const isActiveRoleTemplate = (role: Pick<RoleTemplate, 'status'>) =>
+  typeof role.status === 'undefined' || role.status === '1';
+
+export const isSelectableRoleTemplate = (role: Pick<RoleTemplate, 'id' | 'roleName' | 'status'>) =>
+  isEditableRoleTemplate(role) && isActiveRoleTemplate(role);
+
 const findExistingBackendKey = (backendPrivileges: Record<string, unknown>, canonicalPermissionId: string) => {
   const lowerCanonicalId = canonicalPermissionId.toLowerCase();
 
