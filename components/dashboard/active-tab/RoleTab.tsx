@@ -97,6 +97,11 @@ export default function RoleTab({ ctx }: RoleTabProps) {
 
   const columns = useMemo(() => [
     {
+      key: 'serial',
+      header: 'S. No.',
+      render: (_role: RoleTemplate, index: number) => index + 1,
+    },
+    {
       key: 'id',
       header: 'ID',
       render: (role: RoleTemplate) => role.id,

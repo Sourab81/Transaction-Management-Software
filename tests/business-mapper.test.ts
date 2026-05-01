@@ -33,6 +33,16 @@ describe('business mapper', () => {
           status: 'Active',
           create_date: null,
         },
+        {
+          id: 4,
+          fullname: 'Legacy Role Collision',
+          username: 'legacy-role@example.test',
+          email_id: 'legacy-role@example.test',
+          contact_no: 7777777777,
+          user_type: 'Admin',
+          role: 2,
+          status: 'Active',
+        },
       ],
     });
 
@@ -43,6 +53,8 @@ describe('business mapper', () => {
         name: businesses[0]?.name,
         phone: businesses[0]?.phone,
         email: businesses[0]?.email,
+        roleTemplateId: businesses[0]?.roleTemplateId,
+        selectedRoleName: businesses[0]?.selectedRoleName,
         status: businesses[0]?.status,
         joinedDate: businesses[0]?.joinedDate,
       },
@@ -51,10 +63,64 @@ describe('business mapper', () => {
         name: 'New Business Name',
         phone: '9999999999',
         email: 'newbusiness@example.test',
+        roleTemplateId: '2',
+        selectedRoleName: undefined,
         status: 'Active',
         joinedDate: '2026-04-25 12:24:47',
       },
     );
+  });
+
+  test('keeps selected role details when the user-list payload includes them', () => {
+    const businesses = mapBusinessesResponse({
+      data: [
+        {
+          id: 9,
+          fullname: 'Cash Counter User',
+          email_id: 'cash-counter@example.test',
+          contact_no: 9876543210,
+          user_type: 'Business',
+          role: 5,
+          role_name: 'Cash Counter',
+          permission: {
+            Customers_list: 1,
+            Services_access: 1,
+          },
+          status: 'Active',
+        },
+      ],
+    });
+
+    assert.equal(businesses[0]?.roleTemplateId, '5');
+    assert.equal(businesses[0]?.selectedRoleName, 'Cash Counter');
+    assert.equal(businesses[0]?.permissions.customers_list, 1);
+    assert.equal(businesses[0]?.permissions.services_access, 1);
+    assert.equal(businesses[0]?.permissions.employee_add, 0);
+  });
+
+  test('keeps id-only predefined roles on Business users without requiring legacy role 2', () => {
+    const businesses = mapBusinessesResponse({
+      data: [
+        {
+          id: 10,
+          fullname: 'Template Six User',
+          email_id: 'template-six@example.test',
+          contact_no: 9123456780,
+          user_type: 'Business',
+          role: 6,
+          permissions: JSON.stringify({
+            Employee_list: 1,
+          }),
+          status: 'Active',
+        },
+      ],
+    });
+
+    assert.equal(businesses.length, 1);
+    assert.equal(businesses[0]?.roleTemplateId, '6');
+    assert.equal(businesses[0]?.selectedRoleName, undefined);
+    assert.equal(businesses[0]?.permissions.employee_list, 1);
+    assert.equal(businesses[0]?.permissions.customers_list, 0);
   });
 
   test('maps backend pagination for the admin business directory', () => {

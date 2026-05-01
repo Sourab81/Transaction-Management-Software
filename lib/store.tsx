@@ -32,6 +32,13 @@ export interface Business {
   phone: string;
   email: string;
   password: string;
+  role?: string;
+  role_id?: string;
+  roleTemplateId?: string;
+  role_template_id?: string;
+  role_name?: string;
+  roleName?: string;
+  selectedRoleName?: string;
   status?: 'Active' | 'Inactive';
   statusReason?: BusinessStatusReason;
   joinedDate?: string;

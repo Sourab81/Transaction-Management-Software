@@ -53,6 +53,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     isBusinessDirectoryLoading,
     businessDirectoryError,
     customerDirectoryPagination,
+    roleTemplates,
   } = ctx;
   const [isBusinessFilterOpen, setIsBusinessFilterOpen] = useState(false);
   const [draftBusinessFilters, setDraftBusinessFilters] = useState(businessDirectoryFilters);
@@ -223,6 +224,8 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
                 isLoading={isAdminBusinessDirectoryLoading}
                 pagination={currentRole === 'Admin' ? customerDirectoryPagination : undefined}
                 headerAction={businessFilterAction}
+                showRoleColumn={currentRole === 'Admin'}
+                roleTemplates={roleTemplates}
                 onView={currentRole === 'Admin' ? undefined : handleViewCustomerHistory}
                 onEdit={canEditCustomerRecords ? handleEditCustomer : undefined}
                 onDelete={currentRole !== 'Admin' && canDeleteCustomerRecords ? (id: string) => handleDeleteRecord('DELETE_CUSTOMER', id) : undefined}

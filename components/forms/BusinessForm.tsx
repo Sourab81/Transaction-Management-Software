@@ -67,7 +67,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const [isAddingPlan, setIsAddingPlan] = useState(false);
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRoleTemplateId, setSelectedRoleTemplateId] = useState('');
+  const [selectedRoleTemplateId, setSelectedRoleTemplateId] = useState(initialValues?.roleTemplateId || '');
   const [selectedRoleTemplateBackendPrivileges, setSelectedRoleTemplateBackendPrivileges] = useState<Record<string, unknown> | undefined>();
   const [hasPermissionDraft, setHasPermissionDraft] = useState(Boolean(initialValues));
 
@@ -129,6 +129,10 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
       permissions,
       subscription,
       roleTemplateId: selectedRoleTemplateId || undefined,
+      selectedRoleName: selectedRoleTemplateId
+        ? roleTemplates.find((roleTemplate) => roleTemplate.id === selectedRoleTemplateId)?.roleName
+          || initialValues?.selectedRoleName
+        : undefined,
       roleTemplateBackendPrivileges: selectedRoleTemplateBackendPrivileges,
     });
   };
