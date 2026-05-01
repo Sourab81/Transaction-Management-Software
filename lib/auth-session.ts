@@ -15,6 +15,8 @@ import {
 } from './store';
 import { getBusinessAccessState } from './subscription';
 import {
+  INVALID_USER_TYPE_LOGIN_MESSAGE,
+  type LoginAccountType,
   mapLoginResponseToSessionUser,
 } from './mappers/session-user-mapper';
 import { mapPermissionValue } from './mappers/permission-mapper';
@@ -38,6 +40,9 @@ export interface SessionUser {
   name: string;
   email: string;
   role: UserRole;
+  userType?: LoginAccountType;
+  roleTemplateId?: string;
+  legacyRoleId?: string;
   businessId?: string;
   departmentId?: string;
   counterId?: string;
@@ -172,6 +177,9 @@ const resolveStoredSessionUser = (sessionUser: SessionUser): SessionUser | null 
   if (matchedUser) {
     return {
       ...createSessionUserFromAuthUser(matchedUser),
+      userType: sessionUser.userType,
+      roleTemplateId: sessionUser.roleTemplateId,
+      legacyRoleId: sessionUser.legacyRoleId,
       departmentId: sessionUser.departmentId,
       counterId: sessionUser.counterId,
       counterName: sessionUser.counterName,
@@ -197,9 +205,7 @@ const resolveSessionUserFromApiLogin = (
   );
 
   if (!sessionUser) {
-    throw new Error(
-      'Login succeeded, but the backend response did not identify whether this account should open admin, business, or employee access.',
-    );
+    throw new Error(INVALID_USER_TYPE_LOGIN_MESSAGE);
   }
 
   return sessionUser;
@@ -326,6 +332,16 @@ export const getStoredUser = (): SessionUser | null => {
       name: String(parsed.name),
       email: normalizeEmail(String(parsed.email)),
       role: parsed.role,
+      userType:
+        parsed.userType === 'Admin' || parsed.userType === 'Business' || parsed.userType === 'Employee'
+          ? parsed.userType
+          : undefined,
+      roleTemplateId: typeof parsed.roleTemplateId === 'string' && parsed.roleTemplateId.trim()
+        ? parsed.roleTemplateId
+        : undefined,
+      legacyRoleId: typeof parsed.legacyRoleId === 'string' && parsed.legacyRoleId.trim()
+        ? parsed.legacyRoleId
+        : undefined,
       businessId: typeof parsed.businessId === 'string' && parsed.businessId.trim()
         ? parsed.businessId
         : undefined,

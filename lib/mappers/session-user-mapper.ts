@@ -10,11 +10,16 @@ import {
 } from './legacy-record';
 import { readPermissionsFromSources } from './permission-mapper';
 
+export type LoginAccountType = 'Admin' | 'Business' | 'Employee';
+
 export interface SessionUserCandidate {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  userType?: LoginAccountType;
+  roleTemplateId?: string;
+  legacyRoleId?: string;
   businessId?: string;
   departmentId?: string;
   counterId?: string;
@@ -22,7 +27,13 @@ export interface SessionUserCandidate {
   permissions?: CustomerPermissions;
 }
 
-const apiRoleKeys = ['role', 'user_role', 'userRole', 'userType', 'user_type', 'login_type'];
+export const INVALID_USER_TYPE_LOGIN_MESSAGE =
+  'Login succeeded, but the backend response did not identify a valid user type.';
+export const UNAUTHORIZED_ADMIN_LOGIN_MESSAGE =
+  'Admin account is not authorized for admin access.';
+
+const apiUserTypeKeys = ['user_type', 'userType', 'account_type', 'accountType', 'login_type'];
+const apiRoleKeys = ['role', 'role_id', 'roleId', 'user_role', 'userRole'];
 const apiEmailKeys = ['email', 'email_id', 'user_email', 'login_email', 'username'];
 const apiBusinessIdKeys = ['businessId', 'business_id', 'workspaceId', 'workspace_id', 'company_id'];
 const apiDepartmentIdKeys = ['departmentId', 'department_id'];
@@ -45,7 +56,32 @@ const apiTokenKeys = [
   'jwt',
 ];
 
-const normalizeApiRole = (value: string | null): UserRole | null => {
+interface LoginIdentity {
+  role: UserRole | null;
+  userType?: LoginAccountType;
+  roleTemplateId?: string;
+  legacyRoleId?: string;
+}
+
+const normalizeLoginAccountType = (value: string | null): LoginAccountType | null => {
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value.trim().toLowerCase().replace(/\s+/g, '_');
+
+  if (normalizedValue === 'admin') return 'Admin';
+  if (['business', 'business_user', 'user', 'users', 'customer', 'client'].includes(normalizedValue)) {
+    return 'Business';
+  }
+  if (['employee', 'staff', 'operator', 'staff_user', 'employee_user'].includes(normalizedValue)) {
+    return 'Employee';
+  }
+
+  return null;
+};
+
+const normalizeLegacyApiRole = (value: string | null): UserRole | null => {
   if (!value) {
     return null;
   }
@@ -60,6 +96,14 @@ const normalizeApiRole = (value: string | null): UserRole | null => {
 
   return null;
 };
+
+const toInternalRole = (accountType: LoginAccountType): UserRole => {
+  if (accountType === 'Admin') return 'Admin';
+  if (accountType === 'Employee') return 'Employee';
+  return 'Customer';
+};
+
+const isAdminRoleId = (value: string | null) => value === '1';
 
 const decodeBase64UrlValue = (value: string) => {
   const normalizedValue = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -122,23 +166,72 @@ const inferApiRoleFromRecord = (source: UnknownRecord | null): UserRole | null =
   return null;
 };
 
-const resolveApiRole = (
+const resolveLoginIdentity = (
   body: LoginApiResponseBody | null,
   userRecord: UnknownRecord | null,
   tokenPayload: UnknownRecord | null,
   tokenUserRecord: UnknownRecord | null,
-) => {
+): LoginIdentity => {
   const dataRecord = isRecord(body?.data) ? body.data : null;
+  const userTypeValue = readStringValue(userRecord, apiUserTypeKeys)
+    || readStringValue(tokenUserRecord, apiUserTypeKeys)
+    || readStringValue(dataRecord, apiUserTypeKeys)
+    || readStringValue(tokenPayload, apiUserTypeKeys)
+    || readStringValue(body as UnknownRecord | null, apiUserTypeKeys);
+  const roleValue = readStringValue(userRecord, apiRoleKeys)
+    || readStringValue(tokenUserRecord, apiRoleKeys)
+    || readStringValue(dataRecord, apiRoleKeys)
+    || readStringValue(tokenPayload, apiRoleKeys)
+    || readStringValue(body as UnknownRecord | null, apiRoleKeys);
 
-  return normalizeApiRole(readStringValue(userRecord, apiRoleKeys))
-    || normalizeApiRole(readStringValue(tokenUserRecord, apiRoleKeys))
-    || normalizeApiRole(readStringValue(dataRecord, apiRoleKeys))
-    || normalizeApiRole(readStringValue(tokenPayload, apiRoleKeys))
-    || normalizeApiRole(readStringValue(body as UnknownRecord | null, apiRoleKeys))
-    || inferApiRoleFromRecord(userRecord)
+  if (userTypeValue) {
+    const accountType = normalizeLoginAccountType(userTypeValue);
+
+    if (!accountType) {
+      return {
+        role: null,
+        legacyRoleId: roleValue || undefined,
+      };
+    }
+
+    if (accountType === 'Admin' && !isAdminRoleId(roleValue)) {
+      throw new Error(UNAUTHORIZED_ADMIN_LOGIN_MESSAGE);
+    }
+
+    return {
+      role: toInternalRole(accountType),
+      userType: accountType,
+      roleTemplateId: accountType === 'Admin' ? undefined : roleValue || undefined,
+      legacyRoleId: roleValue || undefined,
+    };
+  }
+
+  const legacyRole = normalizeLegacyApiRole(roleValue);
+
+  if (legacyRole) {
+    return {
+      role: legacyRole,
+      userType: legacyRole === 'Customer' ? 'Business' : legacyRole,
+      legacyRoleId: roleValue || undefined,
+    };
+  }
+
+  if (roleValue) {
+    return {
+      role: null,
+      legacyRoleId: roleValue,
+    };
+  }
+
+  const inferredRole = inferApiRoleFromRecord(userRecord)
     || inferApiRoleFromRecord(tokenUserRecord)
     || inferApiRoleFromRecord(dataRecord)
     || inferApiRoleFromRecord(tokenPayload);
+
+  return {
+    role: inferredRole,
+    userType: inferredRole === 'Customer' ? 'Business' : inferredRole || undefined,
+  };
 };
 
 const extractResponseUserRecord = (body: unknown): UnknownRecord | null => {
@@ -214,7 +307,8 @@ export const mapLoginResponseToSessionUser = (
       || readStringValue(tokenPayload, apiEmailKeys)
       || normalizedEmail,
   );
-  const resolvedRole = resolveApiRole(responseBody, userRecord, tokenPayload, tokenUserRecord);
+  const loginIdentity = resolveLoginIdentity(responseBody, userRecord, tokenPayload, tokenUserRecord);
+  const resolvedRole = loginIdentity.role;
   const resolvedUserId = readStringValue(userRecord, apiIdKeys)
     || readStringValue(tokenUserRecord, apiIdKeys)
     || readStringValue(dataRecord, apiIdKeys)
@@ -262,6 +356,9 @@ export const mapLoginResponseToSessionUser = (
   if (matchedKnownUser) {
     return {
       ...matchedKnownUser,
+      userType: loginIdentity.userType,
+      roleTemplateId: loginIdentity.roleTemplateId,
+      legacyRoleId: loginIdentity.legacyRoleId,
       departmentId: resolvedDepartmentId,
       counterId: resolvedCounterId,
       counterName: resolvedCounterName,
@@ -290,6 +387,9 @@ export const mapLoginResponseToSessionUser = (
       || resolvedEmail,
     email: resolvedEmail,
     role: resolvedRole,
+    userType: loginIdentity.userType,
+    roleTemplateId: loginIdentity.roleTemplateId,
+    legacyRoleId: loginIdentity.legacyRoleId,
     businessId: resolvedBusinessId,
     departmentId: resolvedDepartmentId,
     counterId: resolvedCounterId,

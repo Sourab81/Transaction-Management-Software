@@ -4,6 +4,7 @@ import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar, FaFilter } from 'react-icons/fa';
 import { getAvailableUsers, type SessionUser } from '../../lib/auth-session';
+import { checkUserIdentityAvailability } from '../../lib/actions/business-directory-actions';
 import { buildCsv } from '../../lib/csv';
 import {
   canPerformModuleActionForSession,
@@ -109,6 +110,7 @@ import {
   type BusinessSubscription,
 } from '../../lib/subscription';
 import { getCustomerWorkspacePath, type CustomerWorkspaceView } from '../../lib/workspace-routes';
+import { normalizePhoneNumber } from '../../lib/validators/phone-validator';
 
 const getSubscriptionStatusLabel = (status?: BusinessSubscription['status']) => {
   if (status === 'trial') return 'Trial';
@@ -194,6 +196,10 @@ type ModalMode =
   | 'confirm-plan-cancel'
   | 'confirm-option-change'
   | null;
+
+interface IdentityConflictDialog {
+  description: string;
+}
 
 type DeleteActionType =
   | 'DELETE_BUSINESS'
@@ -532,6 +538,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     favoriteServiceIds: ['service-1', 'service-3'],
   });
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
+  const [identityConflictDialog, setIdentityConflictDialog] = useState<IdentityConflictDialog | null>(null);
   const [isTransactionFiltersOpen, setIsTransactionFiltersOpen] = useState(false);
   const [isAdminPlanFiltersOpen, setIsAdminPlanFiltersOpen] = useState(false);
   const {
@@ -1485,6 +1492,22 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const normalizeEmail = (email: string) => email.trim().toLowerCase();
+  const normalizePhone = (phone: string) => normalizePhoneNumber(phone);
+  const getIdentityConflictMessage = (conflict: { email: boolean; phone: boolean }) => {
+    if (conflict.email && conflict.phone) {
+      return 'A user already exists with this email and phone number.';
+    }
+
+    if (conflict.email) {
+      return 'A user already exists with this email.';
+    }
+
+    return 'A user already exists with this phone number.';
+  };
+  const showIdentityConflict = (description: string) => {
+    setIdentityConflictDialog({ description });
+    addNotification('error', description);
+  };
   const updateSessionUser = (updates: Partial<SessionUser>) => {
     onSessionUserChange({
       ...currentUser,
@@ -1507,6 +1530,23 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     return Object.values(businessWorkspacesById).some((tenantWorkspace) =>
       tenantWorkspace.employees.some((employee) => normalizeEmail(employee.email) === normalizedEmail)
+    );
+  };
+
+  const isBusinessPhoneTaken = (phone: string, excludedBusinessId?: string) => {
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return false;
+
+    const businessConflict = businesses.some((business) =>
+      normalizePhone(business.phone) === normalizedPhone && business.id !== excludedBusinessId
+    );
+
+    if (businessConflict) {
+      return true;
+    }
+
+    return Object.values(businessWorkspacesById).some((tenantWorkspace) =>
+      tenantWorkspace.employees.some((employee) => normalizePhone(employee.phone) === normalizedPhone)
     );
   };
 
@@ -2370,11 +2410,31 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (isBusinessEmailTaken(values.email, editingBusiness?.id)) {
-      addNotification('error', 'That business email is already assigned to another login.');
+      showIdentityConflict('A user already exists with this email.');
+      return;
+    }
+
+    if (isBusinessPhoneTaken(values.phone, editingBusiness?.id)) {
+      showIdentityConflict('A user already exists with this phone number.');
       return;
     }
 
     if (currentRole === 'Admin' && !editingBusiness) {
+      const duplicateCheck = await checkUserIdentityAvailability({
+        email: values.email,
+        phone: values.phone,
+      });
+
+      if (!duplicateCheck.ok) {
+        addNotification('error', duplicateCheck.error || 'Unable to check whether this user already exists.');
+        return;
+      }
+
+      if (duplicateCheck.conflict.email || duplicateCheck.conflict.phone) {
+        showIdentityConflict(getIdentityConflictMessage(duplicateCheck.conflict));
+        return;
+      }
+
       const privilegesPayload = JSON.stringify(
         buildRoleTemplatePrivilegesPayload(values.permissions, values.roleTemplateBackendPrivileges),
       );
@@ -3181,6 +3241,31 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (requiredPermission.permission === 'access') return hasModuleAccess;
     if (requiredPermission.permission === 'delete') return hasModuleAccess && canDeleteModule(requiredPermission.moduleId);
     return hasModuleAccess && canPerformModuleAction(requiredPermission.moduleId, requiredPermission.permission);
+  };
+
+  const renderIdentityConflictModal = () => {
+    if (!identityConflictDialog) {
+      return null;
+    }
+
+    return (
+      <ActionModal
+        title="User Already Exists"
+        eyebrow="Duplicate User"
+        tone="danger"
+        onClose={() => setIdentityConflictDialog(null)}
+      >
+        <ErrorState
+          eyebrow="Email / Phone In Use"
+          title="Cannot create this user"
+          description={identityConflictDialog.description}
+          action={{
+            label: 'Review Details',
+            onClick: () => setIdentityConflictDialog(null),
+          }}
+        />
+      </ActionModal>
+    );
   };
 
   const renderModal = () => {
@@ -4148,6 +4233,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <Footer />
       </div>
       {renderModal()}
+      {renderIdentityConflictModal()}
     </div>
   );
 };

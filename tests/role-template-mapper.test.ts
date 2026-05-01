@@ -41,6 +41,8 @@ describe('role template mapper', () => {
     assert.equal(isSelectableRoleTemplate({ id: '3', roleName: 'Inactive', status: '0' }), false);
     assert.equal(isSelectableRoleTemplate({ id: '4', roleName: 'Business', status: '1' }), true);
     assert.equal(isSelectableRoleTemplate({ id: '5', roleName: 'Legacy Business' }), true);
+    assert.equal(isSelectableRoleTemplate({ id: '6', roleName: 'Cash Counter', status: 'Active' }), true);
+    assert.equal(isSelectableRoleTemplate({ id: '7', roleName: 'Disabled Role', status: 'disabled' }), false);
   });
 
   test('builds create-user privileges from edited permissions using selected role key casing', () => {

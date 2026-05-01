@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { FaEdit, FaPlusCircle, FaTrashAlt } from 'react-icons/fa';
+import { FaEdit, FaFilter, FaPlusCircle, FaTrashAlt } from 'react-icons/fa';
 import {
   createRoleTemplate,
   deleteRoleTemplate,
@@ -14,6 +14,12 @@ import type {
 import ActionModal from '../../ui/ActionModal';
 import ConfirmActionModal from '../../ui/state/ConfirmActionModal';
 import ReusableListTable from '../../common/ReusableListTable';
+import DataTableFilters, {
+  buildEmptyDataTableFiltersValue,
+  readDataTableSingleSelectFilter,
+  type DataTableFiltersConfig,
+  type DataTableFiltersValue,
+} from '../../common/DataTableFilters';
 import SectionHero from '../SectionHero';
 import RoleTemplateForm from '../../admin/roles/RoleTemplateForm';
 import type { DashboardTabContext } from './types';
@@ -23,6 +29,37 @@ interface RoleTabProps {
 }
 
 type RoleModalMode = 'create' | 'edit' | 'delete' | null;
+
+const roleFiltersConfig: DataTableFiltersConfig = {
+  search: {
+    enabled: true,
+    fields: ['ID', 'role name'],
+    label: 'Search',
+  },
+  fields: [
+    {
+      field: 'status',
+      label: 'Status',
+      type: 'single-select',
+      options: [
+        { label: 'Active', value: 'Active' },
+        { label: 'Inactive', value: 'Inactive' },
+      ],
+    },
+  ],
+};
+
+const initialRoleFilters = buildEmptyDataTableFiltersValue(roleFiltersConfig);
+
+const normalizeRoleStatus = (status: string | undefined) => {
+  const normalizedStatus = status?.trim().toLowerCase();
+  return normalizedStatus === 'inactive' || normalizedStatus === '0' ? 'Inactive' : 'Active';
+};
+
+const getActiveRoleFilterCount = (filters: DataTableFiltersValue) => [
+  filters.search.trim() ? 1 : 0,
+  readDataTableSingleSelectFilter(filters, 'status') ? 1 : 0,
+].filter(Boolean).length;
 
 export default function RoleTab({ ctx }: RoleTabProps) {
   const {
@@ -36,6 +73,27 @@ export default function RoleTab({ ctx }: RoleTabProps) {
   const [selectedRole, setSelectedRole] = useState<RoleTemplate | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [roleFilters, setRoleFilters] = useState<DataTableFiltersValue>(initialRoleFilters);
+  const [draftRoleFilters, setDraftRoleFilters] = useState<DataTableFiltersValue>(initialRoleFilters);
+  const [isRoleFilterOpen, setIsRoleFilterOpen] = useState(false);
+  const activeRoleFilterCount = getActiveRoleFilterCount(roleFilters);
+  const hasActiveRoleFilters = activeRoleFilterCount > 0;
+  const roleFilterLabel = `${activeRoleFilterCount} active filter${activeRoleFilterCount === 1 ? '' : 's'}`;
+
+  const filteredRoleTemplates = useMemo(() => {
+    const searchQuery = roleFilters.search.trim().toLowerCase();
+    const selectedStatus = readDataTableSingleSelectFilter(roleFilters, 'status');
+
+    return roleTemplates.filter((role) => {
+      const matchesSearch = !searchQuery || [
+        role.id,
+        role.roleName,
+      ].some((value) => value.toLowerCase().includes(searchQuery));
+      const matchesStatus = !selectedStatus || normalizeRoleStatus(role.status) === selectedStatus;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [roleFilters, roleTemplates]);
 
   const columns = useMemo(() => [
     {
@@ -57,15 +115,6 @@ export default function RoleTab({ ctx }: RoleTabProps) {
       key: 'updatedDate',
       header: 'Updated Date',
       render: (role: RoleTemplate) => role.updatedDate || 'Not added',
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (role: RoleTemplate) => (
-        <span className={`status-chip ${role.status === 'Inactive' || role.status === '0' ? 'status-chip--inactive' : 'status-chip--active'}`}>
-          {role.status || 'Active'}
-        </span>
-      ),
     },
     {
       key: 'privileges',
@@ -98,6 +147,28 @@ export default function RoleTab({ ctx }: RoleTabProps) {
     setActionError('');
     setModalMode('delete');
   };
+
+  const openRoleFilter = () => {
+    setDraftRoleFilters(roleFilters);
+    setIsRoleFilterOpen(true);
+  };
+
+  const applyRoleFilter = () => {
+    setRoleFilters(draftRoleFilters);
+    setIsRoleFilterOpen(false);
+  };
+
+  const roleFilterAction = (
+    <div className="table-filter-trigger">
+      <button type="button" className="btn-app btn-app-secondary" onClick={openRoleFilter}>
+        <FaFilter />
+        Filter
+      </button>
+      {hasActiveRoleFilters ? (
+        <span className="status-chip status-chip--info">{roleFilterLabel}</span>
+      ) : null}
+    </div>
+  );
 
   const handleSaveRole = async (values: RoleTemplateFormValues) => {
     if (!values.roleName) {
@@ -157,6 +228,32 @@ export default function RoleTab({ ctx }: RoleTabProps) {
 
   return (
     <div className="row g-4">
+      {isRoleFilterOpen ? (
+        <ActionModal
+          title="Filter Roles"
+          eyebrow="Role Filters"
+          description="Choose filters, then click Filter to update the predefined role list."
+          onClose={() => setIsRoleFilterOpen(false)}
+        >
+          <DataTableFilters
+            filters={roleFiltersConfig}
+            value={draftRoleFilters}
+            onChange={setDraftRoleFilters}
+            showHeader={false}
+            showFooterHint={false}
+            className="table-filter-panel--modal"
+          />
+          <div className="modal-actions">
+            <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsRoleFilterOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-app btn-app-primary" onClick={applyRoleFilter}>
+              Filter
+            </button>
+          </div>
+        </ActionModal>
+      ) : null}
+
       {modalMode === 'create' || modalMode === 'edit' ? (
         <ActionModal
           title={selectedRole ? 'Edit Role' : 'Create Role'}
@@ -206,15 +303,16 @@ export default function RoleTab({ ctx }: RoleTabProps) {
 
       <div className="col-12">
         <ReusableListTable
-          data={roleTemplates}
+          data={filteredRoleTemplates}
           columns={columns}
           rowKey={(role) => role.id}
           loading={isRoleTemplatesLoading}
           error={roleTemplatesError}
-          emptyMessage="No role templates found."
+          emptyMessage={hasActiveRoleFilters ? 'No role templates match these filters.' : 'No role templates found.'}
           eyebrow="Roles"
           title="Predefined roles"
           copy="Reusable privilege templates for Admin user creation."
+          headerAction={roleFilterAction}
           actionsLabel="Actions"
           renderActions={(role) => (
             <div className="table-actions">

@@ -7,6 +7,11 @@ import {
   type CustomerPermissions,
 } from '../../lib/platform-structure';
 import type { Counter, Employee } from '../../lib/store';
+import {
+  isValidPhoneNumber,
+  normalizePhoneNumber,
+  phoneNumberValidationMessage,
+} from '../../lib/validators/phone-validator';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -39,6 +44,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const [joinedDate, setJoinedDate] = useState(initialValues?.joinedDate || new Date().toISOString().split('T')[0]);
   const [showPassword, setShowPassword] = useState(Boolean(initialValues?.password));
   const [validationError, setValidationError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [permissions, setPermissions] = useState<Employee['permissions']>(
     intersectCustomerPermissions(
       normalizeCustomerPermissions(initialValues?.permissions ?? businessPermissions ?? buildDefaultCustomerPermissions()),
@@ -88,6 +94,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
+    if (!isValidPhoneNumber(phone)) {
+      setPhoneError(phoneNumberValidationMessage);
+      return;
+    }
+
     if (!departmentId) {
       setValidationError('Assign a department before saving the employee.');
       return;
@@ -96,7 +107,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     setValidationError('');
     onSubmit({
       name,
-      phone,
+      phone: normalizePhoneNumber(phone),
       email,
       password,
       permissions: intersectCustomerPermissions(permissions, businessPermissions),
@@ -141,7 +152,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             <Input label="Employee Name" placeholder="Example: Aarav Patel" value={name} onChange={(event) => setName(event.target.value)} required />
           </div>
           <div className="col-12 col-md-6">
-            <Input label="Phone" placeholder="Enter mobile number" value={phone} onChange={(event) => setPhone(event.target.value)} required />
+            <Input
+              label="Phone"
+              type="tel"
+              inputMode="numeric"
+              placeholder="Enter 10-digit mobile number"
+              value={phone}
+              onChange={(event) => {
+                setPhone(event.target.value);
+                setPhoneError('');
+              }}
+              error={phoneError}
+              required
+            />
           </div>
           <div className="col-12 col-md-6">
             <Input label="Joined Date" type="date" value={joinedDate} onChange={(event) => setJoinedDate(event.target.value)} />

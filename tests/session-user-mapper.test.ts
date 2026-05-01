@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { canAccessModuleForSession, createCustomerPermissions } from '../lib/platform-structure';
-import { extractAccessToken, mapLoginResponseToSessionUser } from '../lib/mappers/session-user-mapper';
+import { completeApiLogin } from '../lib/auth-session';
+import {
+  extractAccessToken,
+  INVALID_USER_TYPE_LOGIN_MESSAGE,
+  mapLoginResponseToSessionUser,
+  UNAUTHORIZED_ADMIN_LOGIN_MESSAGE,
+} from '../lib/mappers/session-user-mapper';
 
 describe('session user mapper', () => {
   test('extracts auth tokens from nested backend login response shapes', () => {
@@ -46,6 +52,9 @@ describe('session user mapper', () => {
       name: 'Business User',
       email: 'business@example.test',
       role: 'Customer',
+      userType: 'Business',
+      roleTemplateId: '2',
+      legacyRoleId: '2',
       businessId: '1',
       departmentId: undefined,
       counterId: undefined,
@@ -226,6 +235,9 @@ describe('session user mapper', () => {
       name: 'Aarav Patel',
       email: 'aarav@enest.com',
       role: 'Employee',
+      userType: 'Employee',
+      roleTemplateId: undefined,
+      legacyRoleId: 'employee',
       businessId: 'business-1',
       departmentId: 'department-1',
       counterId: 'department-1',
@@ -261,5 +273,145 @@ describe('session user mapper', () => {
     assert.equal(sessionUser?.businessId, 'business-1');
     assert.equal(sessionUser?.email, 'owner@business.com');
     assert.equal(sessionUser?.permissions?.customers_list, 1);
+  });
+
+  test('maps business user_type with role template id 5 without requiring legacy role 2', () => {
+    const sessionUser = mapLoginResponseToSessionUser('ransome@gmail.com', {
+      status: 200,
+      message: 'User login successfully.',
+      data: {
+        id: 34,
+        fullname: 'cashiy',
+        email_id: 'ransome@gmail.com',
+        username: 'ransome@gmail.com',
+        user_type: 'Business',
+        role: 5,
+        token: 'test-token',
+        permission: {
+          Customers_list: 1,
+          Employee_add: 0,
+        },
+      },
+    }, () => null);
+
+    assert.equal(sessionUser?.role, 'Customer');
+    assert.equal(sessionUser?.userType, 'Business');
+    assert.equal(sessionUser?.roleTemplateId, '5');
+    assert.equal(sessionUser?.legacyRoleId, '5');
+    assert.equal(sessionUser?.businessId, '34');
+    assert.equal(sessionUser?.permissions?.customers_list, 1);
+  });
+
+  test('maps business user_type with legacy role 2 as a role template id', () => {
+    const sessionUser = mapLoginResponseToSessionUser('business@example.test', {
+      data: {
+        id: 35,
+        fullname: 'Business User',
+        email_id: 'business@example.test',
+        user_type: 'Business',
+        role: 2,
+      },
+    }, () => null);
+
+    assert.equal(sessionUser?.role, 'Customer');
+    assert.equal(sessionUser?.userType, 'Business');
+    assert.equal(sessionUser?.roleTemplateId, '2');
+  });
+
+  test('maps employee user_type with role template id 5 when permissions are present', () => {
+    const sessionUser = mapLoginResponseToSessionUser('employee@example.test', {
+      data: {
+        id: 36,
+        fullname: 'Counter Employee',
+        email_id: 'employee@example.test',
+        user_type: 'Employee',
+        role: 5,
+        business_id: 'business-1',
+        permission: {
+          Services_access: 1,
+        },
+      },
+    }, () => null);
+
+    assert.equal(sessionUser?.role, 'Employee');
+    assert.equal(sessionUser?.userType, 'Employee');
+    assert.equal(sessionUser?.roleTemplateId, '5');
+    assert.equal(sessionUser?.businessId, 'business-1');
+    assert.equal(sessionUser?.permissions?.services_access, 1);
+  });
+
+  test('allows admin user_type only when role is 1', () => {
+    const sessionUser = mapLoginResponseToSessionUser('admin@enest.com', {
+      data: {
+        id: 1,
+        fullname: 'Admin User',
+        email_id: 'admin@enest.com',
+        user_type: 'Admin',
+        role: 1,
+      },
+    }, () => null);
+
+    assert.equal(sessionUser?.role, 'Admin');
+    assert.equal(sessionUser?.userType, 'Admin');
+    assert.equal(sessionUser?.legacyRoleId, '1');
+    assert.equal(sessionUser?.roleTemplateId, undefined);
+  });
+
+  test('rejects admin user_type when role is not 1', () => {
+    assert.throws(
+      () => mapLoginResponseToSessionUser('admin@enest.com', {
+        data: {
+          id: 1,
+          fullname: 'Admin User',
+          email_id: 'admin@enest.com',
+          user_type: 'Admin',
+          role: 5,
+        },
+      }, () => null),
+      new Error(UNAUTHORIZED_ADMIN_LOGIN_MESSAGE),
+    );
+  });
+
+  test('keeps legacy role 2 login compatible when user_type is missing', () => {
+    const sessionUser = mapLoginResponseToSessionUser('owner@example.test', {
+      data: {
+        id: 40,
+        fullname: 'Owner',
+        email_id: 'owner@example.test',
+        role: 2,
+      },
+    }, () => null);
+
+    assert.equal(sessionUser?.role, 'Customer');
+    assert.equal(sessionUser?.userType, 'Business');
+    assert.equal(sessionUser?.legacyRoleId, '2');
+    assert.equal(sessionUser?.roleTemplateId, undefined);
+  });
+
+  test('rejects role template id 5 when user_type is missing', () => {
+    const sessionUser = mapLoginResponseToSessionUser('role5@example.test', {
+      data: {
+        id: 41,
+        fullname: 'Role 5 User',
+        email_id: 'role5@example.test',
+        role: 5,
+      },
+    }, () => null);
+
+    assert.equal(sessionUser, null);
+  });
+
+  test('reports invalid user type through the login completion flow', () => {
+    assert.throws(
+      () => completeApiLogin('role5@example.test', {
+        data: {
+          id: 41,
+          fullname: 'Role 5 User',
+          email_id: 'role5@example.test',
+          role: 5,
+        },
+      }),
+      new Error(INVALID_USER_TYPE_LOGIN_MESSAGE),
+    );
   });
 });

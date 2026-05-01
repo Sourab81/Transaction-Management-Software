@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import type { BusinessCustomer } from '../../lib/store';
+import {
+  isValidPhoneNumber,
+  normalizePhoneNumber,
+  phoneNumberValidationMessage,
+} from '../../lib/validators/phone-validator';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -20,12 +25,19 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ initialValues, submitLabel,
   const [email, setEmail] = useState(initialValues?.email || '');
   const [status, setStatus] = useState<BusinessCustomer['status']>(initialValues?.status || 'Active');
   const [joinedDate, setJoinedDate] = useState(initialValues?.joinedDate || new Date().toISOString().split('T')[0]);
+  const [phoneError, setPhoneError] = useState('');
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+
+    if (!isValidPhoneNumber(phone)) {
+      setPhoneError(phoneNumberValidationMessage);
+      return;
+    }
+
     onSubmit({
       name,
-      phone,
+      phone: normalizePhoneNumber(phone),
       email,
       status,
       joinedDate,
@@ -52,7 +64,19 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ initialValues, submitLabel,
             <Input label={`${entityLabel} Name`} placeholder="Example: Riya Sharma" value={name} onChange={(event) => setName(event.target.value)} required />
           </div>
           <div className="col-12 col-md-6">
-            <Input label="Phone" placeholder="Enter mobile number" value={phone} onChange={(event) => setPhone(event.target.value)} required />
+            <Input
+              label="Phone"
+              type="tel"
+              inputMode="numeric"
+              placeholder="Enter 10-digit mobile number"
+              value={phone}
+              onChange={(event) => {
+                setPhone(event.target.value);
+                setPhoneError('');
+              }}
+              error={phoneError}
+              required
+            />
           </div>
           <div className="col-12 col-md-6">
             <Input label="Email" type="email" placeholder="customer@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />

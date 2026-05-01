@@ -14,6 +14,11 @@ import {
   getBusinessSubscriptionPlan,
   type BusinessSubscriptionPlanId,
 } from '../../lib/subscription';
+import {
+  isValidPhoneNumber,
+  normalizePhoneNumber,
+  phoneNumberValidationMessage,
+} from '../../lib/validators/phone-validator';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -49,6 +54,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const [email, setEmail] = useState(initialValues?.email || '');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Business['status']>(initialValues?.status || 'Active');
+  const [phoneError, setPhoneError] = useState('');
   const joinedDate = initialValues?.joinedDate || today;
   const [permissions, setPermissions] = useState<Business['permissions']>(
     initialValues?.permissions
@@ -70,6 +76,11 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const previewEndDate = calculateBusinessSubscriptionEndDate(planId, subscriptionStartDate);
   const activePlan = subscription ? getBusinessSubscriptionPlan(subscription.planId) : null;
   const selectableRoleTemplates = roleTemplates.filter(isSelectableRoleTemplate);
+  const roleSelectPlaceholder = isRoleTemplatesLoading
+    ? 'Loading roles...'
+    : selectableRoleTemplates.length === 0
+      ? 'No active roles available'
+      : 'Select role';
   const canEditPermissions = Boolean(initialValues) || hasPermissionDraft || Boolean(roleTemplatesError);
 
   const handleRoleTemplateChange = (roleTemplateId: string) => {
@@ -103,9 +114,14 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
+    if (!isValidPhoneNumber(phone)) {
+      setPhoneError(phoneNumberValidationMessage);
+      return;
+    }
+
     onSubmit({
       name,
-      phone,
+      phone: normalizePhoneNumber(phone),
       email,
       password: password || initialValues?.password || '',
       status,
@@ -149,7 +165,19 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
             <Input label="User Name" placeholder="Example: Riya Services" value={name} onChange={(event) => setName(event.target.value)} required />
           </div>
           <div className="col-12 col-md-6">
-            <Input label="Phone" placeholder="Enter mobile number" value={phone} onChange={(event) => setPhone(event.target.value)} required />
+            <Input
+              label="Phone"
+              type="tel"
+              inputMode="numeric"
+              placeholder="Enter 10-digit mobile number"
+              value={phone}
+              onChange={(event) => {
+                setPhone(event.target.value);
+                setPhoneError('');
+              }}
+              error={phoneError}
+              required
+            />
           </div>
           <div className="col-12 col-md-6">
             <Input
@@ -204,7 +232,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
                 options={[
                   {
                     value: '',
-                    label: isRoleTemplatesLoading ? 'Loading roles...' : 'Select role',
+                    label: roleSelectPlaceholder,
                   },
                   ...selectableRoleTemplates.map((roleTemplate) => ({
                     value: roleTemplate.id,
@@ -216,6 +244,10 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
               {roleTemplatesError ? (
                 <div className="form-hint text-warning">
                   Unable to load roles. You can still set permissions manually.
+                </div>
+              ) : selectableRoleTemplates.length === 0 && !isRoleTemplatesLoading ? (
+                <div className="form-hint text-warning">
+                  No active roles are available for user creation.
                 </div>
               ) : (
                 <div className="form-hint">Selecting a role fills permissions; you can still edit them below.</div>

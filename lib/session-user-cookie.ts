@@ -9,6 +9,9 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUserRole = (value: unknown): value is SessionUser['role'] =>
   value === 'Admin' || value === 'Employee' || value === 'Customer';
 
+const isSessionUserType = (value: unknown): value is NonNullable<SessionUser['userType']> =>
+  value === 'Admin' || value === 'Business' || value === 'Employee';
+
 const buildCookieString = (value: string, maxAgeSeconds: number) => {
   const segments = [
     `${AUTH_SESSION_USER_COOKIE_NAME}=${value}`,
@@ -39,6 +42,9 @@ export const serializeSessionUserCookieValue = (sessionUser: SessionUser) =>
       name: sessionUser.name,
       email: sessionUser.email,
       role: sessionUser.role,
+      userType: sessionUser.userType,
+      roleTemplateId: sessionUser.roleTemplateId,
+      legacyRoleId: sessionUser.legacyRoleId,
       businessId: sessionUser.businessId,
       departmentId: sessionUser.departmentId,
       counterId: sessionUser.counterId,
@@ -66,6 +72,15 @@ export const parseSessionUserCookieValue = (
       name: String(parsed.name),
       email: normalizeEmail(String(parsed.email)),
       role: parsed.role,
+      userType: isSessionUserType(parsed.userType) ? parsed.userType : undefined,
+      roleTemplateId:
+        typeof parsed.roleTemplateId === 'string' && parsed.roleTemplateId.trim()
+          ? parsed.roleTemplateId
+          : undefined,
+      legacyRoleId:
+        typeof parsed.legacyRoleId === 'string' && parsed.legacyRoleId.trim()
+          ? parsed.legacyRoleId
+          : undefined,
       businessId:
         typeof parsed.businessId === 'string' && parsed.businessId.trim()
           ? parsed.businessId
