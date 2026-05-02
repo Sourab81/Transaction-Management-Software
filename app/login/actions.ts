@@ -15,6 +15,7 @@ import {
   serializePrefetchedWorkspaceDataCookieValue,
 } from '../../lib/workspace-prefetch-cookie';
 import type { LoginApiResponseBody } from '../../lib/api/auth';
+import { readLoginFormValues } from './login-form-values';
 
 export interface LoginActionResult {
   ok: boolean;
@@ -24,11 +25,6 @@ export interface LoginActionResult {
   email: string;
   submitted: boolean;
 }
-
-const readStringFormValue = (formData: FormData, key: string) => {
-  const value = formData.get(key);
-  return typeof value === 'string' ? value.trim() : '';
-};
 
 const clearBootstrapCookies = async () => {
   const cookieStore = await cookies();
@@ -46,10 +42,9 @@ export async function loginWithServerAction(
   _previousState: LoginActionResult,
   formData: FormData,
 ): Promise<LoginActionResult> {
-  const normalizedEmail = readStringFormValue(formData, 'email').toLowerCase();
-  const normalizedPassword = readStringFormValue(formData, 'password');
+  const { email: normalizedEmail, password } = readLoginFormValues(formData);
 
-  if (!normalizedEmail || !normalizedPassword) {
+  if (!normalizedEmail || password.length === 0) {
     return {
       ok: false,
       body: null,
@@ -64,7 +59,7 @@ export async function loginWithServerAction(
     const { statusCode, body, accessToken, counters } =
       await loginAndLoadWorkspaceBootstrap(
         normalizedEmail,
-        normalizedPassword,
+        password,
       );
     const cookieStore = await cookies();
     cookieStore.set(

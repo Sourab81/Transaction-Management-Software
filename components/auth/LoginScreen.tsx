@@ -67,9 +67,8 @@ const LoginScreen = () => {
     event.preventDefault();
 
     const normalizedEmail = email.trim();
-    const normalizedPassword = password.trim();
 
-    if (!normalizedEmail || !normalizedPassword) {
+    if (!normalizedEmail || password.length === 0) {
       event.preventDefault();
       setStatus('');
       setError('Enter your email and password to continue.');
@@ -90,7 +89,7 @@ const LoginScreen = () => {
         body: JSON.stringify({
           username: normalizedEmail,
           email: normalizedEmail,
-          password: normalizedPassword,
+          password,
         }),
         cache: 'no-store',
       });

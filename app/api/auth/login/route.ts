@@ -10,53 +10,12 @@ import {
   getWorkspacePrefetchServerCookieOptions,
   serializePrefetchedWorkspaceDataCookieValue,
 } from '../../../../lib/workspace-prefetch-cookie';
+import { readLoginPayload } from './login-payload';
 
 export const dynamic = 'force-dynamic';
 
 // TODO(server-actions): keep this route for backward compatibility while the
 // login form migrates to app/login/actions.ts.
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const readStringValue = (source: Record<string, unknown> | null, keys: string[]) => {
-  if (!source) {
-    return null;
-  }
-
-  for (const key of keys) {
-    const value = source[key];
-
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return null;
-};
-
-const readLoginPayload = async (request: Request) => {
-  const contentType = request.headers.get('content-type')?.toLowerCase() || '';
-
-  if (contentType.includes('application/json')) {
-    const payload = await request.json().catch(() => null);
-    const record = isRecord(payload) ? payload : null;
-
-    return {
-      username: readStringValue(record, ['username', 'email']),
-      password: readStringValue(record, ['password']),
-    };
-  }
-
-  const formData = await request.formData().catch(() => null);
-  const username = formData?.get('username') || formData?.get('email');
-  const password = formData?.get('password');
-
-  return {
-    username: typeof username === 'string' ? username.trim() : null,
-    password: typeof password === 'string' ? password.trim() : null,
-  };
-};
 
 const clearBootstrapCookies = async () => {
   const cookieStore = await cookies();
@@ -73,7 +32,7 @@ const clearBootstrapCookies = async () => {
 export async function POST(request: Request) {
   const { username, password } = await readLoginPayload(request);
 
-  if (!username || !password) {
+  if (!username || password === null || password.length === 0) {
     return Response.json(
       { message: 'Username and password are required.' },
       { status: 400 },
