@@ -38,6 +38,8 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     customerDirectoryRecords,
     customerOutstandingRows,
     customerPaymentTransactions,
+    isCustomersLoading,
+    isTransactionsLoading,
     handleViewCustomerHistory,
     handleEditCustomer,
     handleViewTransaction,
@@ -103,8 +105,12 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   const adminDirectoryEmptyDescription = !hasActiveBusinessDirectoryFilters
     ? 'Create a user workspace to start managing directory records from this screen.'
     : `Try different filters or clear ${businessPermissionFilterLabel}.`;
-  const isAdminBusinessDirectoryLoading = currentRole === 'Admin' && isBusinessDirectoryLoading;
   const adminBusinessDirectoryError = currentRole === 'Admin' ? businessDirectoryError : '';
+  const isCustomerDirectoryLoading = currentRole === 'Admin'
+    ? isBusinessDirectoryLoading
+    : isCustomersLoading;
+  const isCustomerPaymentsLoading = currentRole !== 'Admin' && isTransactionsLoading;
+  const isCustomerOutstandingLoading = currentRole !== 'Admin' && (isCustomersLoading || isTransactionsLoading);
   const openBusinessFilter = () => {
     setDraftBusinessFilters(businessDirectoryFilters);
     setIsBusinessFilterOpen(true);
@@ -198,13 +204,13 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
           renderCustomerRoutePermissionState()
         ) : canViewCustomerRecords ? (
           currentRole === 'Admin' || customerPageView === 'list' ? (
-            adminBusinessDirectoryError && customerDirectoryRecords.length === 0 ? (
+            adminBusinessDirectoryError && customerDirectoryRecords.length === 0 && !isCustomerDirectoryLoading ? (
               <ErrorState
                 eyebrow="User Directory"
                 title="Unable to load users"
                 description={adminBusinessDirectoryError}
               />
-            ) : customerDirectoryRecords.length === 0 && !isAdminBusinessDirectoryLoading ? (
+            ) : customerDirectoryRecords.length === 0 && !isCustomerDirectoryLoading ? (
               <EmptyState
                 eyebrow={currentRole === 'Admin' ? 'User Directory' : customerModuleUi?.label}
                 title={currentRole === 'Admin' ? adminDirectoryEmptyTitle : customerViewUi.emptyTitle}
@@ -221,7 +227,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
                   : 'Contact details and profile status used across service workflows.'}
                 entityLabel={customerEntityLabel}
                 emptyLabel={`No ${customerEntityLabel.toLowerCase()} records found.`}
-                isLoading={isAdminBusinessDirectoryLoading}
+                isLoading={isCustomerDirectoryLoading}
                 pagination={currentRole === 'Admin' ? customerDirectoryPagination : undefined}
                 headerAction={businessFilterAction}
                 showRoleColumn={currentRole === 'Admin'}
@@ -232,24 +238,32 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               />
             )
           ) : customerPageView === 'payments' ? (
-            customerPaymentTransactions.length === 0 ? (
+            customerPaymentTransactions.length === 0 && !isCustomerPaymentsLoading ? (
               <EmptyState
                 eyebrow={customerModuleUi?.label}
                 title={getCustomerWorkspaceViewUi('payments').emptyTitle}
                 description={getCustomerWorkspaceViewUi('payments').emptyDescription}
               />
             ) : (
-              <CustomerPaymentsTable transactions={customerPaymentTransactions} onView={handleViewTransaction} />
+              <CustomerPaymentsTable
+                transactions={customerPaymentTransactions}
+                isLoading={isCustomerPaymentsLoading}
+                onView={handleViewTransaction}
+              />
             )
           ) : (
-            customerOutstandingRows.length === 0 ? (
+            customerOutstandingRows.length === 0 && !isCustomerOutstandingLoading ? (
               <EmptyState
                 eyebrow={customerModuleUi?.label}
                 title={getCustomerWorkspaceViewUi('outstanding').emptyTitle}
                 description={getCustomerWorkspaceViewUi('outstanding').emptyDescription}
               />
             ) : (
-              <CustomerOutstandingTable rows={customerOutstandingRows} onView={handleViewCustomerHistory} />
+              <CustomerOutstandingTable
+                rows={customerOutstandingRows}
+                isLoading={isCustomerOutstandingLoading}
+                onView={handleViewCustomerHistory}
+              />
             )
           )
         ) : (

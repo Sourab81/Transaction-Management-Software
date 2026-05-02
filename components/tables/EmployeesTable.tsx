@@ -8,9 +8,16 @@ interface EmployeesTableProps {
   employees: Employee[];
   onEdit?: (employee: Employee) => void;
   onDelete?: (employeeId: string) => void;
+  isLoading?: boolean;
 }
 
-const EmployeesTable: React.FC<EmployeesTableProps> = ({ departments, employees, onEdit, onDelete }) => {
+const EmployeesTable: React.FC<EmployeesTableProps> = ({
+  departments,
+  employees,
+  onEdit,
+  onDelete,
+  isLoading = false,
+}) => {
   const hasActions = Boolean(onEdit || onDelete);
   const departmentById = new Map(departments.map((department) => [department.id, department]));
 
@@ -22,6 +29,7 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({ departments, employees,
       title="Employee directory"
       copy="Staff contact details and status in a clean list the business owner can manage."
       emptyLabel="No employee records found."
+      isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_employee, index) => index + 1 },
         { key: 'employee', header: 'Employee', render: (employee) => <span className="data-table__primary">{employee.name}</span> },

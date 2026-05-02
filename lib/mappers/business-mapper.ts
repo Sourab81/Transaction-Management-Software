@@ -60,7 +60,6 @@ export const mapBusinessRecord = (record: UnknownRecord): Business | null => {
     name,
     phone: readStringValue(record, ['contact_no', 'phone', 'mobile', 'mobile_no', 'phone_number']) || 'Not added',
     email: readStringValue(record, ['email_id', 'email', 'user_email', 'username']) || '',
-    password: '',
     role: readStringValue(record, ['role']) || undefined,
     role_id: readStringValue(record, ['role_id']) || undefined,
     roleTemplateId,

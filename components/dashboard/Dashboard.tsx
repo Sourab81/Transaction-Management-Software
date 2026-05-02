@@ -96,7 +96,6 @@ import DetailList from '../ui/DetailList';
 import ConfirmActionModal from '../ui/state/ConfirmActionModal';
 import EmptyState from '../ui/state/EmptyState';
 import ErrorState from '../ui/state/ErrorState';
-import LoadingState from '../ui/state/LoadingState';
 import PermissionState from '../ui/state/PermissionState';
 import NotificationCenter from './NotificationCenter';
 import BusinessOnboarding from './BusinessOnboarding';
@@ -167,6 +166,23 @@ const mergeWorkspaceRecords = <T extends { id: string }>(workspaceRecords: T[], 
   const remainingWorkspaceRecords = workspaceRecords.filter((record) => !apiRecordIds.has(record.id));
 
   return [...mergedRecords, ...remainingWorkspaceRecords];
+};
+
+const toBusinessStateValues = (
+  values: BusinessFormValues,
+): Omit<BusinessFormValues, 'password' | 'roleTemplateBackendPrivileges'> => {
+  const stateValues = { ...values };
+  delete stateValues.password;
+  delete stateValues.roleTemplateBackendPrivileges;
+  return stateValues;
+};
+
+const toEmployeeStateValues = (
+  values: EmployeeFormValues,
+): Omit<EmployeeFormValues, 'password'> => {
+  const stateValues = { ...values };
+  delete stateValues.password;
+  return stateValues;
 };
 
 type ModalMode =
@@ -426,7 +442,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       name: currentUser.name,
       phone: 'Not added',
       email: currentUser.email,
-      password: '',
       status: 'Active' as const,
       onboardingCompleted: true,
       onboardingStep: 'dashboard' as const,
@@ -472,6 +487,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   } = useReports(shouldLoadWorkspaceApi, initialWorkspaceApiData?.reports);
   const {
     summary: apiDashboardSummary,
+    isLoading: isDashboardSummaryLoading,
   } = useDashboardSummary(shouldLoadWorkspaceApi, initialWorkspaceApiData?.dashboardSummary);
   const {
     roles: roleTemplates,
@@ -1642,8 +1658,29 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   };
 
+  const getActiveSummaryLoading = () => {
+    switch (activeTab) {
+      case 'customers':
+        return currentRole === 'Admin' ? isBackendBusinessesLoading : isCustomersLoading;
+      case 'employee':
+        return isEmployeesLoading;
+      case 'departments':
+        return isDepartmentsLoading;
+      case 'transactions':
+        return isTransactionsLoading;
+      case 'reports':
+        return isReportsLoading;
+      case 'dashboard':
+        return currentRole === 'Admin'
+          ? isBackendBusinessesLoading
+          : isDashboardSummaryLoading && !apiDashboardSummary;
+      default:
+        return false;
+    }
+  };
+
   const renderSummaryCards = (cards: SummaryCardProps[]) => (
-    <SummaryGrid cards={cards} />
+    <SummaryGrid cards={cards} loading={getActiveSummaryLoading()} />
   );
 
   const renderBusinessPlanSection = (lockedMode = false) => {
@@ -1752,7 +1789,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </section>
       </div>
 
-      <SummaryGrid cards={adminDashboardSummary} />
+      <SummaryGrid cards={adminDashboardSummary} loading={isBackendBusinessesLoading} />
 
       <div className="col-12 col-xl-6 dashboard-balance-col">
         <section className="panel p-4 dashboard-balance-panel">
@@ -2471,10 +2508,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (editingBusiness) {
+      const stateValues = toBusinessStateValues(values);
+
       dispatch({
         type: 'UPDATE_BUSINESS',
         payload: {
-          ...values,
+          ...stateValues,
           id: editingBusiness.id,
           onboardingCompleted: editingBusiness.onboardingCompleted,
           onboardingStep: editingBusiness.onboardingStep,
@@ -2483,10 +2522,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       addHistoryEvent(`${values.name} business updated`, 'Customers');
       addNotification('success', 'Business updated successfully.');
     } else {
+      const stateValues = toBusinessStateValues(values);
+
       dispatch({
         type: 'ADD_BUSINESS',
         payload: {
-          ...values,
+          ...stateValues,
           onboardingCompleted: false,
           onboardingStep: 'welcome',
         },
@@ -2515,7 +2556,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     persistBusinessProfileUpdate(currentBusiness, updates);
   };
 
-  const handleAdminProfileSave = (values: { name: string; email: string; password?: string }) => {
+  const handleAdminProfileSave = (values: { name: string; email: string }) => {
     const nextName = values.name.trim();
     const nextEmail = normalizeEmail(values.email);
     if (!nextName || !nextEmail) {
@@ -2564,7 +2605,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       name: nextName,
       phone: nextPhone,
       email: nextEmail,
-      password: values.password || currentBusiness.password,
     });
     updateSessionUser({
       name: nextName,
@@ -2602,7 +2642,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         name: nextName,
         phone: nextPhone,
         email: nextEmail,
-        password: values.password || currentEmployee.password,
       },
     });
     updateSessionUser({
@@ -2874,11 +2913,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (editingEmployee) {
-      dispatch({ type: 'UPDATE_EMPLOYEE', businessId, payload: { ...values, id: editingEmployee.id } });
+      const stateValues = toEmployeeStateValues(values);
+      dispatch({ type: 'UPDATE_EMPLOYEE', businessId, payload: { ...stateValues, id: editingEmployee.id } });
       addHistoryEvent(`${values.name} employee updated`, 'Employees');
       addNotification('success', 'Employee updated successfully.');
     } else {
-      dispatch({ type: 'ADD_EMPLOYEE', businessId, payload: values });
+      const stateValues = toEmployeeStateValues(values);
+      dispatch({ type: 'ADD_EMPLOYEE', businessId, payload: stateValues });
       addHistoryEvent(`${values.name} employee added`, 'Employees');
       addNotification('success', 'Employee added successfully.');
     }
@@ -3887,6 +3928,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     currentRole,
     currentUser,
     dashboardSummary: apiDashboardSummary,
+    isDashboardSummaryLoading,
     currentBusinessProfile: currentBusiness || null,
     currentEmployeeProfile: currentEmployee,
     accessContext,
@@ -3903,6 +3945,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     expenses,
     additionOptions,
     roleTemplates,
+    isCustomersLoading,
+    isEmployeesLoading,
+    isDepartmentsLoading,
+    isTransactionsLoading,
+    isReportsLoading,
     isRoleTemplatesLoading,
     roleTemplatesError,
     workflowDraft,
@@ -4005,17 +4052,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (activeTab === 'departments') {
-      if (isDepartmentsLoading && counters.length === 0) {
-        return (
-          <LoadingState
-            eyebrow="Loading Departments"
-            title="Fetching departments"
-            description="Pulling the latest department and counter records from the backend."
-          />
-        );
-      }
-
-      if (departmentsError && counters.length === 0) {
+      if (!isDepartmentsLoading && departmentsError && counters.length === 0) {
         return (
           <ErrorState
             eyebrow="Departments Unavailable"
@@ -4028,17 +4065,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (activeTab === 'customers') {
-      if (isCustomersLoading && customers.length === 0) {
-        return (
-          <LoadingState
-            eyebrow="Loading Customers"
-            title="Fetching customers"
-            description="Pulling the latest customer directory from the backend."
-          />
-        );
-      }
-
-      if (customersError && customers.length === 0) {
+      if (!isCustomersLoading && customersError && customers.length === 0) {
         return (
           <ErrorState
             eyebrow="Customers Unavailable"
@@ -4051,17 +4078,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (activeTab === 'employee') {
-      if (isEmployeesLoading && employees.length === 0) {
-        return (
-          <LoadingState
-            eyebrow="Loading Employees"
-            title="Fetching employees"
-            description="Pulling the latest employee records from the backend."
-          />
-        );
-      }
-
-      if (employeesError && employees.length === 0) {
+      if (!isEmployeesLoading && employeesError && employees.length === 0) {
         return (
           <ErrorState
             eyebrow="Employees Unavailable"
@@ -4074,17 +4091,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (activeTab === 'transactions') {
-      if (isTransactionsLoading && transactionHistory.length === 0) {
-        return (
-          <LoadingState
-            eyebrow="Loading Transactions"
-            title="Fetching transactions"
-            description="Pulling the latest transaction records from the backend."
-          />
-        );
-      }
-
-      if (transactionsError && transactionHistory.length === 0) {
+      if (!isTransactionsLoading && transactionsError && transactionHistory.length === 0) {
         return (
           <ErrorState
             eyebrow="Transactions Unavailable"
@@ -4097,17 +4104,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     if (activeTab === 'reports') {
-      if (isReportsLoading && reports.length === 0) {
-        return (
-          <LoadingState
-            eyebrow="Loading Reports"
-            title="Fetching reports"
-            description="Pulling the latest report records from the backend."
-          />
-        );
-      }
-
-      if (reportsError && reports.length === 0) {
+      if (!isReportsLoading && reportsError && reports.length === 0) {
         return (
           <ErrorState
             eyebrow="Reports Unavailable"

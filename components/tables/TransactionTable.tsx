@@ -11,6 +11,7 @@ interface TransactionTableProps {
   onToggleFilters?: () => void;
   isFilterOpen?: boolean;
   headerAction?: React.ReactNode;
+  isLoading?: boolean;
 }
 
 const getStatusClass = (status: Transaction['status']) => {
@@ -28,6 +29,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   onToggleFilters,
   isFilterOpen = false,
   headerAction,
+  isLoading = false,
 }) => {
   const hasActions = Boolean(onEdit || onView || onDelete);
 
@@ -39,6 +41,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       title="Recent activity"
       copy="Track service, amount, status, and timeline in one clean view."
       emptyLabel="No transaction records found."
+      isLoading={isLoading}
       headerAction={headerAction || (onToggleFilters ? (
         <button
           type="button"

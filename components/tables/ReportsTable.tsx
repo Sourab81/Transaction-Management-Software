@@ -7,6 +7,7 @@ interface ReportsTableProps {
   reports: ReportItem[];
   onView?: (report: ReportItem) => void;
   onDelete?: (reportId: string) => void;
+  isLoading?: boolean;
 }
 
 const getStatusClass = (status: ReportItem['status']) => {
@@ -15,7 +16,12 @@ const getStatusClass = (status: ReportItem['status']) => {
   return 'status-chip status-chip--draft';
 };
 
-const ReportsTable: React.FC<ReportsTableProps> = ({ reports, onView, onDelete }) => {
+const ReportsTable: React.FC<ReportsTableProps> = ({
+  reports,
+  onView,
+  onDelete,
+  isLoading = false,
+}) => {
   const hasActions = Boolean(onView || onDelete);
 
   return (
@@ -26,6 +32,7 @@ const ReportsTable: React.FC<ReportsTableProps> = ({ reports, onView, onDelete }
       title="Reporting queue"
       copy="Generated exports, owners, and schedule state in a simple list."
       emptyLabel="No report records found."
+      isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_report, index) => index + 1 },
         { key: 'report', header: 'Report', render: (report) => <span className="data-table__primary">{report.name}</span> },

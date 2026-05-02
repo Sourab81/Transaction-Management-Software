@@ -14,9 +14,14 @@ export interface CustomerOutstandingRow {
 interface CustomerOutstandingTableProps {
   rows: CustomerOutstandingRow[];
   onView?: (customerId: string) => void;
+  isLoading?: boolean;
 }
 
-const CustomerOutstandingTable: React.FC<CustomerOutstandingTableProps> = ({ rows, onView }) => {
+const CustomerOutstandingTable: React.FC<CustomerOutstandingTableProps> = ({
+  rows,
+  onView,
+  isLoading = false,
+}) => {
   const hasActions = Boolean(onView);
 
   return (
@@ -27,6 +32,7 @@ const CustomerOutstandingTable: React.FC<CustomerOutstandingTableProps> = ({ row
       title="Customer outstanding list"
       copy="See which customers still have pending payments and how much is outstanding."
       emptyLabel="No outstanding customer payments found."
+      isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_row, index) => index + 1 },
         { key: 'customer', header: 'Customer', render: (row) => <span className="data-table__primary">{row.customerName}</span> },

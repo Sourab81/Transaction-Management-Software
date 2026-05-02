@@ -28,7 +28,6 @@ export const mapEmployeeRecord = (
     name,
     phone: readStringValue(record, ['phone', 'mobile', 'mobile_no', 'phone_number']) || 'Not added',
     email: readStringValue(record, ['email', 'employee_email', 'user_email', 'username']) || '',
-    password: readStringValue(record, ['password']) || '',
     permissions: readPermissionsFromSources(record) || fallbackPermissions || buildDefaultCustomerPermissions(),
     departmentId: readStringValue(record, ['department_id', 'departmentId', 'counter_id', 'counterId']) || undefined,
     status: normalizeActiveStatus(readStringValue(record, ['status', 'is_active'])),
@@ -50,4 +49,3 @@ export const mapEmployeesResponse = (payload: unknown, fallbackPermissions?: Cus
     return employees;
   }, []);
 };
-

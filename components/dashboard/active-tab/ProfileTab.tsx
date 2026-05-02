@@ -157,6 +157,8 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
         email: trimmedEmail,
         password: trimmedPassword || undefined,
       });
+      setPassword('');
+      setShowPassword(false);
       return;
     }
 
@@ -166,6 +168,8 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
       email: trimmedEmail,
       password: trimmedPassword || undefined,
     });
+    setPassword('');
+    setShowPassword(false);
   };
 
   return (

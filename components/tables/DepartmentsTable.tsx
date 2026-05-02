@@ -13,11 +13,18 @@ interface DepartmentsTableProps {
   counters: Counter[];
   onEdit?: (counter: Counter) => void;
   onDelete?: (counterId: string) => void;
+  isLoading?: boolean;
 }
 
 const formatMoney = (amount: number) => `Rs. ${amount.toLocaleString('en-IN')}`;
 
-const DepartmentsTable: React.FC<DepartmentsTableProps> = ({ accounts, counters, onEdit, onDelete }) => {
+const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
+  accounts,
+  counters,
+  onEdit,
+  onDelete,
+  isLoading = false,
+}) => {
   const hasActions = Boolean(onEdit || onDelete);
 
   return (
@@ -28,6 +35,7 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({ accounts, counters,
       title="Department and counter records"
       copy="Track department codes, default posting accounts, linked account counts, balances, and status from one searchable table."
       emptyLabel="No department records found."
+      isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_counter, index) => index + 1 },
         {

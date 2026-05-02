@@ -66,7 +66,7 @@ describe('store migration', () => {
 
     assert.equal(migratedBusiness?.name, 'Legacy Business');
     assert.equal(migratedBusiness?.email, 'legacy@example.com');
-    assert.equal(migratedBusiness?.password, '');
+    assert.equal(Object.hasOwn(migratedBusiness ?? {}, 'password'), false);
     assert.equal(migratedBusiness?.status, 'Active');
     assert.equal(migratedBusiness?.subscription?.planId, 'trial-1-week');
     assert.equal(migratedBusiness?.subscription?.status, 'trial');

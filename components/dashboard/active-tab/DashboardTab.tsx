@@ -19,6 +19,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   const {
     currentRole,
     dashboardSummary,
+    isDashboardSummaryLoading,
     selectedCounter,
     visibleServices,
     recentServices,
@@ -30,7 +31,6 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
     handleDeleteRecord,
     renderTransactionFilters,
     isTransactionFiltersOpen,
-    transactionFilters,
     hasActiveTransactionFilters,
     filteredTransactionRecords,
     canManageModule,
@@ -53,6 +53,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   const customerCount = dashboardSummary?.customerCount ?? customerDirectoryRecords.length;
   const activeServiceCount = dashboardSummary?.activeServiceCount
     ?? visibleServices.filter((service) => service.status === 'Active').length;
+  const showDashboardSummarySkeletons = isDashboardSummaryLoading && !dashboardSummary;
 
   const transactionFilterAction = (
     <div className="table-filter-trigger">
@@ -174,24 +175,28 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
             value={`Rs. ${collectedAmount.toLocaleString('en-IN')}`}
             icon={<FaDollarSign />}
             color="green"
+            loading={showDashboardSummarySkeletons}
           />
           <DashboardCard
             title="Pending Transactions"
             value={pendingTransactions}
             icon={<FaHourglassHalf />}
             color="orange"
+            loading={showDashboardSummarySkeletons}
           />
           <DashboardCard
             title="Customers"
             value={customerCount}
             icon={<FaUsers />}
             color="blue"
+            loading={showDashboardSummarySkeletons}
           />
           <DashboardCard
             title="Active Services"
             value={activeServiceCount}
             icon={<FaCog />}
             color="purple"
+            loading={showDashboardSummarySkeletons}
           />
         </div>
       </section>

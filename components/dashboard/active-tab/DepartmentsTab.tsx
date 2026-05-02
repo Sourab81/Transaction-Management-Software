@@ -18,6 +18,7 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
     canAddDepartmentRecords,
     canEditDepartmentRecords,
     canDeleteDepartmentRecords,
+    isDepartmentsLoading,
     counters,
     accounts,
     filteredDepartments,
@@ -115,7 +116,7 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
       </div>
 
       <div className="col-12">
-        {filteredDepartments.length === 0 ? (
+        {filteredDepartments.length === 0 && !isDepartmentsLoading ? (
           <EmptyState
             eyebrow={departmentsUi?.label}
             title={hasActiveFilters ? 'No departments match these filters' : departmentsUi?.emptyTitle || 'No departments added yet'}
@@ -128,6 +129,7 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
           <DepartmentsTable
             accounts={accounts}
             counters={filteredDepartments.map((row) => row.counter)}
+            isLoading={isDepartmentsLoading}
             onEdit={canEditDepartmentRecords ? handleEditDepartment : undefined}
             onDelete={canDeleteDepartmentRecords ? (id: string) => handleDeleteRecord('DELETE_COUNTER', id) : undefined}
           />

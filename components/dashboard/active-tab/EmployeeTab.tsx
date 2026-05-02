@@ -18,6 +18,7 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
     employeeSummary,
     canAddEmployeeRecords,
     canViewEmployeeRecords,
+    isEmployeesLoading,
     employees,
     counters,
     canEditEmployeeRecords,
@@ -53,7 +54,7 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
 
       <div className="col-12">
         {canViewEmployeeRecords ? (
-          employees.length === 0 ? (
+          employees.length === 0 && !isEmployeesLoading ? (
             <EmptyState
               eyebrow={employeeUi?.label}
               title={employeeUi?.emptyTitle || 'No employees added yet'}
@@ -64,6 +65,7 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
             <EmployeesTable
               departments={counters}
               employees={employees}
+              isLoading={isEmployeesLoading}
               onEdit={canEditEmployeeRecords ? handleEditEmployee : undefined}
               onDelete={canDeleteEmployeeRecords ? (id: string) => handleDeleteRecord('DELETE_EMPLOYEE', id) : undefined}
             />

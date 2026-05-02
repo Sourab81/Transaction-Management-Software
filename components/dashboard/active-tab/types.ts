@@ -54,6 +54,7 @@ export interface DashboardTabContext {
   currentRole: SessionUser['role'];
   currentUser: SessionUser;
   dashboardSummary: DashboardSummary | null;
+  isDashboardSummaryLoading: boolean;
   currentBusinessProfile: Business | null;
   currentEmployeeProfile: Employee | null;
   accessContext: SessionAccessContext;
@@ -70,6 +71,11 @@ export interface DashboardTabContext {
   expenses: Expense[];
   additionOptions: AdditionOption[];
   roleTemplates: RoleTemplate[];
+  isCustomersLoading: boolean;
+  isEmployeesLoading: boolean;
+  isDepartmentsLoading: boolean;
+  isTransactionsLoading: boolean;
+  isReportsLoading: boolean;
   isRoleTemplatesLoading: boolean;
   roleTemplatesError: string;
   workflowDraft: ServiceWorkflowDraft | null;
@@ -139,7 +145,7 @@ export interface DashboardTabContext {
   showNotification: (type: 'success' | 'warning' | 'error' | 'info', message: string) => void;
   reloadRoleTemplates: () => void;
   handleLogout: () => void;
-  handleAdminProfileSave: (values: { name: string; email: string; password?: string }) => void;
+  handleAdminProfileSave: (values: { name: string; email: string }) => void;
   handleBusinessProfileSave: (values: { name: string; phone: string; email: string; password?: string }) => void;
   handleEmployeeProfileSave: (values: { name: string; phone: string; email: string; password?: string }) => void;
   handleQuickAction: (action: string) => void;

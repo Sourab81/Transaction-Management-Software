@@ -27,7 +27,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     displayUserName,
     handleQuickAction,
     isTransactionFiltersOpen,
-    transactionFilters,
+    isTransactionsLoading,
     hasActiveTransactionFilters,
     renderTransactionFilters,
     filteredTransactionRecords,
@@ -108,7 +108,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
       {isTransactionFiltersOpen ? renderTransactionFilters() : null}
 
       <div className="col-12">
-        {filteredTransactionRecords.length === 0 ? (
+        {filteredTransactionRecords.length === 0 && !isTransactionsLoading ? (
           <EmptyState
             eyebrow={transactionsUi?.label}
             title={isShowingFilteredTransactionState ? 'No transactions match the current filters' : transactionsUi?.emptyTitle || 'No transaction records yet'}
@@ -126,6 +126,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
         ) : (
           <TransactionTable
             transactions={filteredTransactionRecords}
+            isLoading={isTransactionsLoading}
             onEdit={canPerformModuleAction('transactions', 'edit') ? handleEditTransaction : undefined}
             onView={handleViewTransaction}
             onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}

@@ -15,6 +15,7 @@ export default function ReportsTab({ ctx }: ReportsTabProps) {
   const {
     renderSummaryCards,
     reportSummary,
+    isReportsLoading,
     reports,
     handleQuickAction,
     handleViewReport,
@@ -48,7 +49,7 @@ export default function ReportsTab({ ctx }: ReportsTabProps) {
       {renderSummaryCards(reportSummary)}
 
       <div className="col-12">
-        {reports.length === 0 ? (
+        {reports.length === 0 && !isReportsLoading ? (
           <EmptyState
             eyebrow={reportsUi?.label}
             title={reportsUi?.emptyTitle || 'No reports generated yet'}
@@ -58,6 +59,7 @@ export default function ReportsTab({ ctx }: ReportsTabProps) {
         ) : (
           <ReportsTable
             reports={reports}
+            isLoading={isReportsLoading}
             onView={handleViewReport}
             onDelete={canDeleteModule('reports') ? (id: string) => handleDeleteRecord('DELETE_REPORT', id) : undefined}
           />

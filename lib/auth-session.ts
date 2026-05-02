@@ -29,7 +29,6 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  password: string;
   role: UserRole;
   businessId?: string;
   permissions?: CustomerPermissions;
@@ -87,13 +86,12 @@ const canEmployeeSignIn = (business: Partial<Business> | undefined) =>
 
 const readBusinessUsers = (state: AppState): AuthUser[] =>
   state.businesses
-    .filter((business) => Boolean(business.id && business.name && business.email && business.password))
+    .filter((business) => Boolean(business.id && business.name && business.email))
     .filter((business) => canBusinessOwnerSignIn(business))
     .map((business) => ({
       id: business.id,
       name: business.name,
       email: normalizeEmail(business.email),
-      password: business.password,
       role: 'Customer' as const,
       businessId: business.id,
       permissions: business.permissions,
@@ -110,7 +108,7 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
       if (!workspace) return;
 
       workspace.employees
-        .filter((employee): employee is Employee => Boolean(employee?.id && employee?.name && employee?.email && employee?.password))
+        .filter((employee): employee is Employee => Boolean(employee?.id && employee?.name && employee?.email))
         .forEach((employee) => {
           const normalizedEmail = normalizeEmail(employee.email);
           if (!normalizedEmail || seenEmails.has(normalizedEmail)) return;
@@ -120,7 +118,6 @@ const readEmployeeUsers = (state: AppState): AuthUser[] => {
             id: employee.id,
             name: employee.name,
             email: normalizedEmail,
-            password: employee.password,
             role: 'Employee',
             businessId: business.id,
             permissions: employee.permissions,

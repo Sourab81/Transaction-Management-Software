@@ -1,5 +1,6 @@
 import React from 'react';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { SkeletonTable } from '../ui/Skeleton';
 
 export interface ReusableListTableColumn<TRecord> {
   key: string;
@@ -101,9 +102,7 @@ export default function ReusableListTable<TRecord>({
           </thead>
           <tbody>
             {loading ? (
-              <tr className="data-table__empty-row">
-                <td className="table-empty" colSpan={columnCount}>Loading records...</td>
-              </tr>
+              <SkeletonTable columns={columnCount} rows={5} />
             ) : error ? (
               <tr className="data-table__empty-row">
                 <td className="table-empty" colSpan={columnCount}>{error}</td>

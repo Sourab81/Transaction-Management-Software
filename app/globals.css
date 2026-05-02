@@ -1390,6 +1390,24 @@ small {
   margin: 1rem 0 0;
 }
 
+.skeleton-card {
+  pointer-events: none;
+}
+
+.skeleton-card:hover {
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.skeleton-card__body {
+  min-width: 0;
+  width: 100%;
+}
+
+.skeleton-card__icon {
+  flex: 0 0 auto;
+}
+
 .metric-card__trend {
   align-items: center;
   color: var(--foreground-muted);
@@ -2810,6 +2828,14 @@ small {
   background: rgba(247, 250, 255, 0.72);
 }
 
+.data-table__skeleton-row td {
+  background: transparent;
+}
+
+.data-table__skeleton-row:hover td {
+  background: transparent;
+}
+
 .data-table__clickable-row {
   cursor: pointer;
 }
@@ -3753,6 +3779,19 @@ small {
   }
 
   .mobile-card-table tbody tr.data-table__empty-row td::before {
+    display: none;
+  }
+
+  .mobile-card-table tbody tr.data-table__skeleton-row {
+    padding: 0.2rem 0.95rem;
+  }
+
+  .mobile-card-table tbody tr.data-table__skeleton-row td {
+    display: block;
+    padding: 0.7rem 0;
+  }
+
+  .mobile-card-table tbody tr.data-table__skeleton-row td::before {
     display: none;
   }
 

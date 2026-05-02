@@ -16,7 +16,9 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 
-export type EmployeeFormValues = Omit<Employee, 'id'>;
+export type EmployeeFormValues = Omit<Employee, 'id'> & {
+  password?: string;
+};
 
 interface EmployeeFormProps {
   businessPermissions: CustomerPermissions;
@@ -38,11 +40,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const [name, setName] = useState(initialValues?.name || '');
   const [phone, setPhone] = useState(initialValues?.phone || '');
   const [email, setEmail] = useState(initialValues?.email || '');
-  const [password, setPassword] = useState(initialValues?.password || '');
+  const [password, setPassword] = useState('');
   const [departmentId, setDepartmentId] = useState(initialValues?.departmentId || '');
   const [status, setStatus] = useState<Employee['status']>(initialValues?.status || 'Active');
   const [joinedDate, setJoinedDate] = useState(initialValues?.joinedDate || new Date().toISOString().split('T')[0]);
-  const [showPassword, setShowPassword] = useState(Boolean(initialValues?.password));
+  const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [permissions, setPermissions] = useState<Employee['permissions']>(
@@ -109,7 +111,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       name,
       phone: normalizePhoneNumber(phone),
       email,
-      password,
+      password: password || undefined,
       permissions: intersectCustomerPermissions(permissions, businessPermissions),
       departmentId: departmentId || undefined,
       status,
@@ -187,7 +189,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
       <div className="form-section-card mb-4">
         <div className="form-section-title">Login Credentials</div>
-        <p className="form-hint mt-0 mb-3">Business owners can review and update the employee login email and password here.</p>
+        <p className="form-hint mt-0 mb-3">Business owners can update the employee login email and set a new password here.</p>
         <div className="row g-3">
           <div className="col-12 col-md-6">
             <Input label="Email" type="email" placeholder="employee@example.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
@@ -199,10 +201,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 <input
                   className="form-control"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Create a secure password"
+                  placeholder={initialValues ? 'Enter a new password to update' : 'Create a secure password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  required
+                  required={!initialValues}
                 />
                 <button
                   type="button"

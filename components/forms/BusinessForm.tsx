@@ -22,9 +22,11 @@ import {
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
+import { SkeletonFormField } from '../ui/Skeleton';
 import PermissionEditor from './PermissionEditor';
 
 export type BusinessFormValues = Omit<Business, 'id'> & {
+  password?: string;
   roleTemplateId?: string;
   roleTemplateBackendPrivileges?: Record<string, unknown>;
 };
@@ -123,7 +125,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
       name,
       phone: normalizePhoneNumber(phone),
       email,
-      password: password || initialValues?.password || '',
+      password: password || undefined,
       status,
       joinedDate,
       permissions,
@@ -229,22 +231,26 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
           </div>
           {!initialValues ? (
             <div className="col-12 col-md-6">
-              <Select
-                label="Role"
-                value={selectedRoleTemplateId}
-                onChange={(event) => handleRoleTemplateChange(event.target.value)}
-                options={[
-                  {
-                    value: '',
-                    label: roleSelectPlaceholder,
-                  },
-                  ...selectableRoleTemplates.map((roleTemplate) => ({
-                    value: roleTemplate.id,
-                    label: roleTemplate.roleName,
-                  })),
-                ]}
-                disabled={isRoleTemplatesLoading || selectableRoleTemplates.length === 0}
-              />
+              {isRoleTemplatesLoading ? (
+                <SkeletonFormField />
+              ) : (
+                <Select
+                  label="Role"
+                  value={selectedRoleTemplateId}
+                  onChange={(event) => handleRoleTemplateChange(event.target.value)}
+                  options={[
+                    {
+                      value: '',
+                      label: roleSelectPlaceholder,
+                    },
+                    ...selectableRoleTemplates.map((roleTemplate) => ({
+                      value: roleTemplate.id,
+                      label: roleTemplate.roleName,
+                    })),
+                  ]}
+                  disabled={selectableRoleTemplates.length === 0}
+                />
+              )}
               {roleTemplatesError ? (
                 <div className="form-hint text-warning">
                   Unable to load roles. You can still set permissions manually.

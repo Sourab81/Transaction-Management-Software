@@ -31,7 +31,6 @@ export interface Business {
   name: string;
   phone: string;
   email: string;
-  password: string;
   role?: string;
   role_id?: string;
   roleTemplateId?: string;
@@ -96,7 +95,6 @@ export interface Employee {
   name: string;
   phone: string;
   email: string;
-  password: string;
   permissions: CustomerPermissions;
   departmentId?: string;
   status?: 'Active' | 'Inactive';
@@ -440,12 +438,23 @@ export const APP_STATE_STORAGE_KEY = 'enest-app-state-v2';
 const LEGACY_APP_STATE_STORAGE_KEY = 'enest-app-state-v1';
 
 type BusinessNormalizationInput =
-  Omit<Business, 'permissions' | 'password' | 'email' | 'onboardingCompleted' | 'onboardingStep' | 'statusReason' | 'subscription'> &
-  Partial<Pick<Business, 'permissions' | 'password' | 'email' | 'onboardingCompleted' | 'onboardingStep' | 'statusReason' | 'subscription'>>;
+  Omit<Business, 'permissions' | 'email' | 'onboardingCompleted' | 'onboardingStep' | 'statusReason' | 'subscription'> &
+  Partial<Pick<Business, 'permissions' | 'email' | 'onboardingCompleted' | 'onboardingStep' | 'statusReason' | 'subscription'>> & {
+    password?: unknown;
+  };
+
+const withoutPasswordField = <TValue extends { password?: unknown }>(
+  value: TValue,
+): Omit<TValue, 'password'> => {
+  const output = { ...value };
+  delete output.password;
+  return output;
+};
 
 const normalizeBusiness = (
   business: BusinessNormalizationInput,
 ): Business => {
+  const businessWithoutPassword = withoutPasswordField(business);
   const joinedDate = business.joinedDate || today();
   const accessState = getBusinessAccessState({
     status: business.status || 'Active',
@@ -455,9 +464,8 @@ const normalizeBusiness = (
   });
 
   return {
-    ...business,
+    ...businessWithoutPassword,
     email: business.email?.trim().toLowerCase() ?? '',
-    password: business.password ?? '',
     permissions: normalizeCustomerPermissions(business.permissions ?? buildDefaultCustomerPermissions()),
     status: accessState.status,
     statusReason: accessState.reason,
@@ -478,21 +486,24 @@ const normalizeBusinessCustomer = (customer: Partial<BusinessCustomer> & Pick<Bu
 });
 
 const normalizeEmployee = (
-  employee: Omit<Employee, 'email' | 'password' | 'permissions'> & {
+  employee: Omit<Employee, 'email' | 'permissions'> & {
     email?: string;
-    password?: string;
     permissions?: CustomerPermissions;
+    password?: unknown;
   },
   fallbackPermissions?: CustomerPermissions,
-): Employee => ({
-  ...employee,
-  email: employee.email?.trim().toLowerCase() ?? '',
-  password: employee.password ?? '',
-  permissions: normalizeCustomerPermissions(employee.permissions ?? fallbackPermissions ?? buildDefaultCustomerPermissions()),
-  departmentId: employee.departmentId || undefined,
-  status: employee.status || 'Active',
-  joinedDate: employee.joinedDate || today(),
-});
+): Employee => {
+  const employeeWithoutPassword = withoutPasswordField(employee);
+
+  return {
+    ...employeeWithoutPassword,
+    email: employee.email?.trim().toLowerCase() ?? '',
+    permissions: normalizeCustomerPermissions(employee.permissions ?? fallbackPermissions ?? buildDefaultCustomerPermissions()),
+    departmentId: employee.departmentId || undefined,
+    status: employee.status || 'Active',
+    joinedDate: employee.joinedDate || today(),
+  };
+};
 
 const normalizeCounter = (counter: Counter): Counter => ({
   ...counter,
@@ -727,10 +738,10 @@ const normalizeWorkspace = (
     ),
     employees: (workspace?.employees ?? baseWorkspace.employees).map((employee) =>
       normalizeEmployee(
-        employee as Omit<Employee, 'email' | 'password' | 'permissions'> & {
+        employee as Omit<Employee, 'email' | 'permissions'> & {
           email?: string;
-          password?: string;
           permissions?: CustomerPermissions;
+          password?: unknown;
         },
         permissions,
       )
@@ -786,7 +797,6 @@ export const migrateLegacyState = (legacyState: LegacyAppState): AppState => {
       name: customer.name,
       phone: customer.phone,
       email: customer.email ?? '',
-      password: '',
       status: customer.status,
       joinedDate: customer.joinedDate,
       permissions: customer.permissions,
@@ -818,22 +828,7 @@ const loadPersistedState = (): AppState => {
 
     if (storedState) {
       const parsedState = JSON.parse(storedState) as Partial<AppState>;
-      const businesses = (parsedState.businesses ?? initialState.businesses).map((business) =>
-        normalizeBusiness(
-          business as BusinessNormalizationInput
-        )
-      );
-
-      return {
-        businesses,
-        businessWorkspacesById: Object.fromEntries(
-          businesses.map((business) => [
-            business.id,
-            normalizeWorkspace(parsedState.businessWorkspacesById?.[business.id], business.permissions),
-          ])
-        ),
-        adminWorkspace: normalizeAdminWorkspace(parsedState.adminWorkspace),
-      };
+      return hydratePersistedAppState(parsedState);
     }
 
     const legacyState = window.localStorage.getItem(LEGACY_APP_STATE_STORAGE_KEY);
@@ -1291,26 +1286,63 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-const toPersistedWorkspace = (workspace: BusinessWorkspace): BusinessWorkspace => ({
-  ...workspace,
-  notifications: [],
-});
+const toPersistedWorkspace = (
+  workspace: BusinessWorkspace,
+  permissions: CustomerPermissions,
+): BusinessWorkspace => normalizeWorkspace(
+  {
+    ...workspace,
+    notifications: [],
+  },
+  permissions,
+);
 
 const toPersistedAdminWorkspace = (workspace: AdminWorkspace): AdminWorkspace => ({
   ...workspace,
   notifications: [],
 });
 
-const toPersistedAppState = (state: AppState): AppState => ({
-  businesses: state.businesses,
-  businessWorkspacesById: Object.fromEntries(
-    Object.entries(state.businessWorkspacesById).map(([businessId, workspace]) => [
-      businessId,
-      toPersistedWorkspace(workspace),
-    ])
-  ),
-  adminWorkspace: toPersistedAdminWorkspace(state.adminWorkspace),
-});
+export const hydratePersistedAppState = (parsedState: Partial<AppState>): AppState => {
+  const businesses = (parsedState.businesses ?? initialState.businesses).map((business) =>
+    normalizeBusiness(
+      business as BusinessNormalizationInput
+    )
+  );
+
+  return {
+    businesses,
+    businessWorkspacesById: Object.fromEntries(
+      businesses.map((business) => [
+        business.id,
+        normalizeWorkspace(parsedState.businessWorkspacesById?.[business.id], business.permissions),
+      ])
+    ),
+    adminWorkspace: normalizeAdminWorkspace(parsedState.adminWorkspace),
+  };
+};
+
+export const sanitizeAppStateForStorage = (state: AppState): AppState => {
+  const businesses = state.businesses.map((business) =>
+    normalizeBusiness(business as BusinessNormalizationInput)
+  );
+  const permissionsByBusinessId = new Map(
+    businesses.map((business) => [business.id, business.permissions]),
+  );
+
+  return {
+    businesses,
+    businessWorkspacesById: Object.fromEntries(
+      Object.entries(state.businessWorkspacesById).map(([businessId, workspace]) => [
+        businessId,
+        toPersistedWorkspace(
+          workspace,
+          permissionsByBusinessId.get(businessId) ?? buildDefaultCustomerPermissions(),
+        ),
+      ])
+    ),
+    adminWorkspace: toPersistedAdminWorkspace(state.adminWorkspace),
+  };
+};
 
 const AppStateContext = createContext<AppState | null>(null);
 const AppDispatchContext = createContext<React.Dispatch<AppAction> | null>(null);
@@ -1332,7 +1364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         window.localStorage.setItem(
           APP_STATE_STORAGE_KEY,
-          JSON.stringify(toPersistedAppState(state))
+          JSON.stringify(sanitizeAppStateForStorage(state))
         );
         window.localStorage.removeItem(LEGACY_APP_STATE_STORAGE_KEY);
       } catch {

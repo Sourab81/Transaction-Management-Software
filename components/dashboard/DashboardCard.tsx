@@ -1,5 +1,6 @@
 import React from 'react';
 import { FaArrowDown, FaArrowUp } from 'react-icons/fa';
+import { SkeletonCard } from '../ui/Skeleton';
 
 interface DashboardCardProps {
   title: string;
@@ -10,9 +11,14 @@ interface DashboardCardProps {
     isPositive: boolean;
   };
   color?: 'blue' | 'green' | 'purple' | 'orange' | 'red';
+  loading?: boolean;
 }
 
-const DashboardCard: React.FC<DashboardCardProps> = ({ title, value, icon, trend, color = 'blue' }) => {
+const DashboardCard: React.FC<DashboardCardProps> = ({ title, value, icon, trend, color = 'blue', loading = false }) => {
+  if (loading) {
+    return <SkeletonCard className={`metric-card--${color}`} />;
+  }
+
   return (
     <div className={`metric-card metric-card--${color}`}>
       <div className="metric-card__top">

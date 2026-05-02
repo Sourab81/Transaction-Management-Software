@@ -6,6 +6,7 @@ import DataTable from './DataTable';
 interface CustomerPaymentsTableProps {
   transactions: Transaction[];
   onView?: (transaction: Transaction) => void;
+  isLoading?: boolean;
 }
 
 const getStatusClass = (status: Transaction['status']) => {
@@ -15,7 +16,11 @@ const getStatusClass = (status: Transaction['status']) => {
   return 'status-chip status-chip--failed';
 };
 
-const CustomerPaymentsTable: React.FC<CustomerPaymentsTableProps> = ({ transactions, onView }) => {
+const CustomerPaymentsTable: React.FC<CustomerPaymentsTableProps> = ({
+  transactions,
+  onView,
+  isLoading = false,
+}) => {
   const hasActions = Boolean(onView);
 
   return (
@@ -26,6 +31,7 @@ const CustomerPaymentsTable: React.FC<CustomerPaymentsTableProps> = ({ transacti
       title="Customer payment list"
       copy="Track customer payment activity, service name, amount, and payment status in one place."
       emptyLabel="No customer payment records found."
+      isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_transaction, index) => index + 1 },
         { key: 'transactionNumber', header: 'Txn No.', render: (transaction) => transaction.transactionNumber },
