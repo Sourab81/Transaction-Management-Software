@@ -124,7 +124,7 @@ describe('password sanitization', () => {
     assert.equal(JSON.stringify({ employee, businesses }).includes('backend-'), false);
   });
 
-  test('create-user request payload can include password only for submit transport', async () => {
+  test('create-user request payload preserves password case and spaces only for submit transport', async () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example.test';
     let capturedBody = '';
 
@@ -139,11 +139,12 @@ describe('password sanitization', () => {
 
     await requestBackendCollection('businessCreate', 'raw-token', undefined, {
       username: 'new.business@example.test',
-      password: 'one-time-submit-secret',
+      password: ' Test@123ABC ',
       fullname: 'New Business',
     });
 
-    assert.match(capturedBody, /password=one-time-submit-secret/);
+    const bodyParams = new URLSearchParams(capturedBody);
+    assert.equal(bodyParams.get('password'), ' Test@123ABC ');
   });
 
   test('edit forms do not prefill legacy passwords', () => {

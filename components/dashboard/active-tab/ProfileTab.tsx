@@ -138,7 +138,6 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
 
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
 
     if (currentRole === 'Admin') {
       handleAdminProfileSave({
@@ -155,7 +154,7 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
         name: trimmedName,
         phone: trimmedPhone,
         email: trimmedEmail,
-        password: trimmedPassword || undefined,
+        password: password || undefined,
       });
       setPassword('');
       setShowPassword(false);
@@ -166,7 +165,7 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
       name: trimmedName,
       phone: trimmedPhone,
       email: trimmedEmail,
-      password: trimmedPassword || undefined,
+      password: password || undefined,
     });
     setPassword('');
     setShowPassword(false);

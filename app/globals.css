@@ -2426,6 +2426,11 @@ small {
   position: relative;
 }
 
+input[type="password"],
+.password-field input {
+  text-transform: none;
+}
+
 .password-field .form-control {
   padding-right: 5rem;
 }

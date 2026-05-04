@@ -36,25 +36,25 @@ describe('login password fidelity', () => {
       },
       body: JSON.stringify({
         username: '  User@Example.Test  ',
-        password: '  exact password  ',
+        password: '  Exact PaSSword  ',
       }),
     });
 
     const payload = await readLoginPayload(request);
 
     assert.equal(payload.username, 'User@Example.Test');
-    assert.equal(payload.password, '  exact password  ');
+    assert.equal(payload.password, '  Exact PaSSword  ');
   });
 
   test('server action form values trim email but preserve password exactly', () => {
     const formData = new FormData();
     formData.set('email', '  USER@Example.Test  ');
-    formData.set('password', '  exact password  ');
+    formData.set('password', '  Exact PaSSword  ');
 
     const values = readLoginFormValues(formData);
 
     assert.equal(values.email, 'user@example.test');
-    assert.equal(values.password, '  exact password  ');
+    assert.equal(values.password, '  Exact PaSSword  ');
   });
 
   test('backend login request payload preserves leading and trailing password spaces', async () => {
@@ -89,11 +89,11 @@ describe('login password fidelity', () => {
       return new Response(null, { status: 404 });
     }) as typeof fetch;
 
-    await loginAndLoadWorkspaceBootstrap('user@example.test', '  exact password  ');
+    await loginAndLoadWorkspaceBootstrap('user@example.test', '  Exact PaSSword  ');
 
     const params = new URLSearchParams(loginRequestBody);
     assert.equal(params.get('username'), 'user@example.test');
-    assert.equal(params.get('password'), '  exact password  ');
+    assert.equal(params.get('password'), '  Exact PaSSword  ');
   });
 
   test('empty passwords are rejected by route and server action validation', async () => {
