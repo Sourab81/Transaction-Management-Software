@@ -151,6 +151,8 @@ export interface Counter {
   openingBalance: number;
   currentBalance: number;
   status: 'Active' | 'Inactive';
+  remark?: string;
+  date?: string;
 }
 
 export interface Account {
@@ -163,6 +165,9 @@ export interface Account {
   currentBalance: number;
   status: 'Active' | 'Inactive';
   date: string;
+  counterId?: string | null;
+  branch?: string;
+  remark?: string;
 }
 
 export interface Service {
@@ -339,20 +344,27 @@ export const getDepartmentDefaultAccountId = (
 };
 
 export const getDepartmentLinkedAccounts = (
-  counter: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId'> | null | undefined,
+  counter: Pick<Counter, 'id' | 'linkedAccountIds' | 'linkedAccountId'> | null | undefined,
   accounts: Account[],
 ) => {
   const linkedAccountIds = new Set(getDepartmentLinkedAccountIds(counter));
+  const counterId = counter?.id;
 
-  return accounts.filter((account) => linkedAccountIds.has(account.id));
+  return accounts.filter((account) =>
+    linkedAccountIds.has(account.id) || (counterId ? account.counterId === counterId : false)
+  );
 };
 
 export const getDepartmentDefaultAccount = (
-  counter: Pick<Counter, 'linkedAccountIds' | 'linkedAccountId' | 'defaultAccountId'> | null | undefined,
+  counter: Pick<Counter, 'id' | 'linkedAccountIds' | 'linkedAccountId' | 'defaultAccountId'> | null | undefined,
   accounts: Account[],
 ) => {
   const defaultAccountId = getDepartmentDefaultAccountId(counter);
-  return defaultAccountId ? accounts.find((account) => account.id === defaultAccountId) : undefined;
+  if (defaultAccountId) {
+    return accounts.find((account) => account.id === defaultAccountId);
+  }
+
+  return getDepartmentLinkedAccounts(counter, accounts)[0];
 };
 
 export const getServicesForDepartment = (
@@ -510,13 +522,22 @@ const normalizeCounter = (counter: Counter): Counter => ({
   linkedAccountIds: getDepartmentLinkedAccountIds(counter),
   defaultAccountId: getDepartmentDefaultAccountId(counter),
   linkedAccountId: getDepartmentDefaultAccountId(counter),
+  openingBalance: counter.openingBalance ?? 0,
+  currentBalance: counter.currentBalance ?? counter.openingBalance ?? 0,
   status: counter.status || 'Active',
+  remark: counter.remark || undefined,
+  date: counter.date || undefined,
 });
 
 const normalizeAccount = (account: Account): Account => ({
   ...account,
+  openingBalance: account.openingBalance ?? 0,
+  currentBalance: account.currentBalance ?? account.openingBalance ?? 0,
   status: account.status || 'Active',
   date: account.date || today(),
+  counterId: account.counterId || null,
+  branch: account.branch || undefined,
+  remark: account.remark || undefined,
 });
 
 const normalizeTransactionStatus = (status?: string): Transaction['status'] => {
@@ -1019,11 +1040,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
       }));
     case 'ADD_ACCOUNT':
       return withBusinessWorkspace(state, action.businessId, (workspace) => {
-        const newAccount: Account = {
+        const newAccount = normalizeAccount({
           ...action.payload,
           id: action.payload.id || createRecordId(),
           date: today(),
-        };
+        });
 
         return {
           ...workspace,
@@ -1034,7 +1055,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return withBusinessWorkspace(state, action.businessId, (workspace) => ({
         ...workspace,
         accounts: workspace.accounts.map((account) =>
-          account.id === action.payload.id ? action.payload : account
+          account.id === action.payload.id ? normalizeAccount(action.payload) : account
         ),
       }));
     case 'ADD_SERVICE':

@@ -31,6 +31,7 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (currentRole === 'Admin') {
       setName(currentUser.name);
@@ -58,6 +59,7 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
       setShowPassword(false);
     }
   }, [currentBusinessProfile, currentEmployeeProfile, currentRole, currentUser.email, currentUser.name]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (currentRole === 'Customer' && !currentBusinessProfile) {
     return (

@@ -1,25 +1,16 @@
 import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
-import {
-  getDepartmentDefaultAccount,
-  getDepartmentLinkedAccounts,
-  type Account,
-  type Counter,
-} from '../../lib/store';
+import type { Counter } from '../../lib/store';
 import DataTable from './DataTable';
 
 interface DepartmentsTableProps {
-  accounts: Account[];
   counters: Counter[];
   onEdit?: (counter: Counter) => void;
   onDelete?: (counterId: string) => void;
   isLoading?: boolean;
 }
 
-const formatMoney = (amount: number) => `Rs. ${amount.toLocaleString('en-IN')}`;
-
 const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
-  accounts,
   counters,
   onEdit,
   onDelete,
@@ -32,62 +23,29 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
       rows={counters}
       getRowKey={(counter) => counter.id}
       eyebrow="Departments"
-      title="Department and counter records"
-      copy="Track department codes, default posting accounts, linked account counts, balances, and status from one searchable table."
+      title="Department records"
+      copy="Review department identifiers, names, remarks, status, and creation dates."
       emptyLabel="No department records found."
       isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_counter, index) => index + 1 },
+        { key: 'code', header: 'Department Code / ID', render: (counter) => counter.code || counter.id },
         {
           key: 'department',
-          header: 'Department',
-          render: (counter) => (
-            <>
-              <span className="data-table__primary">{counter.name}</span>
-              <span className="data-table__secondary">Live counter view</span>
-            </>
-          ),
+          header: 'Department Name',
+          render: (counter) => <span className="data-table__primary">{counter.name}</span>,
         },
-        { key: 'code', header: 'Code', render: (counter) => counter.code },
-        { key: 'defaultAccount', header: 'Default Account', render: (counter) => getDepartmentDefaultAccount(counter, accounts)?.accountHolder || 'Not linked' },
-        { key: 'bank', header: 'Bank', render: (counter) => getDepartmentDefaultAccount(counter, accounts)?.bankName || 'Not linked' },
-        {
-          key: 'linkedAccounts',
-          header: 'Linked Accounts',
-          render: (counter) => {
-            const linkedAccounts = getDepartmentLinkedAccounts(counter, accounts);
-            return (
-              <span className="status-chip status-chip--info">
-                {linkedAccounts.length > 0 ? `${linkedAccounts.length} linked` : 'Unassigned'}
-              </span>
-            );
-          },
-        },
-        {
-          key: 'accountStatus',
-          header: 'Account Status',
-          render: (counter) => {
-            const defaultAccount = getDepartmentDefaultAccount(counter, accounts);
-            return defaultAccount ? (
-              <span className={`status-chip ${defaultAccount.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
-                {defaultAccount.status}
-              </span>
-            ) : (
-              <span className="status-chip status-chip--info">Unassigned</span>
-            );
-          },
-        },
-        { key: 'opening', header: 'Opening', render: (counter) => formatMoney(counter.openingBalance) },
-        { key: 'current', header: 'Current', render: (counter) => formatMoney(counter.currentBalance) },
+        { key: 'remark', header: 'Remark', render: (counter) => counter.remark || '-' },
         {
           key: 'departmentStatus',
-          header: 'Department Status',
+          header: 'Status',
           render: (counter) => (
             <span className={`status-chip ${counter.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
               {counter.status}
             </span>
           ),
         },
+        { key: 'date', header: 'Created Date', render: (counter) => counter.date || '-' },
       ]}
       renderActions={(counter) => (
         <div className="table-actions">

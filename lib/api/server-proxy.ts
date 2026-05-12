@@ -73,6 +73,7 @@ export const proxyAuthenticatedGetRequest = async (
 export const proxyAuthenticatedPostRequest = async (
   resource: BackendApiResource,
   request: Request,
+  bodyValuesOverride?: Record<string, string | number | undefined | null>,
 ) => {
   const config = getBackendApiResourceConfig(resource);
 
@@ -97,8 +98,8 @@ export const proxyAuthenticatedPostRequest = async (
   }
 
   try {
-    const payload = await request.json();
-    const bodyValues = {
+    const payload = bodyValuesOverride ? null : await request.json();
+    const bodyValues = bodyValuesOverride ?? {
       username: payload.username,
       password: payload.password,
       fullname: payload.fullname,
@@ -108,9 +109,14 @@ export const proxyAuthenticatedPostRequest = async (
       role_template_id: payload.role_template_id,
       permission: payload.permission,
       privileges: payload.privileges,
-    } as Record<string, string | undefined>;
+    } as Record<string, string | number | undefined | null>;
 
-    const response = await requestBackendCollection(resource, token, undefined, bodyValues);
+    const response = await requestBackendCollection(
+      resource,
+      token,
+      undefined,
+      bodyValues as Record<string, string | number | undefined>,
+    );
 
     return Response.json(
       normalizeResponseBody(response.body, `Unable to create ${config.label} in the backend.`),

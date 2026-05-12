@@ -20,20 +20,17 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
     canDeleteDepartmentRecords,
     isDepartmentsLoading,
     counters,
-    accounts,
     filteredDepartments,
     departmentSearchInput,
-    departmentAccountStatusFilter,
     handleDepartmentSearch,
     setDepartmentSearchInput,
-    setDepartmentAccountStatusFilter,
     clearDepartmentFilters,
     handleQuickAction,
     handleEditDepartment,
     handleDeleteRecord,
   } = ctx;
   const departmentsUi = getModuleUi('departments');
-  const hasActiveFilters = departmentSearchInput.trim().length > 0 || departmentAccountStatusFilter !== 'All';
+  const hasActiveFilters = departmentSearchInput.trim().length > 0;
   const departmentEmptyAction = hasActiveFilters
     ? {
         label: 'Clear Filters',
@@ -53,7 +50,7 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
         <SectionHero
           eyebrow="Department Hub"
           title="Manage departments and linked counters"
-          description="Add departments, map them to accounts, and review balances with search and account-status filters."
+          description="Add departments and review identifiers, names, remarks, status, and creation dates."
           action={canAddDepartmentRecords ? {
             label: 'Add Department',
             icon: <FaPlusCircle />,
@@ -70,7 +67,7 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
             <div>
               <p className="eyebrow">Search and Filter</p>
               <h2 className="panel-title">Find the right department quickly</h2>
-              <p className="panel-copy">Search by department, code, account holder, bank, or account number, then filter by linked account status.</p>
+              <p className="panel-copy">Search by department name, code, ID, or remark.</p>
             </div>
             <div className="panel-status-chip">
               Showing {filteredDepartments.length} of {counters.length}
@@ -89,23 +86,10 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
               <input
                 type="text"
                 className="form-control"
-                placeholder="Search departments, account holder, bank, or account number"
+                placeholder="Search departments, code, ID, or remark"
                 value={departmentSearchInput}
                 onChange={(event) => setDepartmentSearchInput(event.target.value)}
               />
-            </div>
-            <div className="app-field mb-0">
-              <label className="form-label">Account Status</label>
-              <select
-                className="form-select"
-                value={departmentAccountStatusFilter}
-                onChange={(event) => setDepartmentAccountStatusFilter(event.target.value as 'All' | 'Active' | 'Inactive' | 'Unassigned')}
-              >
-                <option value="All">All</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Unassigned">Unassigned</option>
-              </select>
             </div>
             <div className="department-toolbar__actions">
               <button type="submit" className="btn-app btn-app-primary">Search</button>
@@ -127,7 +111,6 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
           />
         ) : (
           <DepartmentsTable
-            accounts={accounts}
             counters={filteredDepartments.map((row) => row.counter)}
             isLoading={isDepartmentsLoading}
             onEdit={canEditDepartmentRecords ? handleEditDepartment : undefined}

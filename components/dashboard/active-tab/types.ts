@@ -74,9 +74,11 @@ export interface DashboardTabContext {
   isCustomersLoading: boolean;
   isEmployeesLoading: boolean;
   isDepartmentsLoading: boolean;
+  isAccountsLoading: boolean;
   isTransactionsLoading: boolean;
   isReportsLoading: boolean;
   isRoleTemplatesLoading: boolean;
+  accountsError: string;
   roleTemplatesError: string;
   workflowDraft: ServiceWorkflowDraft | null;
   employeeAssignedDepartment: Counter | null | undefined;
@@ -131,6 +133,7 @@ export interface DashboardTabContext {
   canAddAccountRecords: boolean;
   canEditAccountRecords: boolean;
   canDeleteAccountRecords: boolean;
+  canAddServiceRecords: boolean;
   hasRequestedCustomerPageAccess: boolean;
   renderSummaryCards: (cards: SummaryCardProps[]) => ReactNode;
   renderTransactionFilters: () => ReactNode;
@@ -162,6 +165,7 @@ export interface DashboardTabContext {
   clearDepartmentFilters: () => void;
   handleEditDepartment: (counter: Counter) => void;
   handleEditAccount: (account: Account) => void;
+  handleLinkAccount: (account: Account) => void;
   handleEditTransaction: (transaction: Transaction) => void;
   handleViewReport: (report: ReportItem) => void;
   handleEditExpense: (expense: Expense) => void;

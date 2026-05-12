@@ -67,10 +67,12 @@ const Header: React.FC<HeaderProps> = ({
   const headerRef = useRef<HTMLElement | null>(null);
   const compactSearchInputRef = useRef<HTMLInputElement | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setIsCompactMenuOpen(false);
     setIsCompactSearchOpen(false);
   }, [activeTab, customerPageView]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (isCompactSearchOpen) {

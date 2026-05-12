@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import type { Business, BusinessCustomer, Counter, Employee, ReportItem, Transaction } from '../store';
+import type { Account, Business, BusinessCustomer, Counter, Employee, ReportItem, Transaction } from '../store';
 import { AUTH_TOKEN_COOKIE_NAME } from '../auth-cookie';
 import {
   BackendApiConfigurationError,
@@ -7,6 +7,7 @@ import {
 } from './backend-client';
 import type { BackendApiResource } from './backend-endpoints';
 import { mapCountersResponse } from '../mappers/counter-mapper';
+import { mapAccountsResponse } from '../mappers/account-mapper';
 import { mapCustomersResponse } from '../mappers/customer-mapper';
 import {
   mapDashboardSummaryResponse,
@@ -24,6 +25,7 @@ export interface WorkspaceInitialData {
   businesses?: Business[];
   counters?: Counter[];
   prefetchedCounters?: boolean;
+  accounts?: Account[];
   customers?: BusinessCustomer[];
   employees?: Employee[];
   transactions?: Transaction[];
@@ -72,12 +74,14 @@ export const getInitialWorkspaceData = async (): Promise<WorkspaceInitialData> =
     employees,
     transactions,
     reports,
+    accounts,
     dashboardSummary,
   ] = await Promise.all([
     readWorkspaceResource(token, 'customers', mapCustomersResponse),
     readWorkspaceResource(token, 'employees', mapEmployeesResponse),
     readWorkspaceResource(token, 'transactions', mapTransactionsResponse),
     readWorkspaceResource(token, 'reports', mapReportsResponse),
+    readWorkspaceResource(token, 'accounts', mapAccountsResponse),
     readWorkspaceResource(token, 'dashboardSummary', mapDashboardSummaryResponse),
   ]);
 
@@ -88,6 +92,7 @@ export const getInitialWorkspaceData = async (): Promise<WorkspaceInitialData> =
   return {
     counters,
     prefetchedCounters: typeof prefetchedCounters !== 'undefined',
+    accounts,
     customers,
     employees,
     transactions,

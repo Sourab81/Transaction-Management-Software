@@ -5,7 +5,7 @@ const withLegacyPermissionAliases = (canonicalId: string, extraAliases: string[]
 
 export const customerPermissionIdAliases: Record<string, string[]> = {
   master_account_manage: withLegacyPermissionAliases('master_account_manage', ['masters.accounts', 'accounts.accounts_update']),
-  master_department_manage: withLegacyPermissionAliases('master_department_manage', ['masters.counter', 'accounts.counters_update']),
+  master_department_manage: withLegacyPermissionAliases('master_department_manage', ['masters.counter', 'accounts.counters_update', 'departments_manage', 'counter_manage']),
   customers_add: withLegacyPermissionAliases('customers_add', ['customer.add_customer']),
   customers_list: withLegacyPermissionAliases('customers_list', ['customer.customer_list']),
   customers_payment_list: withLegacyPermissionAliases('customers_payment_list', ['customer.customer_payment_list']),

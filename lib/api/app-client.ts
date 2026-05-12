@@ -63,3 +63,35 @@ export const requestAppApi = async <T = unknown>(path: string): Promise<T> => {
   return body as T;
 };
 
+export const requestAppApiMutation = async <T = unknown>(
+  path: string,
+  payload: Record<string, unknown>,
+): Promise<T> => {
+  let response: Response;
+
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+  } catch {
+    throw new AppApiError('Unable to reach the local API route.', null, null);
+  }
+
+  const body = await parseResponseBody(response);
+
+  if (!response.ok) {
+    throw new AppApiError(
+      readApiErrorMessage(body, 'The API request failed.'),
+      response.status,
+      body,
+    );
+  }
+
+  return body as T;
+};

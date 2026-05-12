@@ -18,10 +18,11 @@ interface BusinessOnboardingProps {
   customers: BusinessCustomer[];
   canAddMoreDepartments: boolean;
   canAddMoreAccounts: boolean;
+  canAddMoreServices: boolean;
   canAccessServices: boolean;
   onLogout: () => void;
   onSaveBusinessName: (name: string) => void;
-  onSaveDepartment: (values: { name: string; code: string }) => void;
+  onSaveDepartment: (values: { name: string; remark?: string }) => void | Promise<void>;
   onAdvanceDepartments: () => void;
   onSaveAccount: (values: {
     accountHolder: string;
@@ -43,8 +44,6 @@ interface BusinessOnboardingProps {
   onSkipCustomers: () => void;
 }
 
-const buildDepartmentCode = (index: number) => `D${index}`;
-
 const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   business,
   currentStep,
@@ -54,6 +53,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   customers,
   canAddMoreDepartments,
   canAddMoreAccounts,
+  canAddMoreServices,
   canAccessServices,
   onLogout,
   onSaveBusinessName,
@@ -68,8 +68,8 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
 }) => {
   const visibleSteps = useMemo(() => ([
     { id: 'welcome' as const, label: 'Welcome', icon: <FaBuilding size={14} /> },
-    { id: 'departments' as const, label: 'Departments', icon: <FaRegBuilding size={14} /> },
     { id: 'accounts' as const, label: 'Accounts', icon: <FaUniversity size={14} /> },
+    { id: 'departments' as const, label: 'Departments', icon: <FaRegBuilding size={14} /> },
     ...(canAccessServices ? [{ id: 'services' as const, label: 'Services', icon: <FaWrench size={14} /> }] : []),
     { id: 'customers' as const, label: 'Import Customers', icon: <FaDownload size={14} /> },
   ]), [canAccessServices]);
@@ -80,7 +80,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const configuredAccounts = accounts;
   const [businessName, setBusinessName] = useState(business.name);
   const [departmentName, setDepartmentName] = useState('');
-  const [departmentCode, setDepartmentCode] = useState(buildDepartmentCode(configuredDepartments.length + 1));
+  const [departmentRemark, setDepartmentRemark] = useState('');
   const [showDepartmentForm, setShowDepartmentForm] = useState(configuredDepartments.length === 0);
   const [accountHolder, setAccountHolder] = useState(business.name);
   const [bankName, setBankName] = useState('');
@@ -101,8 +101,8 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
 
   const resetDepartmentForm = () => {
     setDepartmentName('');
-    setDepartmentCode(buildDepartmentCode(configuredDepartments.length + 1));
-    setShowDepartmentForm(true);
+    setDepartmentRemark('');
+    setShowDepartmentForm(canAddMoreDepartments || configuredDepartments.length === 0);
   };
 
   const resetAccountForm = () => {
@@ -110,7 +110,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
     setBankName('');
     setAccountNumber('');
     setIfsc('');
-    setShowAccountForm(true);
+    setShowAccountForm(canAddMoreAccounts || configuredAccounts.length === 0);
   };
 
   const resetServiceForm = () => {
@@ -119,7 +119,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
     setServiceCategory('General');
     setServiceDescription('');
     setServicePrice('');
-    setShowServiceForm(true);
+    setShowServiceForm(canAddMoreServices || services.length === 0);
   };
 
   const handleWelcomeSubmit = (event: React.FormEvent) => {
@@ -138,20 +138,20 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const handleDepartmentSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!departmentName.trim() || !departmentCode.trim()) {
-      setValidationError('Department name and code are required.');
+    if (!departmentName.trim()) {
+      setValidationError('Department name is required.');
       return;
     }
 
     setValidationError('');
     onSaveDepartment({
       name: departmentName.trim(),
-      code: departmentCode.trim().toUpperCase(),
+      remark: departmentRemark.trim() || undefined,
     });
 
     if (canAddMoreDepartments) {
       setDepartmentName('');
-      setDepartmentCode(buildDepartmentCode(configuredDepartments.length + 2));
+      setDepartmentRemark('');
       setShowDepartmentForm(false);
       return;
     }
@@ -222,7 +222,12 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
     setServiceCategory('General');
     setServiceDescription('');
     setServicePrice('');
-    setShowServiceForm(false);
+    if (canAddMoreServices) {
+      setShowServiceForm(false);
+      return;
+    }
+
+    onAdvanceServices();
   };
 
   const handleCustomerImport = (event: React.FormEvent) => {
@@ -276,20 +281,20 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
 
   const stepTitle = currentStep === 'welcome'
     ? 'Set up your business workspace'
-    : currentStep === 'departments'
-      ? 'Add your departments'
-      : currentStep === 'accounts'
-        ? `Add bank accounts for ${business.name}`
+    : currentStep === 'accounts'
+      ? `Add bank accounts for ${business.name}`
+      : currentStep === 'departments'
+        ? 'Add your departments'
         : currentStep === 'services'
           ? `Add services for ${business.name}`
           : 'Import existing customers';
 
   const stepCopy = currentStep === 'welcome'
     ? 'Choose the business name your team will see throughout the workspace.'
-    : currentStep === 'departments'
-      ? 'Start with at least one department so the workspace can organize operations correctly.'
-      : currentStep === 'accounts'
-        ? 'Add the bank accounts your business will use for linked transactions and department posting.'
+    : currentStep === 'accounts'
+      ? 'Add the bank accounts your business will use for linked transactions and department posting.'
+      : currentStep === 'departments'
+        ? 'Add at least one department after account setup so the workspace can organize operations correctly.'
         : currentStep === 'services'
           ? 'Add at least one service so operators can start processing transactions right away.'
           : 'Paste an existing customer list now, or skip and add them later inside the dashboard.';
@@ -390,7 +395,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                     {configuredDepartments.map((department) => (
                       <div key={department.id} className="onboarding-list__item">
                         <strong>{department.name}</strong>
-                        <span>{department.code}</span>
+                        <span>{department.remark || department.code || department.id}</span>
                       </div>
                     ))}
                   </div>
@@ -401,7 +406,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                 <form onSubmit={handleDepartmentSubmit} className="form-section-card">
                   <div className="form-section-title">Department Details</div>
                   <div className="row g-3">
-                    <div className="col-12 col-md-7">
+                    <div className="col-12 col-md-6">
                       <Input
                         label="Department Name"
                         value={departmentName}
@@ -413,16 +418,15 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                         required
                       />
                     </div>
-                    <div className="col-12 col-md-5">
+                    <div className="col-12 col-md-6">
                       <Input
-                        label="Code"
-                        value={departmentCode}
+                        label="Remark"
+                        value={departmentRemark}
                         onChange={(event) => {
-                          setDepartmentCode(event.target.value.toUpperCase());
+                          setDepartmentRemark(event.target.value);
                           setValidationError('');
                         }}
-                        placeholder="D1"
-                        required
+                        placeholder="Optional note"
                       />
                     </div>
                   </div>
@@ -438,12 +442,14 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                 </form>
               ) : (
                 <div className="form-section-card">
-                  <div className="form-section-title mb-2">Add another department?</div>
-                  <p className="page-muted small mb-0">You can add more departments now, or continue to account setup.</p>
+                  <div className="form-section-title mb-2">{canAddMoreDepartments ? 'Add another department?' : 'Department setup complete'}</div>
+                  <p className="page-muted small mb-0">{canAddMoreDepartments ? 'You can add more departments now, or move ahead to the next setup step.' : 'Move ahead to the next setup step.'}</p>
                   <div className="modal-actions mt-4">
-                    <Button type="button" variant="secondary" onClick={resetDepartmentForm}>
-                      Add Another Department
-                    </Button>
+                    {canAddMoreDepartments ? (
+                      <Button type="button" variant="secondary" onClick={resetDepartmentForm}>
+                        Add Another Department
+                      </Button>
+                    ) : null}
                     <Button type="button" onClick={onAdvanceDepartments}>
                       Next
                       <FaArrowRight />
@@ -541,12 +547,14 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                 </form>
               ) : (
                 <div className="form-section-card">
-                  <div className="form-section-title mb-2">Add another account?</div>
-                  <p className="page-muted small mb-0">You can link more bank accounts now, or move ahead to the next setup step.</p>
+                  <div className="form-section-title mb-2">{canAddMoreAccounts ? 'Add another account?' : 'Account setup complete'}</div>
+                  <p className="page-muted small mb-0">{canAddMoreAccounts ? 'You can link more bank accounts now, or move ahead to the next setup step.' : 'Move ahead to the next setup step.'}</p>
                   <div className="modal-actions mt-4">
-                    <Button type="button" variant="secondary" onClick={resetAccountForm}>
-                      Add Another Account
-                    </Button>
+                    {canAddMoreAccounts ? (
+                      <Button type="button" variant="secondary" onClick={resetAccountForm}>
+                        Add Another Account
+                      </Button>
+                    ) : null}
                     <Button type="button" onClick={onAdvanceAccounts}>
                       Next
                       <FaArrowRight />
@@ -666,12 +674,14 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                 </form>
               ) : (
                 <div className="form-section-card">
-                  <div className="form-section-title mb-2">Add another service?</div>
-                  <p className="page-muted small mb-0">You can keep building your service catalog now, or continue to customer import.</p>
+                  <div className="form-section-title mb-2">{canAddMoreServices ? 'Add another service?' : 'Service setup complete'}</div>
+                  <p className="page-muted small mb-0">{canAddMoreServices ? 'You can keep building your service catalog now, or continue to customer import.' : 'Continue to customer import.'}</p>
                   <div className="modal-actions mt-4">
-                    <Button type="button" variant="secondary" onClick={resetServiceForm}>
-                      Add Another Service
-                    </Button>
+                    {canAddMoreServices ? (
+                      <Button type="button" variant="secondary" onClick={resetServiceForm}>
+                        Add Another Service
+                      </Button>
+                    ) : null}
                     <Button type="button" onClick={onAdvanceServices}>
                       Next
                       <FaArrowRight />

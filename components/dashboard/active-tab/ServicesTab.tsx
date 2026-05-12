@@ -15,6 +15,7 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
   const {
     selectedCounter,
     visibleServices,
+    canAddServiceRecords,
     canManageModule,
     canDeleteModule,
     canEmployeeOperateOnDepartment,
@@ -25,7 +26,7 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
     serviceSummary,
   } = ctx;
   const servicesUi = getModuleUi('services');
-  const addServiceAction = canManageModule('services') && canEmployeeOperateOnDepartment
+  const addServiceAction = canAddServiceRecords && canEmployeeOperateOnDepartment
     ? {
         label: 'Add Service',
         onClick: () => handleQuickAction('add-service'),
@@ -43,7 +44,7 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
               ? `Track active offerings, pricing, and service status for ${selectedCounter.name}.`
               : 'Track active offerings, pricing, and service status with the latest metrics.'
           }
-          action={canManageModule('services') && canEmployeeOperateOnDepartment ? {
+          action={canAddServiceRecords && canEmployeeOperateOnDepartment ? {
             label: 'Add Service',
             icon: <FaPlusCircle />,
             onClick: () => handleQuickAction('add-service'),

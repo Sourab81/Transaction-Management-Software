@@ -85,7 +85,7 @@ describe('departments api', () => {
     );
   });
 
-  test('uses temporary demo department data when the backend returns no data', async () => {
+  test('returns an empty department list when the backend returns no data', async () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example.test';
 
     globalThis.fetch = async () => new Response(JSON.stringify({
@@ -95,15 +95,6 @@ describe('departments api', () => {
       headers: { 'Content-Type': 'application/json' },
     });
 
-    assert.deepEqual(await getDepartmentsWithToken('raw-session-token'), [
-      {
-        id: 'demo-department-1',
-        name: 'Demo Department',
-        code: 'DEMO-001',
-        openingBalance: 0,
-        currentBalance: 0,
-        status: 'Active',
-      },
-    ]);
+    assert.deepEqual(await getDepartmentsWithToken('raw-session-token'), []);
   });
 });

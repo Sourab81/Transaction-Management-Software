@@ -3,6 +3,11 @@ export type BackendApiResource =
   | 'businessCreate'
   | 'dashboardSummary'
   | 'departments'
+  | 'departmentCreate'
+  | 'accounts'
+  | 'accountCreate'
+  | 'accountDelete'
+  | 'accountLinkDepartment'
   | 'customers'
   | 'employees'
   | 'transactions'
@@ -46,6 +51,35 @@ const backendApiResources: Record<BackendApiResource, BackendApiResourceConfig> 
   departments: {
     label: 'departments',
     defaultPath: 'getCounters',
+  },
+  departmentCreate: {
+    label: 'create department',
+    defaultPath: 'createCounter',
+    envPathKey: 'NEXT_PUBLIC_API_CREATE_DEPARTMENT_PATH',
+    method: 'POST',
+  },
+  accounts: {
+    label: 'accounts',
+    defaultPath: 'getAccounts',
+    envPathKey: 'NEXT_PUBLIC_API_ACCOUNTS_PATH',
+  },
+  accountCreate: {
+    label: 'create account',
+    defaultPath: 'createAccount',
+    envPathKey: 'NEXT_PUBLIC_API_ACCOUNT_CREATE_PATH',
+    method: 'POST',
+  },
+  accountDelete: {
+    label: 'delete account',
+    defaultPath: 'deleteAccount',
+    envPathKey: 'NEXT_PUBLIC_API_ACCOUNT_DELETE_PATH',
+    method: 'POST',
+  },
+  accountLinkDepartment: {
+    label: 'link account to department',
+    defaultPath: 'linkAccountToDepartment',
+    envPathKey: 'NEXT_PUBLIC_API_ACCOUNT_LINK_DEPARTMENT_PATH',
+    method: 'POST',
   },
   customers: {
     label: 'customers',

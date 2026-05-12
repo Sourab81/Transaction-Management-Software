@@ -85,3 +85,28 @@ export const requestBackendCollection = async (
     body: parseJsonText(rawBody),
   };
 };
+
+export const requestBackendJson = async (
+  resource: BackendApiResource,
+  token: string,
+  bodyValues: Record<string, unknown>,
+): Promise<BackendApiResult> => {
+  const config = getBackendApiResourceConfig(resource);
+  const response = await fetch(buildBackendApiUrl(resource), {
+    method: config.method,
+    headers: {
+      Accept: 'application/json',
+      Authorization: token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(bodyValues),
+    cache: 'no-store',
+  });
+
+  const rawBody = await response.text();
+
+  return {
+    statusCode: response.status,
+    body: parseJsonText(rawBody),
+  };
+};

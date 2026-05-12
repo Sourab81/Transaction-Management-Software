@@ -15,6 +15,7 @@ interface UseApiCollectionResult<T> {
   data: T[];
   isLoading: boolean;
   error: string;
+  hasLoaded: boolean;
   reload: () => void;
 }
 
@@ -29,6 +30,7 @@ export function useApiCollection<T>({
   const [data, setData] = useState<T[]>(() => initialData ?? []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasLoaded, setHasLoaded] = useState(hasInitialData);
   const [reloadToken, setReloadToken] = useState(0);
   const runRequest = useEffectEvent(request);
   const runMapResponse = useEffectEvent(mapResponse);
@@ -38,12 +40,14 @@ export function useApiCollection<T>({
       setData(initialData ?? []);
       setError('');
       setIsLoading(false);
+      setHasLoaded(hasInitialData);
       return;
     }
 
     if (reloadToken === 0 && hasInitialData && !revalidateOnMount) {
       setError('');
       setIsLoading(false);
+      setHasLoaded(true);
       return;
     }
 
@@ -58,6 +62,7 @@ export function useApiCollection<T>({
 
         if (!isCancelled) {
           setData(runMapResponse(payload));
+          setHasLoaded(true);
         }
       } catch (requestError) {
         if (isCancelled) {
@@ -67,10 +72,12 @@ export function useApiCollection<T>({
         if (requestError instanceof AppApiError && requestError.statusCode === 501) {
           setData([]);
           setError('');
+          setHasLoaded(true);
           return;
         }
 
         setData([]);
+        setHasLoaded(true);
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -94,6 +101,7 @@ export function useApiCollection<T>({
     data,
     isLoading,
     error,
+    hasLoaded,
     reload: () => setReloadToken((current) => current + 1),
   };
 }
