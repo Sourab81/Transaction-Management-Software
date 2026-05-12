@@ -71,7 +71,7 @@ const ensureSuccessPayload = (payload: unknown, fallbackMessage: string) => {
 
 export const getAccountsResponse = async () => {
   try {
-    const payload = await requestAppApi(`${process.env.NEXT_PUBLIC_API_BASE_URL}/accounts`);
+    const payload = await requestAppApi(`${process.env.NEXT_PUBLIC_API_BASE_URL}/getAccounts`);
 
     return isNoDataFoundBody(payload) ? [] : payload;
   } catch (error) {
