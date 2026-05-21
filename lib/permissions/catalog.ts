@@ -21,9 +21,9 @@ export const customerPermissionSections: CustomerPermissionSection[] = [
   },
   {
     id: 'service_operations',
-    label: 'Service Operations',
+    label: 'Inventory Operations',
     items: [
-      { id: 'services_access', label: 'Manage Services (View, Add, Edit)' },
+      { id: 'services_access', label: 'Manage Inventory / Transactions (View, Add, Edit)' },
     ],
   },
   {
@@ -65,7 +65,7 @@ export const customerPermissionSections: CustomerPermissionSection[] = [
     label: 'Reports & Analytics',
     items: [
       { id: 'reports_bank_counter_report', label: 'Bank & Counter Reports' },
-      { id: 'reports_service_report', label: 'Service Performance Reports' },
+      { id: 'reports_service_report', label: 'Inventory Performance Reports' },
       { id: 'day_reports_heading', label: 'Daily Business Reports', kind: 'label' },
       { id: 'reports_day_report_service_charge_details', label: 'Service Charge Breakdown', indent: 1 },
       { id: 'reports_day_report_account_and_counter_details', label: 'Account & Counter Summary', indent: 1 },

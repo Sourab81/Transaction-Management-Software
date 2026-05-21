@@ -93,9 +93,9 @@ export const userDashboardModules: PlatformModule[] = [
   },
   {
     id: 'services',
-    label: 'Service',
-    sidebarLabel: 'Services',
-    heading: 'Service',
+    label: 'Inventory',
+    sidebarLabel: 'Inventory',
+    heading: 'Inventory',
     description: ' ',
     icon: FaCog,
     allowedRoles: ['Admin', 'Employee', 'Customer'],
@@ -182,7 +182,7 @@ export const adminDashboardModules = [
 
 export const workflowSteps = [
   'Login',
-  'Service Selection',
+  'Inventory Selection',
   'Customer Entry Or Autofill',
   'Transaction Processing',
   'Save Record',

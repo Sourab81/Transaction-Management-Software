@@ -1,17 +1,14 @@
-import type { Counter } from '../store';
 import {
   type LoginApiResponseBody,
   LoginApiError,
   loginWithApi,
 } from './auth';
-import { getDepartmentsWithToken } from './departments';
 import { extractAccessToken } from '../mappers/session-user-mapper';
 
 export interface LoginWorkspaceBootstrapResult {
   statusCode: number;
   body: LoginApiResponseBody | null;
   accessToken: string;
-  counters: Counter[];
 }
 
 export class LoginWorkspaceBootstrapError extends Error {
@@ -63,11 +60,8 @@ export const loginAndLoadWorkspaceBootstrap = async (
     );
   }
 
-  const counters = await getDepartmentsWithToken(accessToken).catch(() => []);
-
   return {
     ...loginResult,
     accessToken,
-    counters,
   };
 };

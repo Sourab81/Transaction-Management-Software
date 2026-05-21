@@ -21,10 +21,7 @@ import { isPermissionEnabled } from './platform-structure';
 
 interface TransactionRecordFilters {
   query: string;
-  status: 'All' | Transaction['status'];
-  paymentMode: 'All' | Transaction['paymentMode'];
-  department: string;
-  handler: string;
+  transactionAccount: string;
   dateFrom: string;
   dateTo: string;
 }
@@ -134,8 +131,11 @@ export function useFilteredBusinesses(
 
 export function useTransactionFilterOptions(transactions: Transaction[]) {
   return useMemo(() => ({
-    departments: Array.from(new Set(transactions.map((transaction) => transaction.departmentName).filter(Boolean))),
-    handlers: Array.from(new Set(transactions.map((transaction) => transaction.handledByName).filter(Boolean))),
+    accounts: Array.from(new Set(
+      transactions
+        .map((transaction) => transaction.accountLabel || transaction.transactionAccountId)
+        .filter((account): account is string => Boolean(account)),
+    )),
   }), [transactions]);
 }
 
@@ -147,33 +147,37 @@ export function useFilteredTransactionRecords(
 
   return useMemo(() => transactions.filter((transaction) => {
     const matchesQuery = !deferredQuery || [
+      transaction.formName,
+      transaction.transactionNo,
       transaction.transactionNumber,
       transaction.customerName,
       transaction.customerPhone,
+      transaction.serviceProduct,
       transaction.service,
-      transaction.paymentMode,
-      transaction.departmentName,
-      transaction.handledByName,
+      transaction.accountLabel,
+      transaction.transactionAccountId,
+      transaction.amount,
+      transaction.serviceCharge,
+      transaction.bankCharge,
+      transaction.otherCharge,
+      transaction.totalAmount,
+      transaction.remark,
+      transaction.note,
     ]
       .join(' ')
       .toLowerCase()
       .includes(deferredQuery);
-    const matchesStatus = filters.status === 'All' || transaction.status === filters.status;
-    const matchesPaymentMode = filters.paymentMode === 'All' || transaction.paymentMode === filters.paymentMode;
-    const matchesDepartment = filters.department === 'All' || transaction.departmentName === filters.department;
-    const matchesHandler = filters.handler === 'All' || transaction.handledByName === filters.handler;
+    const transactionAccount = transaction.accountLabel || transaction.transactionAccountId || '';
+    const matchesTransactionAccount = filters.transactionAccount === 'All' || transactionAccount === filters.transactionAccount;
     const matchesFromDate = !filters.dateFrom || transaction.date >= filters.dateFrom;
     const matchesToDate = !filters.dateTo || transaction.date <= filters.dateTo;
 
-    return matchesQuery && matchesStatus && matchesPaymentMode && matchesDepartment && matchesHandler && matchesFromDate && matchesToDate;
+    return matchesQuery && matchesTransactionAccount && matchesFromDate && matchesToDate;
   }), [
     deferredQuery,
     filters.dateFrom,
     filters.dateTo,
-    filters.department,
-    filters.handler,
-    filters.paymentMode,
-    filters.status,
+    filters.transactionAccount,
     transactions,
   ]);
 }

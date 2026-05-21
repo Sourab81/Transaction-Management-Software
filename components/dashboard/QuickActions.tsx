@@ -10,7 +10,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onAction }) => {
     {
       id: 'new-transaction',
       label: 'New Transaction',
-      copy: 'Start a fresh service workflow in one click.',
+      copy: 'Start a fresh inventory transaction in one click.',
       icon: <FaPlusCircle />,
       tone: 'primary',
     },
@@ -31,7 +31,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onAction }) => {
     {
       id: 'favorites',
       label: 'Favorites',
-      copy: 'Jump to the services your team uses most often.',
+      copy: 'Jump to the inventory items your team uses most often.',
       icon: <FaStar />,
       tone: 'warning',
     },

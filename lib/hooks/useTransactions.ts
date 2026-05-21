@@ -1,7 +1,7 @@
 'use client';
 
 import type { Transaction } from '../store';
-import { getTransactionsResponse } from '../api/transactions';
+import { requestAppApi } from '../api/client';
 import { mapTransactionsResponse } from '../mappers/transaction-mapper';
 import { useApiCollection } from './useApiCollection';
 
@@ -19,7 +19,7 @@ export function useTransactions(
   const { data, isLoading, error, reload } = useApiCollection({
     enabled,
     initialData,
-    request: getTransactionsResponse,
+    request: () => requestAppApi('/api/transactions'),
     mapResponse: mapTransactionsResponse,
   });
 

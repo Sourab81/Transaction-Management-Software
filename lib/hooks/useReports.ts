@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReportItem } from '../store';
-import { getReportsResponse } from '../api/reports';
+import { requestAppApi } from '../api/client';
 import { mapReportsResponse } from '../mappers/report-mapper';
 import { useApiCollection } from './useApiCollection';
 
@@ -19,7 +19,7 @@ export function useReports(
   const { data, isLoading, error, reload } = useApiCollection({
     enabled,
     initialData,
-    request: getReportsResponse,
+    request: () => requestAppApi('/api/reports'),
     mapResponse: mapReportsResponse,
   });
 

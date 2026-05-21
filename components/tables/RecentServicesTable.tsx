@@ -24,12 +24,12 @@ const RecentServicesTable: React.FC<RecentServicesTableProps> = ({ services }) =
   <DataTable
     rows={services}
     getRowKey={(service) => service.id}
-    eyebrow="Recent Services"
-    title="Latest service activity"
-    copy="Most recent processed services with customer and amount context."
-    emptyLabel="No recent service activity found."
+    eyebrow="Recent Inventory"
+    title="Latest inventory activity"
+    copy="Most recent processed inventory transactions with customer and amount context."
+    emptyLabel="No recent inventory activity found."
     columns={[
-      { key: 'service', header: 'Service', render: (service) => <span className="data-table__primary">{service.name}</span> },
+      { key: 'service', header: 'Inventory Item', render: (service) => <span className="data-table__primary">{service.name}</span> },
       { key: 'customer', header: 'Customer', render: (service) => service.customer },
       { key: 'amount', header: 'Amount', render: (service) => `Rs. ${service.amount.toLocaleString('en-IN')}` },
       { key: 'status', header: 'Status', render: (service) => <span className={getStatusClass(service.status)}>{service.status}</span> },

@@ -75,6 +75,25 @@ INSERT INTO `tbl_roles` (`id`, `create_date`, `update_date`, `user_id`, `role_na
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `tbl_services`
+--
+
+CREATE TABLE IF NOT EXISTS `tbl_services` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT NOT NULL,
+  `service_name` VARCHAR(150) NOT NULL,
+  `service_code` VARCHAR(50) DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `price` DECIMAL(10,2) DEFAULT 0.00,
+  `duration` INT DEFAULT NULL,
+  `status` TINYINT(1) DEFAULT 1,
+  `added_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_date` DATETIME DEFAULT NULL
+);
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `tbl_users`
 --
 

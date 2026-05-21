@@ -1,7 +1,7 @@
 'use client';
 
 import type { DashboardSummary } from '../mappers/dashboard-summary-mapper';
-import { getDashboardSummaryResponse } from '../api/dashboard';
+import { requestAppApi } from '../api/client';
 import { mapDashboardSummaryResponse } from '../mappers/dashboard-summary-mapper';
 import { useApiResource } from './useApiResource';
 
@@ -19,7 +19,7 @@ export function useDashboardSummary(
   const { data, isLoading, error, reload } = useApiResource({
     enabled,
     initialData,
-    request: getDashboardSummaryResponse,
+    request: () => requestAppApi('/api/dashboard-summary'),
     mapResponse: mapDashboardSummaryResponse,
   });
 

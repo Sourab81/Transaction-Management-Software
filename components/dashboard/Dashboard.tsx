@@ -4,7 +4,10 @@ import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar, FaFilter } from 'react-icons/fa';
 import { getAvailableUsers, type SessionUser } from '../../lib/auth-session';
-import { checkUserIdentityAvailability } from '../../lib/actions/business-directory-actions';
+import {
+  checkUserIdentityAvailability,
+  createBusinessUser,
+} from '../../lib/api/business-users';
 import { buildCsv } from '../../lib/csv';
 import {
   canPerformModuleActionForSession,
@@ -24,8 +27,6 @@ import type { Account, AdditionOption, Business, BusinessCustomer, BusinessOnboa
 import { buildDailyClosingSummary, buildTransactionReceiptText } from '../../lib/transaction-workflow';
 import {
   canTransitionTransactionStatus,
-  validateTransactionAccountSelection,
-  validateTransactionAmounts,
 } from '../../lib/transaction-rules';
 import {
   useAdminWorkspaceData,
@@ -50,14 +51,22 @@ import { useDepartments } from '../../lib/hooks/useDepartments';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useReports } from '../../lib/hooks/useReports';
 import { useRoleTemplates } from '../../lib/hooks/useRoleTemplates';
+import { useInventory } from '../../lib/hooks/useInventory';
 import { useTransactions } from '../../lib/hooks/useTransactions';
 import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
 import { createDepartmentResponse } from '../../lib/api/departments';
 import {
   createAccount,
   deleteAccount,
+  getAccountsResponse,
   linkAccountToDepartment,
 } from '../../lib/api/accounts';
+import {
+  createCustomer,
+  deleteCustomer,
+  updateCustomer,
+} from '../../lib/api/customers';
+import { mapAccountsResponse } from '../../lib/mappers/account-mapper';
 import { buildRoleTemplatePrivilegesPayload } from '../../lib/mappers/role-template-mapper';
 import {
   getCustomerWorkspaceViewUi,
@@ -89,7 +98,6 @@ import SummaryGrid from './SummaryGrid';
 import ReusableListTable from '../common/ReusableListTable';
 import type { CustomerOutstandingRow } from '../tables/CustomerOutstandingTable';
 import {
-  buildEmptyDataTableFiltersValue,
   readDataTableDateRangeFilter,
   readDataTableMultiSelectFilter,
   readDataTableSingleSelectFilter,
@@ -277,11 +285,7 @@ const deleteActionModuleIds: Record<DeleteActionType, string> = {
 };
 
 type HistoryStatusFilter = 'All' | 'Failed';
-type TransactionStatusFilter = 'All' | Transaction['status'];
-type TransactionPaymentModeFilter = 'All' | Transaction['paymentMode'];
 type DepartmentAccountStatusFilter = 'All' | 'Active' | 'Inactive' | 'Unassigned';
-type AdminPlanWorkspaceFilter = 'All' | 'Active' | 'Locked';
-type AdminPlanExpiryFilter = 'All' | 'Expiring Soon' | 'Expired' | 'Cancelled';
 
 interface PendingDelete {
   actionType: DeleteActionType;
@@ -290,30 +294,10 @@ interface PendingDelete {
   module: string;
 }
 
-interface TransactionFilterState {
-  query: string;
-  status: TransactionStatusFilter;
-  paymentMode: TransactionPaymentModeFilter;
-  department: string;
-  handler: string;
-  dateFrom: string;
-  dateTo: string;
-  isOpen: boolean;
-}
-
 interface DepartmentFilterState {
   searchInput: string;
   searchQuery: string;
   accountStatus: DepartmentAccountStatusFilter;
-}
-
-interface AdminPlanFilterState {
-  searchQuery: string;
-  planId: string;
-  status: 'All' | BusinessSubscription['status'];
-  workspace: AdminPlanWorkspaceFilter;
-  expiry: AdminPlanExpiryFilter;
-  isOpen: boolean;
 }
 
 interface DashboardFilterState {
@@ -367,10 +351,7 @@ const resolveStateValue = <T,>(current: T, value: T | ((previous: T) => T)) => (
 const initialTransactionFilterState: DataTableFiltersValue = {
   search: '',
   fields: {
-    status: '',
-    paymentMode: '',
-    department: '',
-    handler: '',
+    transactionAccount: '',
     date: { from: '', to: '' },
   },
 };
@@ -482,7 +463,66 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
   }, [businesses, currentRole, currentUser.businessId, currentUser.email, currentUser.name, currentUser.permissions]);
   const workspace = useRoleScopedWorkspace(currentRole, currentUser.businessId);
+  const [uiState, setUiState] = useState<DashboardUiState>({
+    activeModal: null,
+    editingService: null,
+    editingBusiness: null,
+    selectedPlanBusiness: null,
+    editingCustomer: null,
+    editingEmployee: null,
+    editingDepartment: null,
+    editingAccount: null,
+    linkingAccount: null,
+    editingExpense: null,
+    editingTransaction: null,
+    selectedTransaction: null,
+    selectedCustomerHistory: null,
+    selectedHistoryEvent: null,
+    selectedReport: null,
+    selectedOption: null,
+    pendingDelete: null,
+    transactionDeleteReason: '',
+    workflowDraft: null,
+    favoriteServiceIds: ['service-1', 'service-3'],
+  });
+  const {
+    activeModal,
+    editingService,
+    editingBusiness,
+    selectedPlanBusiness,
+    editingCustomer,
+    editingEmployee,
+    editingDepartment,
+    editingAccount,
+    linkingAccount,
+    editingExpense,
+    editingTransaction,
+    selectedTransaction,
+    selectedCustomerHistory,
+    selectedHistoryEvent,
+    selectedReport,
+    selectedOption,
+    pendingDelete,
+    transactionDeleteReason,
+    workflowDraft,
+    favoriteServiceIds,
+  } = uiState;
   const shouldLoadWorkspaceApi = currentRole !== 'Admin' && Boolean(currentUser.businessId);
+  const isAccountsTab = activeTab === 'accounts';
+  const isTransactionEditModalOpen = activeModal === 'edit-transaction';
+  // Accounts/services stay page-scoped and load on transactions only because the form needs dropdowns.
+  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'transactions' || isTransactionEditModalOpen);
+  // Departments are shared shell data because the header selector scopes
+  // transactions, services, and search on every workspace page.
+  const shouldLoadDepartmentsApi = shouldLoadWorkspaceApi;
+  const shouldLoadCustomersApi = shouldLoadWorkspaceApi
+    && (activeTab === 'customers' || activeTab === 'transactions');
+  const shouldLoadEmployeesApi = shouldLoadWorkspaceApi && activeTab === 'employee';
+  // Inventory page owns inventory API loading and does not preload other modules.
+  const shouldLoadServicesApi = shouldLoadWorkspaceApi && (activeTab === 'services' || activeTab === 'transactions' || isTransactionEditModalOpen);
+  const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && activeTab === 'transactions';
+  const shouldLoadReportsApi = shouldLoadWorkspaceApi && activeTab === 'reports';
+  const shouldLoadDashboardSummaryApi = shouldLoadWorkspaceApi && activeTab === 'dashboard';
   const initialWorkspaceApiData = currentRole === 'Admin' ? undefined : initialWorkspaceData;
   const {
     counters: apiCounters,
@@ -490,7 +530,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     error: departmentsError,
     reload: reloadDepartments,
   } = useDepartments(
-    shouldLoadWorkspaceApi,
+    shouldLoadDepartmentsApi,
     initialWorkspaceApiData?.counters,
     initialWorkspaceApiData?.prefetchedCounters === true,
   );
@@ -499,42 +539,46 @@ const Dashboard: React.FC<DashboardProps> = ({
     isLoading: isCustomersLoading,
     error: customersError,
     reload: reloadCustomers,
-  } = useCustomers(shouldLoadWorkspaceApi, initialWorkspaceApiData?.customers);
+  } = useCustomers(shouldLoadCustomersApi, initialWorkspaceApiData?.customers);
   const {
     employees: apiEmployees,
     isLoading: isEmployeesLoading,
     error: employeesError,
     reload: reloadEmployees,
-  } = useEmployees(shouldLoadWorkspaceApi, initialWorkspaceApiData?.employees);
+  } = useEmployees(shouldLoadEmployeesApi, initialWorkspaceApiData?.employees);
   const {
     transactions: apiTransactions,
     isLoading: isTransactionsLoading,
     error: transactionsError,
     reload: reloadTransactions,
-  } = useTransactions(shouldLoadWorkspaceApi, initialWorkspaceApiData?.transactions);
+  } = useTransactions(shouldLoadTransactionsApi, initialWorkspaceApiData?.transactions);
   const {
     reports: apiReports,
     isLoading: isReportsLoading,
     error: reportsError,
     reload: reloadReports,
-  } = useReports(shouldLoadWorkspaceApi, initialWorkspaceApiData?.reports);
+  } = useReports(shouldLoadReportsApi, initialWorkspaceApiData?.reports);
   const {
     accounts: apiAccounts,
     isLoading: isAccountsLoading,
     error: accountsError,
     hasLoaded: hasLoadedAccounts,
     reload: reloadAccounts,
-  } = useAccounts(shouldLoadWorkspaceApi, initialWorkspaceApiData?.accounts);
+  } = useAccounts(shouldLoadAccountsApi, initialWorkspaceApiData?.accounts);
+  const {
+    services: apiServices,
+    isLoading: isServicesLoading,
+    error: servicesError,
+    hasLoaded: hasLoadedServices,
+    createInventory: createBackendInventory,
+    updateInventory: updateBackendInventory,
+    deleteInventory: deleteBackendInventory,
+    reload: reloadServices,
+  } = useInventory(shouldLoadServicesApi);
   const {
     summary: apiDashboardSummary,
     isLoading: isDashboardSummaryLoading,
-  } = useDashboardSummary(shouldLoadWorkspaceApi, initialWorkspaceApiData?.dashboardSummary);
-  const {
-    roles: roleTemplates,
-    isLoading: isRoleTemplatesLoading,
-    error: roleTemplatesError,
-    reload: reloadRoleTemplates,
-  } = useRoleTemplates(currentRole === 'Admin');
+  } = useDashboardSummary(shouldLoadDashboardSummaryApi, initialWorkspaceApiData?.dashboardSummary);
   const adminWorkspace = useAdminWorkspaceData();
   const businessWorkspacesById = useBusinessWorkspacesById();
   const [optimisticAccounts, setOptimisticAccounts] = useState<Account[]>([]);
@@ -556,10 +600,35 @@ const Dashboard: React.FC<DashboardProps> = ({
         : mergeWorkspaceRecords(workspace.accounts, apiAccounts),
     [apiAccounts, currentRole, hasLoadedAccounts, pendingOptimisticAccounts, workspace.accounts],
   );
-  const services = workspace.services;
+  const rawServices = useMemo(
+    () => currentRole === 'Admin'
+      ? workspace.services
+      : hasLoadedServices
+        ? apiServices
+        : mergeWorkspaceRecords(workspace.services, apiServices),
+    [apiServices, currentRole, hasLoadedServices, workspace.services],
+  );
   const counters = useMemo(
     () => mergeWorkspaceRecords(workspace.counters, apiCounters),
     [apiCounters, workspace.counters],
+  );
+  const services = useMemo(
+    () => rawServices.map((service) => {
+      const counterId = service.counterId || service.departmentId;
+      const counter = counterId
+        ? counters.find((item) => item.id === counterId)
+        : null;
+
+      return counter
+        ? {
+            ...service,
+            counterId: counter.id,
+            departmentId: counter.id,
+            departmentName: counter.name,
+          }
+        : service;
+    }),
+    [counters, rawServices],
   );
   const customers: Array<Business | BusinessCustomer> = useMemo(
     () => currentRole === 'Admin'
@@ -590,28 +659,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [selectedCounterId, setSelectedCounterId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState<DashboardFilterState>(initialDashboardFilterState);
-  const [uiState, setUiState] = useState<DashboardUiState>({
-    activeModal: null,
-    editingService: null,
-    editingBusiness: null,
-    selectedPlanBusiness: null,
-    editingCustomer: null,
-    editingEmployee: null,
-    editingDepartment: null,
-    editingAccount: null,
-    linkingAccount: null,
-    editingExpense: null,
-    editingTransaction: null,
-    selectedTransaction: null,
-    selectedCustomerHistory: null,
-    selectedHistoryEvent: null,
-    selectedReport: null,
-    selectedOption: null,
-    pendingDelete: null,
-    transactionDeleteReason: '',
-    workflowDraft: null,
-    favoriteServiceIds: ['service-1', 'service-3'],
-  });
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
   const [identityConflictDialog, setIdentityConflictDialog] = useState<IdentityConflictDialog | null>(null);
   const [isTransactionFiltersOpen, setIsTransactionFiltersOpen] = useState(false);
@@ -619,6 +666,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [selectedAccountLinkDepartmentId, setSelectedAccountLinkDepartmentId] = useState('');
   const [isDepartmentSubmitting, setIsDepartmentSubmitting] = useState(false);
   const [departmentSubmitError, setDepartmentSubmitError] = useState('');
+  const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
+  const [serviceSubmitError, setServiceSubmitError] = useState('');
+  const [departmentFormAccounts, setDepartmentFormAccounts] = useState<Account[]>([]);
+  const [isDepartmentAccountsLoading, setIsDepartmentAccountsLoading] = useState(false);
+  const [departmentAccountsError, setDepartmentAccountsError] = useState('');
   const {
     historyStatus: historyStatusFilter,
     businessDirectory: businessDirectoryFilters,
@@ -631,28 +683,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     searchQuery: departmentSearchQuery,
     accountStatus: departmentAccountStatusFilter,
   } = departmentFilters;
+  // Role templates are loaded only for the Roles page or when the Admin user form needs the dropdown.
+  const shouldLoadRoleTemplates = currentRole === 'Admin'
+    && (activeTab === 'role' || activeModal === 'add-customer' || activeModal === 'edit-customer');
   const {
-    activeModal,
-    editingService,
-    editingBusiness,
-    selectedPlanBusiness,
-    editingCustomer,
-    editingEmployee,
-    editingDepartment,
-    editingAccount,
-    linkingAccount,
-    editingExpense,
-    editingTransaction,
-    selectedTransaction,
-    selectedCustomerHistory,
-    selectedHistoryEvent,
-    selectedReport,
-    selectedOption,
-    pendingDelete,
-    transactionDeleteReason,
-    workflowDraft,
-    favoriteServiceIds,
-  } = uiState;
+    roles: roleTemplates,
+    isLoading: isRoleTemplatesLoading,
+    error: roleTemplatesError,
+    reload: reloadRoleTemplates,
+  } = useRoleTemplates(shouldLoadRoleTemplates);
 
   const updateUiState = <K extends keyof DashboardUiState>(
     key: K,
@@ -691,6 +730,49 @@ const Dashboard: React.FC<DashboardProps> = ({
   const updateAdminPlanFilters = (value: DataTableFiltersValue) => {
     updateFilterState('adminPlan', value);
   };
+
+  const isDepartmentFormModalOpen = activeModal === 'add-department' || activeModal === 'edit-department';
+
+  useEffect(() => {
+    if (!isDepartmentFormModalOpen) {
+      setDepartmentFormAccounts([]);
+      setDepartmentAccountsError('');
+      setIsDepartmentAccountsLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadDepartmentFormAccounts = async () => {
+      setIsDepartmentAccountsLoading(true);
+      setDepartmentAccountsError('');
+
+      try {
+        // Accounts are loaded only when the department modal opens for linking.
+        const payload = await getAccountsResponse();
+        if (!isCancelled) {
+          setDepartmentFormAccounts(mapAccountsResponse(payload));
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setDepartmentFormAccounts([]);
+          setDepartmentAccountsError(
+            error instanceof Error ? error.message : 'Unable to load bank accounts.',
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsDepartmentAccountsLoading(false);
+        }
+      }
+    };
+
+    void loadDepartmentFormAccounts();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isDepartmentFormModalOpen]);
 
   const setHistoryStatusFilter: React.Dispatch<React.SetStateAction<HistoryStatusFilter>> = (value) => {
     updateFilterState('historyStatus', value);
@@ -778,9 +860,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     && !isBusinessSubscriptionLocked
     && Boolean(currentBusiness)
     && !currentBusiness?.onboardingCompleted;
+  const hasLoadedSetupData = hasLoadedAccounts || workspace.accounts.length > 0 || workspace.counters.length > 0;
   const shouldRequireDepartmentSetup = currentRole === 'Customer'
     && !isBusinessSubscriptionLocked
     && !shouldShowBusinessOnboarding
+    && hasLoadedSetupData
     && counters.length === 0;
   const tokenAssignedDepartmentId = currentUser.counterId || currentUser.departmentId;
   const resolvedAssignedDepartmentId = tokenAssignedDepartmentId || currentEmployee?.departmentId;
@@ -799,9 +883,16 @@ const Dashboard: React.FC<DashboardProps> = ({
     : availableCounters[0]?.id || '';
   const selectedCounter = availableCounters.find((counter) => counter.id === safeSelectedCounterId) || availableCounters[0];
   const selectedDepartmentName = selectedCounter?.name || '';
-  const departmentScopedServices = getServicesForDepartment(services, safeSelectedCounterId || undefined);
+  const shouldShowAllInventory = activeTab === 'services' || activeTab === 'transactions' || isTransactionEditModalOpen;
+  const departmentScopedServices = shouldShowAllInventory
+    ? services
+    : getServicesForDepartment(services, safeSelectedCounterId || undefined);
   const visibleServices = useVisibleServiceRecords(accessContext, departmentScopedServices);
   const visibleCustomers = useVisibleCustomerRecords(accessContext, customers);
+  const visibleBusinessCustomers = useMemo(
+    () => visibleCustomers.filter((customer): customer is BusinessCustomer => !('permissions' in customer)),
+    [visibleCustomers],
+  );
   const visibleTransactionHistory = useVisibleTransactionRecords(accessContext, transactionHistory);
   const activeAccounts = useMemo(
     () => accounts.filter((account) => account.status === 'Active').length,
@@ -1032,13 +1123,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const serviceSummary = [
     {
-      title: 'Total Services',
+      title: 'Total Inventory',
       value: `${visibleServices.length}`,
-      detail: selectedDepartmentName ? `${selectedDepartmentName} catalog` : 'Visible service catalog',
+      detail: selectedDepartmentName ? `${selectedDepartmentName} catalog` : 'Visible inventory catalog',
       icon: <FaCog />,
       colorClass: 'bg-primary',
     },
-    { title: 'Active Services', value: `${activeVisibleServiceCount}`, detail: 'Ready for new transactions', icon: <FaChartLine />, colorClass: 'bg-success' },
+    { title: 'Active Inventory', value: `${activeVisibleServiceCount}`, detail: 'Ready for new transactions', icon: <FaChartLine />, colorClass: 'bg-success' },
     {
       title: 'Collected Amount',
       value: `Rs. ${scopedCollectedAmount.toLocaleString('en-IN')}`,
@@ -1046,7 +1137,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       icon: <FaDollarSign />,
       colorClass: 'bg-info',
     },
-    { title: 'Categories', value: `${serviceCategoryCount}`, detail: 'Distinct service groups on record', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
+    { title: 'Types', value: `${serviceCategoryCount}`, detail: 'Service and product groups on record', icon: <FaFolderOpen />, colorClass: 'bg-warning' },
   ];
 
   const customerSummary = useMemo(() => {
@@ -1091,16 +1182,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const transactionStats = useTransactionStats(visibleTransactionHistory);
   const {
-    departments: transactionDepartmentOptions,
-    handlers: transactionHandlerOptions,
+    accounts: transactionAccountOptions,
   } = useTransactionFilterOptions(visibleTransactionHistory);
   const transactionDateFilter = readDataTableDateRangeFilter(transactionFilters, 'date');
   const filteredTransactionRecords = useFilteredTransactionRecords(visibleTransactionHistory, {
     query: transactionFilters.search,
-    status: (transactionFilters.fields.status as TransactionStatusFilter) || 'All',
-    paymentMode: (transactionFilters.fields.paymentMode as TransactionPaymentModeFilter) || 'All',
-    department: typeof transactionFilters.fields.department === 'string' ? transactionFilters.fields.department : 'All',
-    handler: typeof transactionFilters.fields.handler === 'string' ? transactionFilters.fields.handler : 'All',
+    transactionAccount: typeof transactionFilters.fields.transactionAccount === 'string'
+      ? transactionFilters.fields.transactionAccount
+      : 'All',
     dateFrom: transactionDateFilter.from,
     dateTo: transactionDateFilter.to,
   });
@@ -1108,45 +1197,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   const transactionFiltersConfig: DataTableFiltersConfig = {
     search: {
       enabled: true,
-      fields: ['transactionNumber', 'customerName', 'customerPhone', 'service', 'paymentMode', 'departmentName', 'handledByName'],
+      fields: ['formName', 'transactionNo', 'transactionNumber', 'serviceProduct', 'accountLabel', 'remark'],
       label: 'Search',
     },
     fields: [
       {
-        field: 'status',
-        label: 'Status',
+        field: 'transactionAccount',
+        label: 'Transaction Account',
         type: 'single-select',
-        options: [
-          { label: 'All', value: 'All' },
-          { label: 'Completed', value: 'completed' },
-          { label: 'Pending', value: 'pending' },
-          { label: 'Cancelled', value: 'cancelled' },
-          { label: 'Refunded', value: 'refunded' },
-        ],
-      },
-      {
-        field: 'paymentMode',
-        label: 'Payment Mode',
-        type: 'single-select',
-        options: [
-          { label: 'All', value: 'All' },
-          { label: 'Cash', value: 'cash' },
-          { label: 'UPI', value: 'upi' },
-          { label: 'Bank', value: 'bank' },
-          { label: 'Card', value: 'card' },
-        ],
-      },
-      {
-        field: 'department',
-        label: 'Department',
-        type: 'single-select',
-        options: [{ label: 'All', value: 'All' }, ...transactionDepartmentOptions.map(d => ({ label: d, value: d }))],
-      },
-      {
-        field: 'handler',
-        label: 'Handled By',
-        type: 'single-select',
-        options: [{ label: 'All', value: 'All' }, ...transactionHandlerOptions.map(h => ({ label: h, value: h }))],
+        options: [{ label: 'All', value: 'All' }, ...transactionAccountOptions.map(account => ({ label: account, value: account }))],
       },
       {
         field: 'date',
@@ -1206,10 +1265,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const hasActiveTransactionFilters = transactionFilters.search.trim() !== '' ||
-    transactionFilters.fields.status !== '' ||
-    transactionFilters.fields.paymentMode !== '' ||
-    transactionFilters.fields.department !== '' ||
-    transactionFilters.fields.handler !== '' ||
+    transactionFilters.fields.transactionAccount !== '' ||
     transactionDateFilter.from !== '' ||
     transactionDateFilter.to !== '';
 
@@ -1454,14 +1510,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateFilterState('department', initialDepartmentFilterState);
   };
 
-  const clearTransactionFilters = () => {
-    updateFilterState('transaction', buildEmptyDataTableFiltersValue(transactionFiltersConfig));
-  };
-
-  const clearAdminPlanFilters = () => {
-    updateFilterState('adminPlan', buildEmptyDataTableFiltersValue(adminPlanFiltersConfig));
-  };
-
   const renderTransactionFilters = () => (
     <ActionModal
       title="Filter Transactions"
@@ -1557,6 +1605,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     setSelectedAccountLinkDepartmentId('');
     setDepartmentSubmitError('');
     setIsDepartmentSubmitting(false);
+    setServiceSubmitError('');
+    setIsServiceSubmitting(false);
   };
 
   const addNotification = (type: 'success' | 'warning' | 'error' | 'info', message: string) => {
@@ -2244,7 +2294,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       DELETE_SERVICE: {
         actionType,
         id,
-        label: services.find((service) => service.id === id)?.name || 'this service',
+        label: services.find((service) => service.id === id)?.name || 'this inventory item',
         module: getModuleLabel('services'),
       },
       DELETE_CUSTOMER: {
@@ -2356,6 +2406,32 @@ const Dashboard: React.FC<DashboardProps> = ({
         );
         return;
       }
+    } else if (pendingDelete.actionType === 'DELETE_SERVICE' && shouldLoadWorkspaceApi) {
+      try {
+        const result = await deleteBackendInventory(pendingDelete.id);
+
+        if (!result.success) {
+          addNotification('error', result.message || 'Unable to delete inventory item right now.');
+          return;
+        }
+
+        reloadServices();
+      } catch (error) {
+        addNotification(
+          'error',
+          error instanceof Error ? error.message : 'Unable to delete inventory item right now.',
+        );
+        return;
+      }
+    } else if (pendingDelete.actionType === 'DELETE_CUSTOMER' && shouldLoadWorkspaceApi) {
+      const result = await deleteCustomer(pendingDelete.id);
+
+      if (!result.success) {
+        addNotification('error', result.message || 'Unable to delete customer right now.');
+        return;
+      }
+
+      reloadCustomers();
     } else {
       const businessId = requireBusinessWorkspaceId();
       if (!businessId) return;
@@ -2511,18 +2587,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   const exportTransactions = () => {
     if (!requireModuleManagement('transactions', 'export')) return;
 
-    const header = ['Transaction No.', 'Customer', 'Service', 'Payment Mode', 'Total Amount', 'Paid Amount', 'Due Amount', 'Status', 'Department', 'Handled By', 'Date'];
+    const header = ['Form Name', 'Transaction No.', 'Service/Product', 'Transaction Account', 'Amount', 'Service Charge', 'Bank Charge', 'Other Charge', 'Total Amount', 'Remark', 'Date'];
     const rows = filteredTransactionRecords.map((transaction) => [
-      transaction.transactionNumber,
-      transaction.customerName,
-      transaction.service,
-      transaction.paymentMode.toUpperCase(),
+      transaction.formName || '',
+      transaction.transactionNo || transaction.transactionNumber,
+      transaction.serviceProduct || transaction.service,
+      transaction.accountLabel || transaction.transactionAccountId || '',
+      String(transaction.amount ?? transaction.totalAmount),
+      String(transaction.serviceCharge ?? 0),
+      String(transaction.bankCharge ?? 0),
+      String(transaction.otherCharge ?? 0),
       String(transaction.totalAmount),
-      String(transaction.paidAmount),
-      String(transaction.dueAmount),
-      transaction.status,
-      transaction.departmentName,
-      transaction.handledByName,
+      transaction.remark || transaction.note || '',
       transaction.date,
     ]);
     const csv = buildCsv([header, ...rows]);
@@ -2537,25 +2613,86 @@ const Dashboard: React.FC<DashboardProps> = ({
     addNotification('success', 'Transactions exported as CSV.');
   };
 
-  const handleServiceSubmit = (values: ServiceFormValues) => {
+  const handleServiceSubmit = async (values: ServiceFormValues) => {
     if (!requireModuleAction('services', editingService ? 'edit' : 'add')) return;
-    if (!ensureEmployeeDepartmentAccess(editingService ? 'update services' : 'create services')) return;
+    if (!ensureEmployeeDepartmentAccess(editingService ? 'update inventory' : 'create inventory')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
-    if (!values.departmentId || !values.departmentName) {
-      addNotification('warning', 'Choose the department for this service before saving.');
-      return;
-    }
-
     if (editingService) {
-      dispatch({ type: 'UPDATE_SERVICE', businessId, payload: { ...values, id: editingService.id } });
-      addHistoryEvent(`${values.name} service updated`, 'Services');
-      addNotification('success', `${values.name} updated for ${values.departmentName}.`);
+      if (shouldLoadWorkspaceApi) {
+        setIsServiceSubmitting(true);
+        setServiceSubmitError('');
+
+        try {
+          const result = await updateBackendInventory({
+            id: editingService.id,
+            name: values.name,
+            type: values.type || 'service',
+            quantity: values.quantity ?? 0,
+            remark: values.remark ?? values.description ?? null,
+            counterId: values.counterId ?? values.departmentId ?? null,
+            status: values.status === 'Active' ? 1 : 0,
+          });
+
+          if (!result.success) {
+            const message = result.message || 'Unable to update inventory item.';
+            setServiceSubmitError(message);
+            addNotification('error', message);
+            return;
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to update inventory item.';
+          setServiceSubmitError(message);
+          addNotification('error', message);
+          return;
+        } finally {
+          setIsServiceSubmitting(false);
+        }
+
+        reloadServices();
+      } else {
+        dispatch({ type: 'UPDATE_SERVICE', businessId, payload: { ...values, id: editingService.id } });
+      }
+
+      addHistoryEvent(`${values.name} inventory item updated`, 'Inventory');
+      addNotification('success', `${values.name} updated.`);
     } else {
-      dispatch({ type: 'ADD_SERVICE', businessId, payload: values });
-      addHistoryEvent(`${values.name} service added`, 'Services');
-      addNotification('success', `${values.name} added for ${values.departmentName}.`);
+      if (shouldLoadWorkspaceApi) {
+        setIsServiceSubmitting(true);
+        setServiceSubmitError('');
+
+        try {
+          const result = await createBackendInventory({
+            name: values.name,
+            type: values.type || 'service',
+            quantity: values.quantity ?? 0,
+            remark: values.remark ?? values.description ?? null,
+            counterId: values.counterId ?? values.departmentId ?? null,
+          });
+
+          if (!result.success) {
+            const message = result.message || 'Unable to create inventory item.';
+            setServiceSubmitError(message);
+            addNotification('error', message);
+            return;
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to create inventory item.';
+          setServiceSubmitError(message);
+          addNotification('error', message);
+          return;
+        } finally {
+          setIsServiceSubmitting(false);
+        }
+
+        reloadServices();
+      } else {
+        dispatch({ type: 'ADD_SERVICE', businessId, payload: values });
+      }
+
+      addHistoryEvent(`${values.name} inventory item added`, 'Inventory');
+      addNotification('success', `${values.name} added.`);
     }
     closeModal();
   };
@@ -2597,28 +2734,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       const privilegesPayload = JSON.stringify(
         buildRoleTemplatePrivilegesPayload(values.permissions, values.roleTemplateBackendPrivileges),
       );
-      const response = await fetch('/api/businesses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: values.email,
-          password: values.password,
-          fullname: values.name,
-          role: values.roleTemplateId,
-          email_id: values.email,
-          contact_no: values.phone,
-          // role_template_id: values.roleTemplateId,
-          permission: privilegesPayload,
-          privileges: privilegesPayload,
-        }),
+      const result = await createBusinessUser({
+        username: values.email,
+        password: values.password,
+        fullname: values.name,
+        role: values.roleTemplateId,
+        email_id: values.email,
+        contact_no: values.phone,
+        // role_template_id: values.roleTemplateId,
+        permission: privilegesPayload,
+        privileges: privilegesPayload,
       });
 
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        addNotification('error', result?.message || 'Unable to create business.');
+      if (!result.ok) {
+        addNotification('error', result.error || 'Unable to create business.');
         return;
       }
 
@@ -3000,6 +3129,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     category: string;
     description: string;
     price: number;
+    type?: 'service' | 'product';
+    quantity?: number;
+    remark?: string | null;
+    counterId?: string | null;
   }) => {
     if (!canPerformModuleAction('services', 'add') && !canCreateInitialService) {
       showPermissionWarning('services', 'add more');
@@ -3080,17 +3213,52 @@ const Dashboard: React.FC<DashboardProps> = ({
     completeOnboarding();
   };
 
-  const handleCustomerSubmit = (values: CustomerFormValues) => {
+  const handleCustomerSubmit = async (values: CustomerFormValues) => {
     if (!requireModuleAction('customers', editingCustomer ? 'edit' : 'add')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
     if (editingCustomer) {
-      dispatch({ type: 'UPDATE_CUSTOMER', businessId, payload: { ...values, id: editingCustomer.id } });
+      if (shouldLoadWorkspaceApi) {
+        const result = await updateCustomer({
+          id: editingCustomer.id,
+          customerName: values.customerName || values.name,
+          mobileNo: values.mobileNo || values.phone,
+          email: values.email || null,
+          address: values.address || null,
+          remark: values.remark || null,
+        });
+
+        if (!result.success) {
+          addNotification('error', result.message || 'Unable to update customer.');
+          return;
+        }
+
+        reloadCustomers();
+      } else {
+        dispatch({ type: 'UPDATE_CUSTOMER', businessId, payload: { ...values, id: editingCustomer.id } });
+      }
       addHistoryEvent(`${values.name} customer updated`, 'Customers');
       addNotification('success', 'Customer updated successfully.');
     } else {
-      dispatch({ type: 'ADD_CUSTOMER', businessId, payload: values });
+      if (shouldLoadWorkspaceApi) {
+        const result = await createCustomer({
+          customerName: values.customerName || values.name,
+          mobileNo: values.mobileNo || values.phone,
+          email: values.email || null,
+          address: values.address || null,
+          remark: values.remark || null,
+        });
+
+        if (!result.success) {
+          addNotification('error', result.message || 'Unable to create customer.');
+          return;
+        }
+
+        reloadCustomers();
+      } else {
+        dispatch({ type: 'ADD_CUSTOMER', businessId, payload: values });
+      }
       addHistoryEvent(`${values.name} customer added`, 'Customers');
       addNotification('success', 'Customer added successfully.');
     }
@@ -3140,10 +3308,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       const accountIds = values.accountIds.map((accountId) => Number(accountId)).filter(Number.isFinite);
       const defaultAccountId = Number(values.defaultAccountId);
 
-      if (accountIds.length !== values.accountIds.length || !Number.isFinite(defaultAccountId)) {
-        setDepartmentSubmitError('Selected bank account values are invalid.');
-        return;
-      }
+      // if (accountIds.length !== values.accountIds.length || !Number.isFinite(defaultAccountId)) {
+      //   setDepartmentSubmitError('Selected bank account values are invalid.');
+      //   return;
+      // }
 
       if (shouldLoadWorkspaceApi) {
         setIsDepartmentSubmitting(true);
@@ -3297,94 +3465,120 @@ const Dashboard: React.FC<DashboardProps> = ({
     closeModal();
   };
 
-  const handleTransactionSubmit = (values: TransactionEditorValues) => {
+  const handleTransactionSubmit = (values: TransactionEditorValues[]) => {
     if (!editingTransaction) return;
     if (!requireModuleAction('transactions', 'edit')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
-    const amountErrors = validateTransactionAmounts({
-      totalAmount: values.totalAmount,
-      paidAmount: values.paidAmount,
-      dueAmount: values.dueAmount,
-      status: values.status,
-    });
-    if (amountErrors.length > 0) {
-      addNotification('warning', amountErrors[0]);
+    const transactionRows = values;
+    const firstRow = transactionRows[0];
+    if (!firstRow) {
+      addNotification('warning', 'Add at least one transaction row before saving.');
       return;
     }
 
-    const selectedAccount = values.accountId
-      ? accounts.find((account) => account.id === values.accountId) || null
-      : null;
-    const selectedDepartment = values.departmentId
-      ? counters.find((counter) => counter.id === values.departmentId) || null
-      : null;
-    const accountErrors = validateTransactionAccountSelection({
-      paymentMode: values.paymentMode,
-      accountId: values.accountId,
-      paymentDetails: values.paymentDetails,
-      selectedAccount,
-      selectedDepartment,
-    });
-    if (accountErrors.length > 0) {
-      addNotification('warning', accountErrors[0]);
-      return;
-    }
-
-    const transition = canTransitionTransactionStatus(editingTransaction.status, values.status);
-    if (!transition.allowed) {
-      addNotification('warning', transition.error);
+    const missingAccountRow = transactionRows.find((row) => !accounts.some((account) => account.id === row.transactionAccountId));
+    if (missingAccountRow) {
+      addNotification('warning', 'Select a valid transaction account before saving.');
       return;
     }
 
     const now = new Date().toISOString();
+    const activeStatus = editingTransaction.status === 'cancelled' || editingTransaction.status === 'refunded'
+      ? editingTransaction.status
+      : 'completed';
+    const selectedAccount = accounts.find((account) => account.id === firstRow.transactionAccountId);
+
+    if (!selectedAccount) {
+      addNotification('warning', 'Select a valid transaction account before saving.');
+      return;
+    }
 
     const updatedTransaction: Transaction = {
       ...editingTransaction,
-      ...values,
+      formName: firstRow.formName,
+      transactionNo: firstRow.transactionNo,
+      transactionNumber: firstRow.transactionNo || editingTransaction.transactionNumber,
+      serviceProduct: firstRow.serviceProduct,
+      inventoryItemId: firstRow.inventoryItemId,
+      inventoryItemType: firstRow.inventoryItemType,
+      serviceId: firstRow.inventoryItemId || editingTransaction.serviceId,
+      service: firstRow.serviceProduct,
+      transactionAccountId: firstRow.transactionAccountId,
+      accountId: firstRow.transactionAccountId,
+      accountLabel: `${selectedAccount.accountHolder} | ${selectedAccount.bankName}`,
+      amount: firstRow.amount,
+      servicePrice: firstRow.amount,
+      serviceCharge: firstRow.serviceCharge,
+      bankCharge: firstRow.bankCharge,
+      otherCharge: firstRow.otherCharge,
+      totalAmount: firstRow.totalAmount,
+      paidAmount: activeStatus === 'completed' ? firstRow.totalAmount : 0,
+      dueAmount: 0,
+      remark: firstRow.remark,
+      note: firstRow.remark,
+      status: activeStatus,
       updatedAt: now,
       updatedBy: displayUserName,
       lastAuditAction: 'updated',
     };
-
-    if (editingTransaction.status !== updatedTransaction.status) {
-      if (updatedTransaction.status === 'cancelled') {
-        updatedTransaction.cancelledAt = now;
-        updatedTransaction.cancelledBy = displayUserName;
-        updatedTransaction.lastAuditAction = 'cancelled';
-      }
-
-      if (updatedTransaction.status === 'refunded') {
-        updatedTransaction.refundedAt = now;
-        updatedTransaction.refundedBy = displayUserName;
-        updatedTransaction.refundReason = values.note?.trim() || editingTransaction.refundReason || 'Refund processed during transaction update.';
-        updatedTransaction.lastAuditAction = 'refunded';
-      }
-    }
 
     dispatch({
       type: 'UPDATE_TRANSACTION',
       businessId,
       payload: updatedTransaction,
     });
-    if (editingTransaction.status !== updatedTransaction.status) {
-      const historyStatus = updatedTransaction.status === 'pending'
-        ? 'Pending'
-        : updatedTransaction.status === 'cancelled' || updatedTransaction.status === 'refunded'
-          ? 'Failed'
-          : 'Completed';
 
-      addHistoryEvent(
-        `Transaction ${updatedTransaction.transactionNumber} changed from ${editingTransaction.status} to ${updatedTransaction.status}`,
-        'Transactions',
-        historyStatus,
-      );
-    } else {
-      addHistoryEvent(`${updatedTransaction.transactionNumber} updated for ${updatedTransaction.customerName}`, 'Transactions');
-    }
+    transactionRows.slice(1).forEach((row) => {
+      const rowAccount = accounts.find((account) => account.id === row.transactionAccountId);
+      if (!rowAccount) return;
 
-    addNotification('success', `Transaction updated for ${updatedTransaction.customerName}.`);
+      dispatch({
+        type: 'ADD_TRANSACTION',
+        businessId,
+        payload: {
+          formName: row.formName,
+          transactionNo: row.transactionNo || undefined,
+          customerId: editingTransaction.customerId,
+          customerName: editingTransaction.customerName,
+          customerPhone: editingTransaction.customerPhone,
+          serviceProduct: row.serviceProduct,
+          inventoryItemId: row.inventoryItemId,
+          inventoryItemType: row.inventoryItemType,
+          serviceId: row.inventoryItemId || '',
+          service: row.serviceProduct,
+          servicePrice: row.amount,
+          transactionAccountId: row.transactionAccountId,
+          amount: row.amount,
+          serviceCharge: row.serviceCharge,
+          bankCharge: row.bankCharge,
+          otherCharge: row.otherCharge,
+          totalAmount: row.totalAmount,
+          paidAmount: activeStatus === 'completed' ? row.totalAmount : 0,
+          dueAmount: 0,
+          paymentMode: editingTransaction.paymentMode,
+          paymentDetails: editingTransaction.paymentDetails,
+          departmentId: editingTransaction.departmentId,
+          departmentName: editingTransaction.departmentName,
+          accountId: row.transactionAccountId,
+          accountLabel: `${rowAccount.accountHolder} | ${rowAccount.bankName}`,
+          handledById: editingTransaction.handledById,
+          handledByName: editingTransaction.handledByName,
+          handledByRole: editingTransaction.handledByRole,
+          remark: row.remark,
+          note: row.remark,
+          status: activeStatus,
+          createdBy: displayUserName,
+          updatedAt: now,
+          updatedBy: displayUserName,
+          lastAuditAction: 'created',
+        },
+      });
+    });
+
+    addHistoryEvent(`${transactionRows.length} transaction row${transactionRows.length === 1 ? '' : 's'} saved for ${updatedTransaction.customerName}`, 'Transactions');
+    addNotification('success', `${transactionRows.length} transaction row${transactionRows.length === 1 ? '' : 's'} saved.`);
     closeModal();
   };
 
@@ -3496,7 +3690,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <EmptyState
               eyebrow="Global Search"
               title={`No results for "${searchQuery}"`}
-              description="Try a customer name, transaction number, phone number, or service name."
+              description="Try a customer name, transaction number, phone number, or inventory item name."
               action={{
                 label: 'Clear Search',
                 onClick: () => setSearchQuery(''),
@@ -3508,12 +3702,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         {searchMatches.services.length > 0 && (
           <div className="col-12 col-xl-4">
-            <h3 className="h5 fw-semibold mb-3">Services</h3>
+            <h3 className="h5 fw-semibold mb-3">Inventory</h3>
             <div className="d-flex flex-column gap-2">
               {searchMatches.services.map((service) => (
                 <button key={service.id} type="button" className="search-result-button" onClick={() => { openModule('services'); setSearchQuery(''); }}>
                   <span className="fw-semibold d-block">{service.name}</span>
-                  <span className="page-muted small">{service.category} | Rs. {service.price.toLocaleString('en-IN')}</span>
+                  <span className="page-muted small">{service.type === 'product' ? 'Product' : 'Service'} | Qty. {service.quantity ?? 0}</span>
                 </button>
               ))}
             </div>
@@ -3541,7 +3735,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               {searchMatches.transactions.map((transaction) => (
                 <button key={transaction.id} type="button" className="search-result-button" onClick={() => { openModule('transactions'); setSearchQuery(''); }}>
                   <span className="fw-semibold d-block">{transaction.customerName}</span>
-                  <span className="page-muted small">{transaction.service} | {transaction.status}</span>
+                  <span className="page-muted small">{transaction.serviceProduct || transaction.service} | Rs. {transaction.totalAmount.toLocaleString('en-IN')}</span>
                 </button>
               ))}
             </div>
@@ -3665,17 +3859,17 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     if (activeModal === 'favorites') {
       return (
-        <ActionModal title="Favorite Services" onClose={closeModal}>
+        <ActionModal title="Favorite Inventory" onClose={closeModal}>
           <div className="d-flex flex-column gap-3">
             {favoriteServices.length === 0 ? (
-              <p className="page-muted mb-0">No favorite services pinned yet.</p>
+              <p className="page-muted mb-0">No favorite inventory items pinned yet.</p>
             ) : (
               favoriteServices.map((service) => (
                 <div key={service.id} className="form-section-card p-3">
                   <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
                     <div>
                       <h3 className="h6 fw-semibold mb-1"><FaStar className="text-warning me-2" />{service.name}</h3>
-                      <p className="page-muted small mb-0">{service.category} | Rs. {service.price.toLocaleString('en-IN')}</p>
+                      <p className="page-muted small mb-0">{service.type === 'product' ? 'Product' : 'Service'} | Qty. {service.quantity ?? 0}</p>
                     </div>
                     <div className="d-flex gap-2 flex-wrap">
                       <button
@@ -3683,8 +3877,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                         className="btn-app btn-app-primary"
                         onClick={() => startWorkflowWithDraft({
                           serviceId: service.id,
-                          totalAmount: service.price,
-                          paidAmount: service.price,
+                          totalAmount: 0,
+                          paidAmount: 0,
                           paymentMode: 'cash',
                           status: 'completed',
                         }, {
@@ -3809,12 +4003,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (activeModal === 'add-service' || activeModal === 'edit-service') {
       return (
         <ActionModal
-          title={editingService ? 'Edit Service' : 'Add Service'}
-          eyebrow="Service"
+          title={editingService ? 'Edit Inventory' : 'Add Inventory'}
+          eyebrow="Inventory"
           description={
             editingService
-              ? 'Update the service details and department mapping operators use during transactions.'
-              : 'Create a department-specific service that operators can select in the one-page workflow.'
+              ? 'Update the inventory item details and department mapping operators use during transactions.'
+              : 'Create an inventory item that operators can select in the one-page workflow.'
           }
           onClose={closeModal}
         >
@@ -3823,7 +4017,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             defaultDepartmentId={selectedCounter?.id}
             departmentLocked={currentRole === 'Employee'}
             initialValues={editingService || undefined}
-            submitLabel={editingService ? 'Update Service' : 'Add Service'}
+            isSubmitting={isServiceSubmitting}
+            submitError={serviceSubmitError}
+            submitLabel={isServiceSubmitting ? 'Saving...' : editingService ? 'Update Inventory' : 'Add Inventory'}
             onCancel={closeModal}
             onSubmit={handleServiceSubmit}
           />
@@ -3845,7 +4041,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 : 'Create a user profile, assign login credentials, and choose the workspace permissions it should receive.'
               : editingCustomer
                 ? 'Update customer details used inside the business workspace.'
-                : 'Save customer details once and reuse them during service processing.'
+                : 'Save customer details once and reuse them during transaction processing.'
           }
           onClose={closeModal}
         >
@@ -3901,13 +4097,17 @@ const Dashboard: React.FC<DashboardProps> = ({
           onClose={closeModal}
         >
           <DepartmentForm
-            accounts={accounts}
+            accounts={departmentFormAccounts}
             initialValues={editingDepartment || undefined}
             submitLabel={editingDepartment ? 'Update Department' : 'Add Department'}
             onCancel={closeModal}
             onSubmit={handleDepartmentSubmit}
             isSubmitting={isDepartmentSubmitting}
-            submitError={departmentSubmitError}
+            submitError={
+              departmentSubmitError
+              || departmentAccountsError
+              || (isDepartmentAccountsLoading ? 'Loading bank accounts...' : '')
+            }
           />
         </ActionModal>
       );
@@ -4036,14 +4236,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         <ActionModal
           title="Edit Transaction"
           eyebrow="Transactions"
-          description="Update payment details, department mapping, or transaction status without breaking account balances."
+          description="Update transaction details, account mapping, charges, and remarks."
           onClose={closeModal}
         >
           <TransactionEditForm
             accounts={accounts}
-            departments={availableCounters}
             initialValues={editingTransaction}
-            lockDepartment={currentRole === 'Employee'}
             services={services}
             onCancel={closeModal}
             onSubmit={handleTransactionSubmit}
@@ -4056,19 +4254,19 @@ const Dashboard: React.FC<DashboardProps> = ({
       return (
         <ActionModal title="Transaction Details" onClose={closeModal}>
           <DetailList rows={[
-            ['Transaction No.', selectedTransaction.transactionNumber],
+            ['Form Name', selectedTransaction.formName || 'Not added'],
+            ['Transaction No.', selectedTransaction.transactionNo || selectedTransaction.transactionNumber],
             ['Customer', selectedTransaction.customerName],
             ['Customer Phone', selectedTransaction.customerPhone || 'Not added'],
-            ['Service', selectedTransaction.service],
-            ['Payment Mode', selectedTransaction.paymentMode.toUpperCase()],
+            ['Service/Product', selectedTransaction.serviceProduct || selectedTransaction.service],
+            ['Transaction Account', selectedTransaction.accountLabel || selectedTransaction.transactionAccountId || 'Not linked'],
+            ['Amount', `Rs. ${(selectedTransaction.amount ?? selectedTransaction.totalAmount).toLocaleString('en-IN')}`],
+            ['Service Charge', `Rs. ${(selectedTransaction.serviceCharge ?? 0).toLocaleString('en-IN')}`],
+            ['Bank Charge', `Rs. ${(selectedTransaction.bankCharge ?? 0).toLocaleString('en-IN')}`],
+            ['Other Charge', `Rs. ${(selectedTransaction.otherCharge ?? 0).toLocaleString('en-IN')}`],
             ['Total Amount', `Rs. ${selectedTransaction.totalAmount.toLocaleString('en-IN')}`],
-            ['Paid Amount', `Rs. ${selectedTransaction.paidAmount.toLocaleString('en-IN')}`],
-            ['Due Amount', `Rs. ${selectedTransaction.dueAmount.toLocaleString('en-IN')}`],
-            ['Department', selectedTransaction.departmentName || 'Not assigned'],
-            ['Account', selectedTransaction.accountLabel || 'Not linked'],
             ['Handled By', `${selectedTransaction.handledByName} (${selectedTransaction.handledByRole})`],
-            ['Status', selectedTransaction.status],
-            ['Notes', selectedTransaction.note || 'No notes'],
+            ['Remark', selectedTransaction.remark || selectedTransaction.note || 'No remark'],
             ['Date', selectedTransaction.date],
           ]} />
           <div className="modal-actions">
@@ -4162,12 +4360,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             className="mb-4"
             mobileCards={false}
             columns={[
-              { key: 'transactionNumber', header: 'Txn No.', render: (transaction) => transaction.transactionNumber },
-              { key: 'service', header: 'Service', render: (transaction) => transaction.service },
-              { key: 'total', header: 'Total', render: (transaction) => `Rs. ${transaction.totalAmount.toLocaleString('en-IN')}` },
-              { key: 'paid', header: 'Paid', render: (transaction) => `Rs. ${transaction.paidAmount.toLocaleString('en-IN')}` },
-              { key: 'due', header: 'Due', render: (transaction) => `Rs. ${transaction.dueAmount.toLocaleString('en-IN')}` },
-              { key: 'status', header: 'Status', render: (transaction) => transaction.status },
+              { key: 'formName', header: 'Form Name', render: (transaction) => transaction.formName || 'Not added' },
+              { key: 'transactionNumber', header: 'Txn No.', render: (transaction) => transaction.transactionNo || transaction.transactionNumber },
+              { key: 'serviceProduct', header: 'Service/Product', render: (transaction) => transaction.serviceProduct || transaction.service },
+              { key: 'account', header: 'Transaction Account', render: (transaction) => transaction.accountLabel || transaction.transactionAccountId || 'Not linked' },
+              { key: 'amount', header: 'Amount', render: (transaction) => `Rs. ${(transaction.amount ?? transaction.totalAmount).toLocaleString('en-IN')}` },
+              { key: 'total', header: 'Total Amount', render: (transaction) => `Rs. ${transaction.totalAmount.toLocaleString('en-IN')}` },
               { key: 'date', header: 'Date', render: (transaction) => transaction.date },
             ]}
           />
@@ -4320,6 +4518,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     accessContext,
     selectedCounter,
     availableCounters,
+    visibleCustomers: visibleBusinessCustomers,
     visibleServices,
     recentServices,
     notifications,
@@ -4335,10 +4534,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     isEmployeesLoading,
     isDepartmentsLoading,
     isAccountsLoading,
+    isServicesLoading,
     isTransactionsLoading,
     isReportsLoading,
     isRoleTemplatesLoading,
     accountsError,
+    servicesError,
     roleTemplatesError,
     workflowDraft,
     employeeAssignedDepartment,
@@ -4406,6 +4607,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     canAccessModuleForSession,
     getRoleLabel,
     showNotification: addNotification,
+    reloadCustomers,
     reloadRoleTemplates,
     handleLogout: onLogout,
     handleAdminProfileSave,
@@ -4462,6 +4664,19 @@ const Dashboard: React.FC<DashboardProps> = ({
             title="Unable to load accounts"
             description={accountsError}
             action={{ label: 'Retry', onClick: reloadAccounts }}
+          />
+        );
+      }
+    }
+
+    if (activeTab === 'services') {
+      if (!isServicesLoading && servicesError && services.length === 0) {
+        return (
+          <ErrorState
+            eyebrow="Inventory Unavailable"
+            title="Unable to load inventory"
+            description={servicesError}
+            action={{ label: 'Retry', onClick: reloadServices }}
           />
         );
       }

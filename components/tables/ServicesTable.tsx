@@ -16,15 +16,17 @@ const ServicesTable: React.FC<ServicesTableProps> = ({ services, onEdit, onDelet
     <DataTable
       rows={services}
       getRowKey={(service) => service.id}
-      eyebrow="Services"
-      title="Service catalog"
-      copy="Pricing, category, availability, and operator-facing descriptions."
-      emptyLabel="No service records found."
+      eyebrow="Inventory"
+      title="Inventory catalog"
+      copy="Inventory items with quantity, department, and availability."
+      emptyLabel="No inventory records found."
       columns={[
         { key: 'serial', header: 'S.No', render: (_service, index) => index + 1 },
-        { key: 'service', header: 'Service', render: (service) => <span className="data-table__primary">{service.name}</span> },
-        { key: 'category', header: 'Category', render: (service) => service.category },
-        { key: 'price', header: 'Price', render: (service) => `Rs. ${service.price.toLocaleString('en-IN')}` },
+        { key: 'name', header: 'Name', render: (service) => <span className="data-table__primary">{service.name}</span> },
+        { key: 'type', header: 'Type', render: (service) => service.type === 'product' ? 'Product' : 'Service' },
+        { key: 'quantity', header: 'Quantity', render: (service) => service.quantity ?? 0 },
+        { key: 'remark', header: 'Remark', render: (service) => <span className="data-table__secondary">{service.remark || service.description || 'No remark'}</span> },
+        { key: 'counter', header: 'Counter/Department', render: (service) => service.departmentName || 'General' },
         {
           key: 'status',
           header: 'Status',
@@ -34,7 +36,7 @@ const ServicesTable: React.FC<ServicesTableProps> = ({ services, onEdit, onDelet
             </span>
           ),
         },
-        { key: 'description', header: 'Description', render: (service) => <span className="data-table__secondary">{service.description}</span> },
+        { key: 'addedDate', header: 'Added Date', render: (service) => service.addedDate || 'Not added' },
       ]}
       renderActions={(service) => (
         <div className="table-actions">

@@ -12,7 +12,6 @@ import {
 import {
   WORKSPACE_PREFETCH_COOKIE_NAME,
   getWorkspacePrefetchServerCookieOptions,
-  serializePrefetchedWorkspaceDataCookieValue,
 } from '../../lib/workspace-prefetch-cookie';
 import type { LoginApiResponseBody } from '../../lib/api/auth';
 import { readLoginFormValues } from './login-form-values';
@@ -56,7 +55,7 @@ export async function loginWithServerAction(
   }
 
   try {
-    const { statusCode, body, accessToken, counters } =
+    const { statusCode, body, accessToken } =
       await loginAndLoadWorkspaceBootstrap(
         normalizedEmail,
         password,
@@ -66,11 +65,6 @@ export async function loginWithServerAction(
       AUTH_TOKEN_COOKIE_NAME,
       accessToken,
       getAuthTokenServerCookieOptions(),
-    );
-    cookieStore.set(
-      WORKSPACE_PREFETCH_COOKIE_NAME,
-      serializePrefetchedWorkspaceDataCookieValue({ counters }),
-      getWorkspacePrefetchServerCookieOptions(),
     );
 
     return {

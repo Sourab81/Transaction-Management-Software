@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useEffectEvent, useState } from 'react';
-import { AppApiError } from '../api/app-client';
+import { AppApiError } from '../api/client';
 
 interface UseApiResourceOptions<T> {
   enabled: boolean;

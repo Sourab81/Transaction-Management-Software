@@ -1,7 +1,7 @@
 'use client';
 
 import type { BusinessCustomer } from '../store';
-import { getCustomersResponse } from '../api/customers';
+import { getCustomers } from '../api/customers';
 import { mapCustomersResponse } from '../mappers/customer-mapper';
 import { useApiCollection } from './useApiCollection';
 
@@ -19,7 +19,7 @@ export function useCustomers(
   const { data, isLoading, error, reload } = useApiCollection({
     enabled,
     initialData,
-    request: getCustomersResponse,
+    request: () => getCustomers(),
     mapResponse: mapCustomersResponse,
   });
 

@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe('login workspace bootstrap', () => {
-  test('keeps login successful when counter prefetch fails after backend auth succeeds', async () => {
+  test('keeps login focused on authentication without module prefetching', async () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.test';
     const calls: string[] = [];
 
@@ -39,14 +39,6 @@ describe('login workspace bootstrap', () => {
         }), { status: 200 });
       }
 
-      if (url.endsWith('/getCounters')) {
-        return new Response(JSON.stringify({
-          status: 400,
-          message: 'Counter data is not available for this login.',
-          data: null,
-        }), { status: 400 });
-      }
-
       return new Response(null, { status: 404 });
     }) as typeof fetch;
 
@@ -54,10 +46,8 @@ describe('login workspace bootstrap', () => {
 
     assert.equal(result.accessToken, 'admin-token');
     assert.equal(result.body?.data && typeof result.body.data === 'object' && 'role' in result.body.data ? result.body.data.role : null, 1);
-    assert.deepEqual(result.counters, []);
     assert.deepEqual(calls, [
       'https://api.example.test/login',
-      'https://api.example.test/getCounters',
     ]);
   });
 
@@ -82,10 +72,6 @@ describe('login workspace bootstrap', () => {
             },
           },
         }), { status: 200 });
-      }
-
-      if (url.endsWith('/getCounters')) {
-        return new Response(JSON.stringify({ data: [] }), { status: 200 });
       }
 
       return new Response(null, { status: 404 });

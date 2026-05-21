@@ -20,6 +20,9 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     currentRole,
     employeeAssignedDepartment,
     canManageModule,
+    accounts,
+    visibleCustomers,
+    visibleServices,
     availableCounters,
     workflowDraft,
     selectedCounter,
@@ -38,6 +41,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     canPerformModuleAction,
     handleEditTransaction,
     getRoleLabel,
+    reloadCustomers,
   } = ctx;
   const transactionsUi = getModuleUi('transactions');
   const isShowingFilteredTransactionState = isTransactionFiltersOpen && filteredTransactionRecords.length === 0;
@@ -79,28 +83,32 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
       <div id="service-workflow" className="col-12">
         {currentRole === 'Employee' && !employeeAssignedDepartment ? (
           <PermissionState
-            eyebrow="Service Workflow"
+            eyebrow="Transaction Workflow"
             title="Department assignment required"
-            description="Assign this employee to a department before they can create transactions or post service payments."
+            description="Assign this employee to a department before they can create transactions or post inventory payments."
           />
         ) : canManageModule('transactions') ? (
           <ServiceForm
             key={`${workflowDraft?.token || 'service-workflow-form'}:${selectedCounter?.id || 'no-department'}`}
+            accounts={accounts}
             availableDepartments={availableCounters}
             businessId={currentUser.businessId || ''}
+            customers={visibleCustomers}
             selectedDepartment={selectedCounter}
+            services={visibleServices}
             actor={{
               id: currentUser.id,
               name: displayUserName,
               role: currentRole === 'Employee' ? 'Employee' : 'Customer',
             }}
             draft={workflowDraft}
+            onCustomersChanged={reloadCustomers}
           />
         ) : (
           <PermissionState
-            eyebrow="Service Workflow"
+            eyebrow="Transaction Workflow"
             title="Transaction entry is restricted"
-            description={`${getRoleLabel(currentRole)} can view allowed information, but cannot create service transactions.`}
+            description={`${getRoleLabel(currentRole)} can view allowed information, but cannot create inventory transactions.`}
           />
         )}
       </div>
@@ -114,7 +122,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
             title={isShowingFilteredTransactionState ? 'No transactions match the current filters' : transactionsUi?.emptyTitle || 'No transaction records yet'}
             description={isShowingFilteredTransactionState
               ? 'Adjust or hide the current filters to review more transaction records.'
-              : transactionsUi?.emptyDescription || 'Saved service transactions will appear here after they are added.'}
+              : transactionsUi?.emptyDescription || 'Saved inventory transactions will appear here after they are added.'}
             action={isShowingFilteredTransactionState
               ? {
                   label: 'Hide Filters',

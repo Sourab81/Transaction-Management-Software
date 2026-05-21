@@ -8,7 +8,6 @@ import {
 import {
   WORKSPACE_PREFETCH_COOKIE_NAME,
   getWorkspacePrefetchServerCookieOptions,
-  serializePrefetchedWorkspaceDataCookieValue,
 } from '../../../../lib/workspace-prefetch-cookie';
 import { readLoginPayload } from './login-payload';
 
@@ -41,15 +40,10 @@ export async function POST(request: Request) {
 
   try {
     const normalizedUsername = username.trim().toLowerCase();
-    const { statusCode, body, accessToken, counters } =
+    const { statusCode, body, accessToken } =
       await loginAndLoadWorkspaceBootstrap(normalizedUsername, password);
     const cookieStore = await cookies();
     cookieStore.set(AUTH_TOKEN_COOKIE_NAME, accessToken, getAuthTokenServerCookieOptions());
-    cookieStore.set(
-      WORKSPACE_PREFETCH_COOKIE_NAME,
-      serializePrefetchedWorkspaceDataCookieValue({ counters }),
-      getWorkspacePrefetchServerCookieOptions(),
-    );
 
     return Response.json(body, { status: statusCode });
   } catch (error) {

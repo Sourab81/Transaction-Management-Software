@@ -6,11 +6,15 @@ import {
   type DepartmentRecord,
 } from '../mappers/department.mapper';
 import { mapCountersResponse } from '../mappers/counter-mapper';
-import { AppApiError, requestAppApi, requestAppApiMutation } from './app-client';
 import {
   BackendApiConfigurationError,
   requestBackendCollection,
 } from './backend-client';
+import {
+  AppApiError,
+  requestAppApi,
+  requestAppApiMutation,
+} from './client';
 
 export class DepartmentsApiError extends Error {
   readonly statusCode: number | null;
@@ -58,6 +62,7 @@ const isNoDataFoundBody = (body: unknown) =>
 
 export const getDepartmentsResponse = async () => {
   try {
+    // Frontend calls this local route; Departments are called "Counters" in the backend.
     const payload = await requestAppApi('/api/departments');
 
     return isNoDataFoundBody(payload) ? [] : payload;

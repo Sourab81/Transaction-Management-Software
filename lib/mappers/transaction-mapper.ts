@@ -120,19 +120,36 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
   }
 
   const paymentMode = normalizePaymentMode(readStringValue(record, ['payment_mode', 'paymentMode', 'mode']));
-  const totalAmount = readNumberValue(record, ['total_amount', 'totalAmount', 'amount']) || 0;
+  const amount = readNumberValue(record, ['amount', 'base_amount', 'baseAmount', 'total_amount', 'totalAmount']) || 0;
+  const serviceCharge = readNumberValue(record, ['service_charge', 'serviceCharge']) || 0;
+  const bankCharge = readNumberValue(record, ['bank_charge', 'bankCharge']) || 0;
+  const otherCharge = readNumberValue(record, ['other_charge', 'otherCharge']) || 0;
+  const totalAmount = readNumberValue(record, ['total_amount', 'totalAmount'])
+    ?? amount + serviceCharge + bankCharge + otherCharge;
   const paidAmount = readNumberValue(record, ['paid_amount', 'paidAmount', 'received_amount', 'receivedAmount']) || 0;
   const dueAmount = readNumberValue(record, ['due_amount', 'dueAmount', 'pending_amount']) ?? Math.max(totalAmount - paidAmount, 0);
+  const transactionNo = readStringValue(record, ['transaction_no', 'transactionNo', 'transaction_number', 'transactionNumber', 'txn_number']) || `TXN-${id}`;
+  const serviceProduct = readStringValue(record, ['service_product', 'serviceProduct', 'service_name', 'service', 'service_title']) || 'Service';
+  const transactionAccountId = readStringValue(record, ['transaction_account_id', 'transactionAccountId', 'account_id', 'accountId']) || undefined;
+  const remark = readStringValue(record, ['remark', 'remarks', 'note']) || undefined;
 
   return {
     id,
-    transactionNumber: readStringValue(record, ['transaction_number', 'transactionNumber', 'txn_number']) || `TXN-${id}`,
+    formName: readStringValue(record, ['form_name', 'formName']) || '',
+    transactionNo,
+    transactionNumber: transactionNo,
     customerId: readStringValue(record, ['customer_id', 'customerId']) || id,
     customerName,
     customerPhone: readStringValue(record, ['customer_phone', 'customerPhone', 'phone', 'mobile']) || 'Not added',
     serviceId: readStringValue(record, ['service_id', 'serviceId']) || id,
-    service: readStringValue(record, ['service_name', 'service', 'service_title']) || 'Service',
-    servicePrice: readNumberValue(record, ['service_price', 'servicePrice', 'price']) || totalAmount,
+    serviceProduct,
+    service: serviceProduct,
+    servicePrice: readNumberValue(record, ['service_price', 'servicePrice', 'price']) || amount,
+    transactionAccountId,
+    amount,
+    serviceCharge,
+    bankCharge,
+    otherCharge,
     totalAmount,
     paidAmount,
     dueAmount,
@@ -140,12 +157,13 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
     paymentDetails: readPaymentDetails(record, paymentMode),
     departmentId: readStringValue(record, ['department_id', 'departmentId', 'counter_id', 'counterId']) || undefined,
     departmentName: readStringValue(record, ['department_name', 'departmentName', 'counter_name', 'counterName']) || 'General',
-    accountId: readStringValue(record, ['account_id', 'accountId']) || undefined,
+    accountId: transactionAccountId,
     accountLabel: readStringValue(record, ['account_label', 'accountLabel', 'account_name']) || 'Cash',
     handledById: readStringValue(record, ['handled_by_id', 'handledById', 'user_id']) || '',
     handledByName: readStringValue(record, ['handled_by_name', 'handledByName', 'operator_name', 'employee_name']) || 'Operator',
     handledByRole: normalizeHandledByRole(readStringValue(record, ['handled_by_role', 'handledByRole', 'user_role', 'role'])),
-    note: readStringValue(record, ['note', 'remarks', 'remark']) || undefined,
+    remark,
+    note: remark,
     status: normalizeTransactionStatus(readStringValue(record, ['status', 'transaction_status'])),
     date: readStringValue(record, ['date', 'transaction_date', 'transactionDate']) || new Date().toISOString().split('T')[0],
     createdAt: readStringValue(record, ['created_at', 'createdAt', 'date']) || new Date().toISOString(),

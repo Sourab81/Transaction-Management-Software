@@ -71,6 +71,11 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       ? roleTemplates.find((roleTemplate) => roleTemplate.id === roleTemplateId)?.roleName || '-'
       : '-';
   };
+  const getCustomerName = (customer: CustomerDirectoryRecord) =>
+    'customerName' in customer && customer.customerName ? customer.customerName : customer.name;
+  const getCustomerMobile = (customer: CustomerDirectoryRecord) =>
+    'mobileNo' in customer && customer.mobileNo ? customer.mobileNo : customer.phone;
+
   const columns: Array<DataTableColumn<CustomerDirectoryRecord>> = [
     {
       key: 'serial',
@@ -80,8 +85,8 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
     },
     {
       key: 'name',
-      header: entityLabel,
-      render: (customer) => <span className="data-table__primary">{customer.name}</span>,
+      header: entityLabel === 'Customer' ? 'Customer Name' : entityLabel,
+      render: (customer) => <span className="data-table__primary">{getCustomerName(customer)}</span>,
     },
     ...(showRoleColumn
       ? [{
@@ -92,13 +97,23 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       : []),
     {
       key: 'phone',
-      header: 'Phone',
-      render: (customer) => customer.phone,
+      header: 'Mobile No.',
+      render: getCustomerMobile,
     },
     {
       key: 'email',
       header: 'Email',
       render: (customer) => customer.email || 'Not added',
+    },
+    {
+      key: 'address',
+      header: 'Address',
+      render: (customer) => 'address' in customer ? customer.address || 'Not added' : 'Not added',
+    },
+    {
+      key: 'remark',
+      header: 'Remark',
+      render: (customer) => 'remark' in customer ? customer.remark || 'No remark' : 'No remark',
     },
     {
       key: 'status',
@@ -115,8 +130,8 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
     },
     {
       key: 'joined',
-      header: 'Joined',
-      render: (customer) => customer.joinedDate || 'Not added',
+      header: 'Added Date',
+      render: (customer) => 'addedDate' in customer ? customer.addedDate || customer.joinedDate || 'Not added' : customer.joinedDate || 'Not added',
     },
   ];
 

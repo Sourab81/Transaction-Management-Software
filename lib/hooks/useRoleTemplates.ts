@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
-import { fetchRoleTemplates } from '../actions/role-template-actions';
+import { fetchRoleTemplates } from '../api/role-templates';
 import {
   isEditableRoleTemplate,
   mapRoleTemplatesResponse,

@@ -60,6 +60,7 @@ export interface DashboardTabContext {
   accessContext: SessionAccessContext;
   selectedCounter: Counter | null;
   availableCounters: Counter[];
+  visibleCustomers: BusinessCustomer[];
   visibleServices: Service[];
   recentServices: RecentService[];
   notifications: Notification[];
@@ -75,10 +76,12 @@ export interface DashboardTabContext {
   isEmployeesLoading: boolean;
   isDepartmentsLoading: boolean;
   isAccountsLoading: boolean;
+  isServicesLoading: boolean;
   isTransactionsLoading: boolean;
   isReportsLoading: boolean;
   isRoleTemplatesLoading: boolean;
   accountsError: string;
+  servicesError: string;
   roleTemplatesError: string;
   workflowDraft: ServiceWorkflowDraft | null;
   employeeAssignedDepartment: Counter | null | undefined;
@@ -146,6 +149,7 @@ export interface DashboardTabContext {
   canAccessModuleForSession: (context: SessionAccessContext, moduleId: string) => boolean;
   getRoleLabel: (role: SessionUser['role']) => string;
   showNotification: (type: 'success' | 'warning' | 'error' | 'info', message: string) => void;
+  reloadCustomers: () => void;
   reloadRoleTemplates: () => void;
   handleLogout: () => void;
   handleAdminProfileSave: (values: { name: string; email: string }) => void;

@@ -12,145 +12,200 @@ interface ServiceEditorFormProps {
   defaultDepartmentId?: string;
   departmentLocked?: boolean;
   initialValues?: Service;
+  isSubmitting?: boolean;
+  submitError?: string;
   submitLabel: string;
   onCancel: () => void;
-  onSubmit: (values: ServiceFormValues) => void;
+  onSubmit: (values: ServiceFormValues) => void | Promise<void>;
 }
+
+const typeOptions = [
+  { value: 'service', label: 'Service' },
+  { value: 'product', label: 'Product' },
+];
+
+const statusOptions = [
+  { value: 'Active', label: 'Active' },
+  { value: 'Inactive', label: 'Inactive' },
+];
+
+type InventoryFormType = NonNullable<Service['type']>;
+
+const toTypeLabel = (type: InventoryFormType) => type === 'product' ? 'Product' : 'Service';
 
 const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
   departments,
   defaultDepartmentId,
   departmentLocked = false,
   initialValues,
+  isSubmitting = false,
+  submitError = '',
   submitLabel,
   onCancel,
   onSubmit,
 }) => {
-  const resolvedDefaultDepartmentId = initialValues?.departmentId || defaultDepartmentId || departments[0]?.id || '';
+  const isEditMode = Boolean(initialValues);
+  const resolvedDefaultDepartmentId = initialValues?.counterId || initialValues?.departmentId || defaultDepartmentId || '';
   const [name, setName] = useState(initialValues?.name || '');
+  const [type, setType] = useState<InventoryFormType>(initialValues?.type || 'service');
+  const [quantity, setQuantity] = useState(String(initialValues?.quantity ?? 0));
   const [departmentId, setDepartmentId] = useState(resolvedDefaultDepartmentId);
-  const [category, setCategory] = useState(initialValues?.category || 'General');
-  const [price, setPrice] = useState(String(initialValues?.price ?? 0));
   const [status, setStatus] = useState<Service['status']>(initialValues?.status || 'Active');
-  const [description, setDescription] = useState(initialValues?.description || '');
+  const [remark, setRemark] = useState(initialValues?.remark ?? initialValues?.description ?? '');
   const [validationError, setValidationError] = useState('');
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const servicePrice = parseNonNegativeNumber(price);
+    const trimmedName = name.trim();
 
-    if (servicePrice === null) {
-      setValidationError('Price must be a valid zero or positive number.');
+    if (!trimmedName) {
+      setValidationError('Inventory name is required.');
+      return;
+    }
+
+    if (type !== 'service' && type !== 'product') {
+      setValidationError('Inventory type must be Service or Product.');
+      return;
+    }
+
+    const parsedQuantity = parseNonNegativeNumber(quantity);
+    if (parsedQuantity === null) {
+      setValidationError('Quantity must be a valid zero or positive number.');
       return;
     }
 
     const selectedDepartment = departments.find((department) => department.id === departmentId);
-    if (!selectedDepartment) {
-      setValidationError('Choose the department that should own this service.');
-      return;
-    }
+    const trimmedRemark = remark.trim();
 
     setValidationError('');
     onSubmit({
-      departmentId: selectedDepartment.id,
-      departmentName: selectedDepartment.name,
-      name,
-      category,
-      price: servicePrice,
+      departmentId: selectedDepartment?.id,
+      departmentName: selectedDepartment?.name || 'General',
+      name: trimmedName,
+      category: toTypeLabel(type),
+      price: 0,
       status,
-      description,
+      description: trimmedRemark,
+      type,
+      quantity: parsedQuantity,
+      remark: trimmedRemark || null,
+      counterId: selectedDepartment?.id || null,
     });
   };
 
   return (
     <form onSubmit={handleSubmit}>
-      {validationError && (
+      {(validationError || submitError) && (
         <div className="form-alert" role="alert">
-          {validationError}
+          {validationError || submitError}
         </div>
       )}
 
       <div className="form-workflow-panel mb-4">
         <div>
-          <p className="eyebrow mb-2">Service</p>
-          <h3 className="h5 fw-semibold mb-1">{initialValues ? 'Update service details' : 'Create a new service'}</h3>
-          <p className="page-muted small mb-0">Keep the name, price, and status clear so operators can process transactions faster.</p>
+          <p className="eyebrow mb-2">Inventory</p>
+          <h3 className="h5 fw-semibold mb-1">{isEditMode ? 'Update inventory item' : 'Create inventory item'}</h3>
+          <p className="page-muted small mb-0">Store services and products operators can select during transaction entry.</p>
         </div>
-        <span className={`status-chip ${status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
-          {status}
-        </span>
+        {isEditMode ? (
+          <span className={`status-chip ${status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
+            {status}
+          </span>
+        ) : null}
       </div>
 
       <div className="form-section-card mb-4">
-        <div className="form-section-title">Basic Details</div>
+        <div className="form-section-title">Inventory Details</div>
         <div className="row g-3">
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-md-6">
+            <Input
+              label="Inventory Name"
+              placeholder="Example: Website Design"
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                setValidationError('');
+              }}
+              disabled={isSubmitting}
+              required
+            />
+          </div>
+          <div className="col-12 col-md-6">
             <Select
-              label="Department"
+              label="Type"
+              value={type}
+              onChange={(event) => {
+                setType(event.target.value as InventoryFormType);
+                setValidationError('');
+              }}
+              options={typeOptions}
+              disabled={isSubmitting}
+              required
+            />
+          </div>
+          <div className="col-12 col-md-6">
+            <Input
+              label="Quantity"
+              type="number"
+              min="0"
+              value={quantity}
+              onChange={(event) => {
+                setQuantity(event.target.value);
+                setValidationError('');
+              }}
+              disabled={isSubmitting}
+              required
+            />
+          </div>
+          <div className="col-12 col-md-6">
+            <Select
+              label="Counter/Department"
               value={departmentId}
               onChange={(event) => {
                 setDepartmentId(event.target.value);
                 setValidationError('');
               }}
               options={[
-                { value: '', label: departments.length > 0 ? 'Select Department' : 'No Department Available' },
+                { value: '', label: 'No Counter/Department' },
                 ...departments.map((department) => ({
                   value: department.id,
                   label: `${department.name} (${department.code})`,
                 })),
               ]}
-              disabled={departmentLocked || departments.length === 0}
-              required
+              disabled={departmentLocked || departments.length === 0 || isSubmitting}
             />
             {departmentLocked ? (
-              <p className="form-hint">Employees can create or update services only inside their assigned department.</p>
+              <p className="form-hint">Employees can create or update inventory only inside their assigned department.</p>
             ) : null}
           </div>
-          <div className="col-12 col-md-4">
-            <Input label="Service Name" placeholder="Example: Mobile Recharge" value={name} onChange={(event) => setName(event.target.value)} required />
-          </div>
-          <div className="col-12 col-md-4">
-            <Input label="Category" placeholder="Example: Telecom" value={category} onChange={(event) => setCategory(event.target.value)} required />
-          </div>
+          {isEditMode ? (
+            <div className="col-12 col-md-6">
+              <Select
+                label="Status"
+                value={status}
+                onChange={(event) => setStatus(event.target.value as Service['status'])}
+                options={statusOptions}
+                disabled={isSubmitting}
+              />
+            </div>
+          ) : null}
           <div className="col-12">
-            <label className="form-label">Description</label>
-            <textarea className="form-control styled-textarea" rows={3} placeholder="Short note operators can understand quickly" value={description} onChange={(event) => setDescription(event.target.value)} required />
+            <label className="form-label">Remark</label>
+            <textarea
+              className="form-control styled-textarea"
+              rows={3}
+              placeholder="Optional note for this inventory item"
+              value={remark}
+              onChange={(event) => setRemark(event.target.value)}
+              disabled={isSubmitting}
+            />
           </div>
         </div>
       </div>
 
-      <div className="form-section-card">
-        <div className="form-section-title">Pricing And Status</div>
-        <div className="row g-3">
-          <div className="col-12 col-md-6">
-            <Input
-              label="Price"
-              type="number"
-              min="0"
-              value={price}
-              onChange={(event) => {
-                setPrice(event.target.value);
-                setValidationError('');
-              }}
-              required
-            />
-          </div>
-          <div className="col-12 col-md-6">
-            <Select
-              label="Status"
-              value={status}
-              onChange={(event) => setStatus(event.target.value as Service['status'])}
-              options={[
-                { value: 'Active', label: 'Active' },
-                { value: 'Inactive', label: 'Inactive' },
-              ]}
-            />
-          </div>
-        </div>
-      </div>
       <div className="modal-actions">
-        <button type="button" className="btn-app btn-app-secondary" onClick={onCancel}>Cancel</button>
-        <Button type="submit">{submitLabel}</Button>
+        <button type="button" className="btn-app btn-app-secondary" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
+        <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
       </div>
     </form>
   );

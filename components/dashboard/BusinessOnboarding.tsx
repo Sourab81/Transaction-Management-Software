@@ -38,6 +38,10 @@ interface BusinessOnboardingProps {
     category: string;
     description: string;
     price: number;
+    type?: 'service' | 'product';
+    quantity?: number;
+    remark?: string | null;
+    counterId?: string | null;
   }) => void;
   onAdvanceServices: () => void;
   onImportCustomers: (rows: ImportedCustomerRow[]) => void;
@@ -70,7 +74,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
     { id: 'welcome' as const, label: 'Welcome', icon: <FaBuilding size={14} /> },
     { id: 'accounts' as const, label: 'Accounts', icon: <FaUniversity size={14} /> },
     { id: 'departments' as const, label: 'Departments', icon: <FaRegBuilding size={14} /> },
-    ...(canAccessServices ? [{ id: 'services' as const, label: 'Services', icon: <FaWrench size={14} /> }] : []),
+    ...(canAccessServices ? [{ id: 'services' as const, label: 'Inventory', icon: <FaWrench size={14} /> }] : []),
     { id: 'customers' as const, label: 'Import Customers', icon: <FaDownload size={14} /> },
   ]), [canAccessServices]);
 
@@ -89,7 +93,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const [showAccountForm, setShowAccountForm] = useState(configuredAccounts.length === 0);
   const [serviceName, setServiceName] = useState('');
   const [serviceDepartmentId, setServiceDepartmentId] = useState(availableDepartments[0]?.id || '');
-  const [serviceCategory, setServiceCategory] = useState('General');
+  const [serviceCategory, setServiceCategory] = useState<'service' | 'product'>('service');
   const [serviceDescription, setServiceDescription] = useState('');
   const [servicePrice, setServicePrice] = useState('');
   const [showServiceForm, setShowServiceForm] = useState(services.length === 0);
@@ -116,7 +120,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const resetServiceForm = () => {
     setServiceName('');
     setServiceDepartmentId(availableDepartments[0]?.id || '');
-    setServiceCategory('General');
+    setServiceCategory('service');
     setServiceDescription('');
     setServicePrice('');
     setShowServiceForm(canAddMoreServices || services.length === 0);
@@ -189,21 +193,21 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
 
   const handleServiceSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const parsedPrice = parseNonNegativeNumber(servicePrice);
+    const parsedQuantity = parseNonNegativeNumber(servicePrice);
 
-    if (!serviceName.trim() || !serviceCategory.trim() || !serviceDescription.trim()) {
-      setValidationError('Service name, category, and description are required.');
+    if (!serviceName.trim() || (serviceCategory !== 'service' && serviceCategory !== 'product')) {
+      setValidationError('Inventory name and type are required.');
       return;
     }
 
     const selectedDepartment = availableDepartments.find((department) => department.id === serviceDepartmentId);
     if (!selectedDepartment) {
-      setValidationError('Choose the department that should own this service.');
+      setValidationError('Choose the department that should own this inventory item.');
       return;
     }
 
-    if (parsedPrice === null) {
-      setValidationError('Service price must be a valid zero or positive number.');
+    if (parsedQuantity === null) {
+      setValidationError('Quantity must be a valid zero or positive number.');
       return;
     }
 
@@ -212,14 +216,18 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
       departmentId: selectedDepartment.id,
       departmentName: selectedDepartment.name,
       name: serviceName.trim(),
-      category: serviceCategory.trim(),
+      category: serviceCategory === 'product' ? 'Product' : 'Service',
       description: serviceDescription.trim(),
-      price: parsedPrice,
+      price: 0,
+      type: serviceCategory,
+      quantity: parsedQuantity,
+      remark: serviceDescription.trim() || null,
+      counterId: selectedDepartment.id,
     });
 
     setServiceName('');
     setServiceDepartmentId(availableDepartments[0]?.id || '');
-    setServiceCategory('General');
+    setServiceCategory('service');
     setServiceDescription('');
     setServicePrice('');
     if (canAddMoreServices) {
@@ -286,7 +294,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
       : currentStep === 'departments'
         ? 'Add your departments'
         : currentStep === 'services'
-          ? `Add services for ${business.name}`
+          ? `Add inventory for ${business.name}`
           : 'Import existing customers';
 
   const stepCopy = currentStep === 'welcome'
@@ -296,7 +304,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
       : currentStep === 'departments'
         ? 'Add at least one department after account setup so the workspace can organize operations correctly.'
         : currentStep === 'services'
-          ? 'Add at least one service so operators can start processing transactions right away.'
+          ? 'Add at least one inventory item so operators can start processing transactions right away.'
           : 'Paste an existing customer list now, or skip and add them later inside the dashboard.';
 
   return (
@@ -571,8 +579,8 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                 <section className="form-section-card">
                   <div className="d-flex flex-column flex-md-row justify-content-between gap-3 mb-3">
                     <div>
-                      <div className="form-section-title mb-1">Saved Services</div>
-                      <p className="page-muted small mb-0">{services.length} service{services.length === 1 ? '' : 's'} ready for transaction entry.</p>
+                      <div className="form-section-title mb-1">Saved Inventory</div>
+                      <p className="page-muted small mb-0">{services.length} inventory item{services.length === 1 ? '' : 's'} ready for transaction entry.</p>
                     </div>
                     <span className="status-chip status-chip--active">{services.length} added</span>
                   </div>
@@ -580,7 +588,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                     {services.map((service) => (
                       <div key={service.id} className="onboarding-list__item">
                         <strong>{service.name}</strong>
-                        <span>{service.departmentName} | {service.category} | Rs. {service.price.toLocaleString('en-IN')}</span>
+                        <span>{service.departmentName} | {service.type === 'product' ? 'Product' : 'Service'} | Qty. {service.quantity ?? 0}</span>
                       </div>
                     ))}
                   </div>
@@ -589,7 +597,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
 
               {showServiceForm ? (
                 <form onSubmit={handleServiceSubmit} className="form-section-card">
-                  <div className="form-section-title">Service Details</div>
+                  <div className="form-section-title">Inventory Details</div>
                   <div className="row g-3">
                     <div className="col-12 col-md-6">
                       <Select
@@ -611,31 +619,34 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                     </div>
                     <div className="col-12 col-md-6">
                       <Input
-                        label="Service Name"
+                        label="Inventory Name"
                         value={serviceName}
                         onChange={(event) => {
                           setServiceName(event.target.value);
                           setValidationError('');
                         }}
-                        placeholder="Example: Passport Assistance"
+                        placeholder="Example: Website Design"
                         required
                       />
                     </div>
                     <div className="col-12 col-md-6">
-                      <Input
-                        label="Category"
+                      <Select
+                        label="Type"
                         value={serviceCategory}
                         onChange={(event) => {
-                          setServiceCategory(event.target.value);
+                          setServiceCategory(event.target.value as 'service' | 'product');
                           setValidationError('');
                         }}
-                        placeholder="Example: Documentation"
+                        options={[
+                          { value: 'service', label: 'Service' },
+                          { value: 'product', label: 'Product' },
+                        ]}
                         required
                       />
                     </div>
                     <div className="col-12 col-md-6">
                       <Input
-                        label="Price"
+                        label="Quantity"
                         type="number"
                         min="0"
                         value={servicePrice}
@@ -648,7 +659,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                       />
                     </div>
                     <div className="col-12">
-                      <label className="form-label">Description</label>
+                      <label className="form-label">Remark</label>
                       <textarea
                         className="form-control styled-textarea"
                         rows={3}
@@ -657,8 +668,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                           setServiceDescription(event.target.value);
                           setValidationError('');
                         }}
-                        placeholder="Short note operators can understand quickly"
-                        required
+                        placeholder="Optional note operators can understand quickly"
                       />
                     </div>
                   </div>
@@ -669,17 +679,17 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                         Back to Summary
                       </Button>
                     ) : null}
-                    <Button type="submit">{services.length > 0 ? 'Save Service' : 'Save and Continue'}</Button>
+                    <Button type="submit">{services.length > 0 ? 'Save Inventory' : 'Save and Continue'}</Button>
                   </div>
                 </form>
               ) : (
                 <div className="form-section-card">
-                  <div className="form-section-title mb-2">{canAddMoreServices ? 'Add another service?' : 'Service setup complete'}</div>
-                  <p className="page-muted small mb-0">{canAddMoreServices ? 'You can keep building your service catalog now, or continue to customer import.' : 'Continue to customer import.'}</p>
+                  <div className="form-section-title mb-2">{canAddMoreServices ? 'Add another inventory item?' : 'Inventory setup complete'}</div>
+                  <p className="page-muted small mb-0">{canAddMoreServices ? 'You can keep building your inventory catalog now, or continue to customer import.' : 'Continue to customer import.'}</p>
                   <div className="modal-actions mt-4">
                     {canAddMoreServices ? (
                       <Button type="button" variant="secondary" onClick={resetServiceForm}>
-                        Add Another Service
+                        Add Another Inventory
                       </Button>
                     ) : null}
                     <Button type="button" onClick={onAdvanceServices}>

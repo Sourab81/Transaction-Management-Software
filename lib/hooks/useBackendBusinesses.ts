@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
-import { fetchBusinessDirectoryPage } from '../actions/business-directory-actions';
+import { fetchBusinessDirectoryPage } from '../api/business-users';
 import {
   createFallbackPagination,
   type BackendPagination,

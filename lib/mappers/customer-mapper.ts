@@ -3,25 +3,44 @@ import {
   extractCollectionItems,
   isRecord,
   normalizeActiveStatus,
+  readNumberValue,
   readStringValue,
   type UnknownRecord,
 } from './legacy-record';
 
+const readStatusNumber = (record: UnknownRecord) => {
+  const numericStatus = readNumberValue(record, ['status', 'is_active', 'isActive']);
+  if (typeof numericStatus === 'number') {
+    return numericStatus === 0 ? 'Inactive' : 'Active';
+  }
+
+  return normalizeActiveStatus(readStringValue(record, ['status', 'is_active', 'isActive']));
+};
+
 export const mapCustomerRecord = (record: UnknownRecord): BusinessCustomer | null => {
   const id = readStringValue(record, ['id', 'customer_id', 'cust_id', 'user_id']);
-  const name = readStringValue(record, ['name', 'customer_name', 'full_name', 'fullName']);
+  const name = readStringValue(record, ['customerName', 'customer_name', 'name', 'full_name', 'fullName']);
 
   if (!id || !name) {
     return null;
   }
 
+  const phone = readStringValue(record, ['mobileNo', 'mobile_no', 'phone', 'mobile', 'customer_phone', 'phone_number']) || 'Not added';
+  const addedDate = readStringValue(record, ['addedDate', 'added_date', 'joined_date', 'joinedDate', 'created_at', 'createdAt', 'date']) || undefined;
+
   return {
     id,
     name,
-    phone: readStringValue(record, ['phone', 'mobile', 'mobile_no', 'customer_phone', 'phone_number']) || 'Not added',
+    customerName: name,
+    phone,
+    mobileNo: phone,
     email: readStringValue(record, ['email', 'customer_email', 'user_email']) || undefined,
-    status: normalizeActiveStatus(readStringValue(record, ['status', 'is_active'])),
-    joinedDate: readStringValue(record, ['joined_date', 'joinedDate', 'created_at', 'createdAt', 'date']) || undefined,
+    address: readStringValue(record, ['address']) || null,
+    remark: readStringValue(record, ['remark', 'remarks']) || null,
+    status: readStatusNumber(record),
+    joinedDate: addedDate,
+    addedDate,
+    updatedDate: readStringValue(record, ['updatedDate', 'updated_date', 'updated_at', 'updatedAt']) || undefined,
   };
 };
 

@@ -1,0 +1,14 @@
+
+> enest@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.2.3 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.29.58:3000
+- Environments: .env.local
+✓ Ready in 398ms
+
+ GET /login 200 in 2.4s (next.js: 1933ms, application-code: 465ms)
+ GET /customers 307 in 3.2s (next.js: 3.0s, application-code: 184ms)
+ GET /login 200 in 43ms (next.js: 9ms, application-code: 34ms)
+ GET /api/customers 401 in 611ms (next.js: 593ms, application-code: 18ms)

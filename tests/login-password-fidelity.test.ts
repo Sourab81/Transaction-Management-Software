@@ -82,10 +82,6 @@ describe('login password fidelity', () => {
         }), { status: 200 });
       }
 
-      if (url.endsWith('/getCounters')) {
-        return new Response(JSON.stringify({ data: [] }), { status: 200 });
-      }
-
       return new Response(null, { status: 404 });
     }) as typeof fetch;
 

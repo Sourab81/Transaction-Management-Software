@@ -54,8 +54,14 @@ export interface BusinessCustomer {
   name: string;
   phone: string;
   email?: string;
+  address?: string | null;
+  remark?: string | null;
   status?: 'Active' | 'Inactive';
   joinedDate?: string;
+  updatedDate?: string;
+  customerName?: string;
+  mobileNo?: string;
+  addedDate?: string;
 }
 
 export type TransactionPaymentMode = 'cash' | 'upi' | 'bank' | 'card';
@@ -103,13 +109,23 @@ export interface Employee {
 
 export interface Transaction {
   id: string;
+  formName?: string;
+  transactionNo?: string;
   transactionNumber: string;
   customerId: string;
   customerName: string;
   customerPhone: string;
+  serviceProduct?: string;
+  inventoryItemId?: string;
+  inventoryItemType?: 'service' | 'product';
   serviceId: string;
   service: string;
   servicePrice: number;
+  transactionAccountId?: string;
+  amount?: number;
+  serviceCharge?: number;
+  bankCharge?: number;
+  otherCharge?: number;
   totalAmount: number;
   paidAmount: number;
   dueAmount: number;
@@ -122,6 +138,7 @@ export interface Transaction {
   handledById: string;
   handledByName: string;
   handledByRole: 'Customer' | 'Employee';
+  remark?: string;
   note?: string;
   status: TransactionStatus;
   date: string;
@@ -179,6 +196,13 @@ export interface Service {
   price: number;
   status: 'Active' | 'Inactive';
   description: string;
+  type?: 'service' | 'product';
+  quantity?: number;
+  remark?: string | null;
+  counterId?: string | null;
+  userId?: string;
+  addedDate?: string;
+  updatedDate?: string;
 }
 
 export interface RecentService {
@@ -372,10 +396,12 @@ export const getServicesForDepartment = (
   departmentId?: string | null,
 ) => {
   if (!departmentId) {
-    return [];
+    return services;
   }
 
-  return services.filter((service) => service.departmentId === departmentId);
+  // Backend-created services can be global and may not have a department id.
+  // Show those alongside department-specific services for the selected department.
+  return services.filter((service) => !service.departmentId || service.departmentId === departmentId);
 };
 
 export const createEmptyBusinessWorkspace = (): BusinessWorkspace => ({
@@ -491,10 +517,16 @@ const normalizeBusiness = (
 const normalizeBusinessCustomer = (customer: Partial<BusinessCustomer> & Pick<BusinessCustomer, 'id' | 'name' | 'phone'>): BusinessCustomer => ({
   id: customer.id,
   name: customer.name,
+  customerName: customer.customerName || customer.name,
   phone: customer.phone,
+  mobileNo: customer.mobileNo || customer.phone,
   email: customer.email ?? '',
+  address: customer.address ?? null,
+  remark: customer.remark ?? null,
   status: customer.status || 'Active',
   joinedDate: customer.joinedDate || today(),
+  addedDate: customer.addedDate || customer.joinedDate || today(),
+  updatedDate: customer.updatedDate,
 });
 
 const normalizeEmployee = (
@@ -597,11 +629,20 @@ const normalizeTransaction = (
 ): Transaction => {
   const status = normalizeTransactionStatus(transaction.status);
   const paymentMode = transaction.paymentMode || 'cash';
+  const amount = typeof transaction.amount === 'number'
+    ? transaction.amount
+    : typeof transaction.totalAmount === 'number'
+      ? transaction.totalAmount
+      : typeof (transaction as Partial<{ amount: number }>).amount === 'number'
+        ? (transaction as Partial<{ amount: number }>).amount || 0
+        : 0;
+  const serviceCharge = typeof transaction.serviceCharge === 'number' ? transaction.serviceCharge : 0;
+  const bankCharge = typeof transaction.bankCharge === 'number' ? transaction.bankCharge : 0;
+  const otherCharge = typeof transaction.otherCharge === 'number' ? transaction.otherCharge : 0;
+  const calculatedTotalAmount = amount + serviceCharge + bankCharge + otherCharge;
   const legacyAmount = typeof transaction.totalAmount === 'number'
     ? transaction.totalAmount
-    : typeof (transaction as Partial<{ amount: number }>).amount === 'number'
-      ? (transaction as Partial<{ amount: number }>).amount || 0
-      : 0;
+    : calculatedTotalAmount;
   const paidAmount = typeof transaction.paidAmount === 'number'
     ? transaction.paidAmount
     : status === 'pending'
@@ -613,6 +654,7 @@ const normalizeTransaction = (
   const isDeleted = Boolean(transaction.isDeleted);
   const createdAt = transaction.createdAt || nowIso();
   const normalizeOptionalText = (value?: string) => value?.trim() || undefined;
+  const transactionNo = transaction.transactionNo || transaction.transactionNumber || createTransactionNumber();
   const lastAuditAction = (() => {
     if (transaction.lastAuditAction) {
       return transaction.lastAuditAction;
@@ -639,13 +681,27 @@ const normalizeTransaction = (
 
   return {
     id: transaction.id,
-    transactionNumber: transaction.transactionNumber || createTransactionNumber(),
+    formName: transaction.formName || '',
+    transactionNo,
+    transactionNumber: transactionNo,
     customerId: transaction.customerId,
     customerName: transaction.customerName,
     customerPhone: transaction.customerPhone || '',
+    serviceProduct: transaction.serviceProduct || transaction.service,
+    inventoryItemId: normalizeOptionalText(transaction.inventoryItemId),
+    inventoryItemType: transaction.inventoryItemType === 'product'
+      ? 'product'
+      : transaction.inventoryItemType === 'service'
+        ? 'service'
+        : undefined,
     serviceId: transaction.serviceId || '',
-    service: transaction.service,
-    servicePrice: typeof transaction.servicePrice === 'number' ? transaction.servicePrice : legacyAmount,
+    service: transaction.serviceProduct || transaction.service,
+    servicePrice: typeof transaction.servicePrice === 'number' ? transaction.servicePrice : amount,
+    transactionAccountId: transaction.transactionAccountId || transaction.accountId || undefined,
+    amount,
+    serviceCharge,
+    bankCharge,
+    otherCharge,
     totalAmount: legacyAmount,
     paidAmount,
     dueAmount,
@@ -658,7 +714,8 @@ const normalizeTransaction = (
     handledById: transaction.handledById || '',
     handledByName: transaction.handledByName || '',
     handledByRole: transaction.handledByRole === 'Employee' ? 'Employee' : 'Customer',
-    note: transaction.note || '',
+    remark: transaction.remark || transaction.note || '',
+    note: transaction.note || transaction.remark || '',
     status,
     date: transaction.date || today(),
     createdAt,
@@ -683,7 +740,7 @@ const normalizeService = (
   counters: Counter[],
 ): Service => {
   const fallbackDepartment = counters.find((counter) => counter.status !== 'Inactive') || counters[0];
-  const matchedDepartment = counters.find((counter) => counter.id === service.departmentId);
+  const matchedDepartment = counters.find((counter) => counter.id === (service.counterId || service.departmentId));
   const resolvedDepartment = matchedDepartment || fallbackDepartment;
 
   return {
@@ -691,10 +748,17 @@ const normalizeService = (
     departmentId: resolvedDepartment?.id,
     departmentName: resolvedDepartment?.name || service.departmentName || 'Unassigned Department',
     name: service.name || 'Untitled Service',
-    category: service.category || 'General',
+    category: service.category || (service.type === 'product' ? 'Product' : 'Service'),
     price: typeof service.price === 'number' ? service.price : 0,
     status: service.status === 'Inactive' ? 'Inactive' : 'Active',
-    description: service.description || '',
+    description: service.description || service.remark || '',
+    type: service.type === 'product' ? 'product' : 'service',
+    quantity: typeof service.quantity === 'number' ? service.quantity : 0,
+    remark: service.remark ?? service.description ?? null,
+    counterId: service.counterId ?? service.departmentId ?? null,
+    userId: service.userId,
+    addedDate: service.addedDate,
+    updatedDate: service.updatedDate,
   };
 };
 

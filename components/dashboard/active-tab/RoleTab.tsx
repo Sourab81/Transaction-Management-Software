@@ -6,7 +6,7 @@ import {
   createRoleTemplate,
   deleteRoleTemplate,
   updateRoleTemplate,
-} from '../../../lib/actions/role-template-actions';
+} from '../../../lib/api/role-templates';
 import type {
   RoleTemplate,
   RoleTemplateFormValues,

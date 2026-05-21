@@ -26,7 +26,7 @@ const parseResponseBody = async (response: Response) => {
   }
 };
 
-const readApiErrorMessage = (body: unknown, fallbackMessage: string) => {
+export const readApiErrorMessage = (body: unknown, fallbackMessage: string) => {
   if (typeof body === 'string' && body.trim()) {
     return body.trim();
   }
@@ -38,12 +38,30 @@ const readApiErrorMessage = (body: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
-export const requestAppApi = async <T = unknown>(path: string): Promise<T> => {
+interface AppApiRequestOptions {
+  method?: 'GET' | 'POST';
+  body?: Record<string, unknown>;
+}
+
+export const requestAppApi = async <T = unknown>(
+  path: string,
+  options: AppApiRequestOptions = {},
+): Promise<T> => {
+  const method = options.method ?? 'GET';
   let response: Response;
 
   try {
     response = await fetch(path, {
-      method: 'GET',
+      method,
+      headers: method === 'POST'
+        ? {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          }
+        : undefined,
+      body: method === 'POST' && options.body
+        ? JSON.stringify(options.body)
+        : undefined,
       cache: 'no-store',
     });
   } catch {
@@ -65,33 +83,5 @@ export const requestAppApi = async <T = unknown>(path: string): Promise<T> => {
 
 export const requestAppApiMutation = async <T = unknown>(
   path: string,
-  payload: Record<string, unknown>,
-): Promise<T> => {
-  let response: Response;
-
-  try {
-    response = await fetch(path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    });
-  } catch {
-    throw new AppApiError('Unable to reach the local API route.', null, null);
-  }
-
-  const body = await parseResponseBody(response);
-
-  if (!response.ok) {
-    throw new AppApiError(
-      readApiErrorMessage(body, 'The API request failed.'),
-      response.status,
-      body,
-    );
-  }
-
-  return body as T;
-};
+  body: Record<string, unknown>,
+): Promise<T> => requestAppApi<T>(path, { method: 'POST', body });

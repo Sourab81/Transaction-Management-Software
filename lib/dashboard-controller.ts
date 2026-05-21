@@ -95,13 +95,13 @@ export const getSearchMatches = ({
 
   return {
     services: visibleServices.filter((service) =>
-      `${service.name} ${service.category} ${service.description} ${service.departmentName}`.toLowerCase().includes(normalizedQuery),
+      `${service.name} ${service.type || ''} ${service.category} ${service.remark || ''} ${service.description} ${service.departmentName}`.toLowerCase().includes(normalizedQuery),
     ),
     customers: visibleCustomers.filter((customer) =>
       `${customer.name} ${customer.phone} ${customer.email || ''}`.toLowerCase().includes(normalizedQuery),
     ),
     transactions: visibleTransactions.filter((transaction) =>
-      `${transaction.transactionNumber} ${transaction.customerName} ${transaction.customerPhone} ${transaction.service} ${transaction.paymentMode} ${transaction.status} ${transaction.departmentName} ${transaction.handledByName}`.toLowerCase().includes(normalizedQuery),
+      `${transaction.formName || ''} ${transaction.transactionNo || transaction.transactionNumber} ${transaction.customerName} ${transaction.customerPhone} ${transaction.serviceProduct || transaction.service} ${transaction.departmentName || ''} ${transaction.accountLabel || transaction.transactionAccountId || ''} ${transaction.remark || transaction.note || ''}`.toLowerCase().includes(normalizedQuery),
     ),
   };
 };

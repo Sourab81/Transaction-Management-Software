@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   return Response.json(
-    { message: 'The expenses API route is reserved for a later integration slice.' },
+    { success: false, message: 'Backend endpoint is not configured for this module.' },
     { status: 501 },
   );
 }
