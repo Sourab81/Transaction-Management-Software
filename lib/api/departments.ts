@@ -30,9 +30,8 @@ export class DepartmentsApiError extends Error {
 
 export interface CreateDepartmentInput {
   name: string;
+  openingBalance: number;
   remark?: string;
-  accountIds: number[];
-  defaultAccountId: number;
 }
 
 export interface CreateDepartmentResult {
@@ -95,10 +94,10 @@ const normalizeCreateDepartmentPayload = (
       name: payload.department.departmentName,
       remark: payload.department.remark,
       status: payload.department.status,
-      account_ids: payload.department.linkedAccountIds,
-      default_account_id: payload.department.defaultAccountId,
       create_date: payload.department.createdAt,
       opening_balance: payload.department.openingBalance,
+      current_balance: payload.department.currentBalance,
+      department_display: payload.department.departmentDisplay,
     });
 
     return {
@@ -132,8 +131,7 @@ export const createDepartmentResponse = async (
       action: 'create',
       name: input.name,
       remark: input.remark,
-      accountIds: input.accountIds,
-      defaultAccountId: input.defaultAccountId,
+      openingBalance: input.openingBalance,
     });
 
     return normalizeCreateDepartmentPayload(payload, 'Department created successfully.');

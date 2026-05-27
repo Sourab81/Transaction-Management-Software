@@ -9,6 +9,7 @@ import {
   createBusinessUser,
 } from '../../lib/api/business-users';
 import { buildCsv } from '../../lib/csv';
+import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
 import {
   canPerformModuleActionForSession,
   canDeleteModuleForSession,
@@ -17,9 +18,7 @@ import {
 } from '../../lib/dashboard-controller';
 import {
   createRecordId,
-  getDepartmentDefaultAccount,
   getDepartmentLinkedAccountIds,
-  getDepartmentLinkedAccounts,
   getServicesForDepartment,
   useAppDispatch,
 } from '../../lib/store';
@@ -53,20 +52,31 @@ import { useReports } from '../../lib/hooks/useReports';
 import { useRoleTemplates } from '../../lib/hooks/useRoleTemplates';
 import { useInventory } from '../../lib/hooks/useInventory';
 import { useTransactions } from '../../lib/hooks/useTransactions';
+import { useCustomerBalance } from '../../lib/hooks/useCustomerBalance';
 import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
 import { createDepartmentResponse } from '../../lib/api/departments';
 import {
   createAccount,
   deleteAccount,
-  getAccountsResponse,
-  linkAccountToDepartment,
 } from '../../lib/api/accounts';
 import {
   createCustomer,
   deleteCustomer,
   updateCustomer,
 } from '../../lib/api/customers';
-import { mapAccountsResponse } from '../../lib/mappers/account-mapper';
+import {
+  createEmployee,
+  deleteEmployee,
+  updateEmployee,
+} from '../../lib/api/employees';
+import {
+  deleteTransaction,
+  updateTransaction,
+} from '../../lib/api/transactions';
+import {
+  payCustomerBalance,
+  type PayCustomerBalancePayload,
+} from '../../lib/api/customerBalance';
 import { buildRoleTemplatePrivilegesPayload } from '../../lib/mappers/role-template-mapper';
 import {
   getCustomerWorkspaceViewUi,
@@ -200,10 +210,15 @@ const toEmployeeStateValues = (
   return stateValues;
 };
 
-const toStoredAccountValues = (values: AccountFormValues): Omit<Account, 'id' | 'date'> => ({
+const toStoredAccountValues = (
+  values: AccountFormValues,
+  initialValues?: Account | null,
+): Omit<Account, 'id' | 'date'> => ({
   ...values,
-  currentBalance: values.currentBalance ?? values.openingBalance,
-  counterId: values.counterId || null,
+  currentBalance: initialValues?.currentBalance ?? values.openingBalance,
+  addedByName: initialValues?.addedByName,
+  addedDate: initialValues?.addedDate,
+  counterId: null,
 });
 
 const toStoredDepartmentValues = (
@@ -213,11 +228,9 @@ const toStoredDepartmentValues = (
   return {
     name: values.name,
     code: initialValues?.code || '',
-    linkedAccountIds: values.accountIds,
-    defaultAccountId: values.defaultAccountId,
-    linkedAccountId: values.defaultAccountId,
-    openingBalance: initialValues?.openingBalance ?? 0,
-    currentBalance: initialValues?.currentBalance ?? initialValues?.openingBalance ?? 0,
+    departmentDisplay: initialValues?.departmentDisplay,
+    openingBalance: values.openingBalance,
+    currentBalance: initialValues?.currentBalance ?? values.openingBalance,
     status: values.status || initialValues?.status || 'Active',
     remark: values.remark,
     date: initialValues?.date,
@@ -237,7 +250,6 @@ type ModalMode =
   | 'edit-department'
   | 'add-account'
   | 'edit-account'
-  | 'link-account'
   | 'add-expense'
   | 'edit-expense'
   | 'edit-transaction'
@@ -317,7 +329,6 @@ interface DashboardUiState {
   editingEmployee: Employee | null;
   editingDepartment: Counter | null;
   editingAccount: Account | null;
-  linkingAccount: Account | null;
   editingExpense: Expense | null;
   editingTransaction: Transaction | null;
   selectedTransaction: Transaction | null;
@@ -351,7 +362,7 @@ const resolveStateValue = <T,>(current: T, value: T | ((previous: T) => T)) => (
 const initialTransactionFilterState: DataTableFiltersValue = {
   search: '',
   fields: {
-    transactionAccount: '',
+    transactionAccount: 'All',
     date: { from: '', to: '' },
   },
 };
@@ -390,6 +401,7 @@ const initialDashboardFilterState: DashboardFilterState = {
 };
 
 const emptyTransactionRecords: Transaction[] = [];
+const SELECTED_COUNTER_STORAGE_PREFIX = 'enest:selected-counter';
 
 const Dashboard: React.FC<DashboardProps> = ({
   currentUser,
@@ -472,7 +484,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     editingEmployee: null,
     editingDepartment: null,
     editingAccount: null,
-    linkingAccount: null,
     editingExpense: null,
     editingTransaction: null,
     selectedTransaction: null,
@@ -494,7 +505,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     editingEmployee,
     editingDepartment,
     editingAccount,
-    linkingAccount,
     editingExpense,
     editingTransaction,
     selectedTransaction,
@@ -507,11 +517,24 @@ const Dashboard: React.FC<DashboardProps> = ({
     workflowDraft,
     favoriteServiceIds,
   } = uiState;
+  const [selectedCounterId, setSelectedCounterId] = useState('');
+  const [hasLoadedStoredCounter, setHasLoadedStoredCounter] = useState(false);
+  const [departmentPromptCounterId, setDepartmentPromptCounterId] = useState('');
+  const [isTransactionDraftDirty, setIsTransactionDraftDirty] = useState(false);
+  const [payingTransaction, setPayingTransaction] = useState<Transaction | null>(null);
+  const [transactionPaymentAmount, setTransactionPaymentAmount] = useState('');
+  const [transactionPaymentMode, setTransactionPaymentMode] = useState<'cash' | 'account'>('cash');
+  const [transactionPaymentAccountId, setTransactionPaymentAccountId] = useState('');
+  const [transactionPaymentRemark, setTransactionPaymentRemark] = useState('');
+  const [transactionPaymentError, setTransactionPaymentError] = useState('');
+  const [isPayingTransaction, setIsPayingTransaction] = useState(false);
+  const requestedApiCounterId = selectedCounterId;
+  const inventoryCounterId = selectedCounterId || editingTransaction?.departmentId || '';
   const shouldLoadWorkspaceApi = currentRole !== 'Admin' && Boolean(currentUser.businessId);
   const isAccountsTab = activeTab === 'accounts';
   const isTransactionEditModalOpen = activeModal === 'edit-transaction';
   // Accounts/services stay page-scoped and load on transactions only because the form needs dropdowns.
-  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'transactions' || isTransactionEditModalOpen);
+  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'transactions' || isTransactionEditModalOpen || (activeTab === 'customers' && customerPageView === 'payments'));
   // Departments are shared shell data because the header selector scopes
   // transactions, services, and search on every workspace page.
   const shouldLoadDepartmentsApi = shouldLoadWorkspaceApi;
@@ -519,8 +542,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     && (activeTab === 'customers' || activeTab === 'transactions');
   const shouldLoadEmployeesApi = shouldLoadWorkspaceApi && activeTab === 'employee';
   // Inventory page owns inventory API loading and does not preload other modules.
-  const shouldLoadServicesApi = shouldLoadWorkspaceApi && (activeTab === 'services' || activeTab === 'transactions' || isTransactionEditModalOpen);
-  const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && activeTab === 'transactions';
+  const shouldLoadServicesApi = shouldLoadWorkspaceApi
+    && Boolean(inventoryCounterId)
+    && (activeTab === 'services' || activeTab === 'transactions' || isTransactionEditModalOpen);
+  const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && activeTab === 'transactions' && Boolean(requestedApiCounterId);
+  const shouldLoadCustomerBalanceApi = shouldLoadWorkspaceApi && activeTab === 'customers' && customerPageView === 'payments';
   const shouldLoadReportsApi = shouldLoadWorkspaceApi && activeTab === 'reports';
   const shouldLoadDashboardSummaryApi = shouldLoadWorkspaceApi && activeTab === 'dashboard';
   const initialWorkspaceApiData = currentRole === 'Admin' ? undefined : initialWorkspaceData;
@@ -551,7 +577,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     isLoading: isTransactionsLoading,
     error: transactionsError,
     reload: reloadTransactions,
-  } = useTransactions(shouldLoadTransactionsApi, initialWorkspaceApiData?.transactions);
+  } = useTransactions(shouldLoadTransactionsApi, shouldLoadTransactionsApi ? initialWorkspaceApiData?.transactions : undefined, {
+    counterId: requestedApiCounterId,
+  });
+  const {
+    balances: customerBalanceRows,
+    isLoading: isCustomerBalanceLoading,
+    error: customerBalanceError,
+    reload: reloadCustomerBalance,
+  } = useCustomerBalance(shouldLoadCustomerBalanceApi);
   const {
     reports: apiReports,
     isLoading: isReportsLoading,
@@ -574,7 +608,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateInventory: updateBackendInventory,
     deleteInventory: deleteBackendInventory,
     reload: reloadServices,
-  } = useInventory(shouldLoadServicesApi);
+  } = useInventory(shouldLoadServicesApi, undefined, { counterId: inventoryCounterId, status: 1 });
   const {
     summary: apiDashboardSummary,
     isLoading: isDashboardSummaryLoading,
@@ -656,21 +690,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     [adminWorkspace.reports, apiReports, currentRole, workspace.reports],
   );
   const additionOptions = adminWorkspace.additionOptions;
-  const [selectedCounterId, setSelectedCounterId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState<DashboardFilterState>(initialDashboardFilterState);
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
   const [identityConflictDialog, setIdentityConflictDialog] = useState<IdentityConflictDialog | null>(null);
   const [isTransactionFiltersOpen, setIsTransactionFiltersOpen] = useState(false);
   const [isAdminPlanFiltersOpen, setIsAdminPlanFiltersOpen] = useState(false);
-  const [selectedAccountLinkDepartmentId, setSelectedAccountLinkDepartmentId] = useState('');
   const [isDepartmentSubmitting, setIsDepartmentSubmitting] = useState(false);
   const [departmentSubmitError, setDepartmentSubmitError] = useState('');
+  const [isEmployeeSubmitting, setIsEmployeeSubmitting] = useState(false);
   const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
   const [serviceSubmitError, setServiceSubmitError] = useState('');
-  const [departmentFormAccounts, setDepartmentFormAccounts] = useState<Account[]>([]);
-  const [isDepartmentAccountsLoading, setIsDepartmentAccountsLoading] = useState(false);
-  const [departmentAccountsError, setDepartmentAccountsError] = useState('');
   const {
     historyStatus: historyStatusFilter,
     businessDirectory: businessDirectoryFilters,
@@ -731,48 +761,21 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateFilterState('adminPlan', value);
   };
 
-  const isDepartmentFormModalOpen = activeModal === 'add-department' || activeModal === 'edit-department';
-
-  useEffect(() => {
-    if (!isDepartmentFormModalOpen) {
-      setDepartmentFormAccounts([]);
-      setDepartmentAccountsError('');
-      setIsDepartmentAccountsLoading(false);
+  const handleCounterChange = (nextCounterId: string) => {
+    if (
+      activeTab === 'transactions'
+      && isTransactionDraftDirty
+      && nextCounterId !== safeSelectedCounterId
+      && !window.confirm('Changing department will clear selected transaction rows. Continue?')
+    ) {
       return;
     }
 
-    let isCancelled = false;
-
-    const loadDepartmentFormAccounts = async () => {
-      setIsDepartmentAccountsLoading(true);
-      setDepartmentAccountsError('');
-
-      try {
-        // Accounts are loaded only when the department modal opens for linking.
-        const payload = await getAccountsResponse();
-        if (!isCancelled) {
-          setDepartmentFormAccounts(mapAccountsResponse(payload));
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setDepartmentFormAccounts([]);
-          setDepartmentAccountsError(
-            error instanceof Error ? error.message : 'Unable to load bank accounts.',
-          );
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsDepartmentAccountsLoading(false);
-        }
-      }
-    };
-
-    void loadDepartmentFormAccounts();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [isDepartmentFormModalOpen]);
+    setSelectedCounterId(nextCounterId);
+    if (activeTab === 'transactions') {
+      setIsTransactionDraftDirty(false);
+    }
+  };
 
   const setHistoryStatusFilter: React.Dispatch<React.SetStateAction<HistoryStatusFilter>> = (value) => {
     updateFilterState('historyStatus', value);
@@ -866,27 +869,62 @@ const Dashboard: React.FC<DashboardProps> = ({
     && !shouldShowBusinessOnboarding
     && hasLoadedSetupData
     && counters.length === 0;
-  const tokenAssignedDepartmentId = currentUser.counterId || currentUser.departmentId;
-  const resolvedAssignedDepartmentId = tokenAssignedDepartmentId || currentEmployee?.departmentId;
-  const availableCounters = currentRole === 'Employee'
-    ? resolvedAssignedDepartmentId
-      ? counters.filter((counter) => counter.id === resolvedAssignedDepartmentId)
-      : []
-    : counters;
-  const employeeAssignedDepartment = resolvedAssignedDepartmentId
-    ? counters.find((counter) => counter.id === resolvedAssignedDepartmentId)
-    : null;
+  const availableCounters = useMemo(
+    () => counters,
+    [counters],
+  );
 
-  const requestedCounterId = selectedCounterId || tokenAssignedDepartmentId;
+  const requestedCounterId = selectedCounterId;
   const safeSelectedCounterId = availableCounters.some((counter) => counter.id === requestedCounterId)
     ? requestedCounterId || ''
-    : availableCounters[0]?.id || '';
-  const selectedCounter = availableCounters.find((counter) => counter.id === safeSelectedCounterId) || availableCounters[0];
+    : '';
+  const selectedCounter = availableCounters.find((counter) => counter.id === safeSelectedCounterId) || null;
   const selectedDepartmentName = selectedCounter?.name || '';
-  const shouldShowAllInventory = activeTab === 'services' || activeTab === 'transactions' || isTransactionEditModalOpen;
-  const departmentScopedServices = shouldShowAllInventory
-    ? services
-    : getServicesForDepartment(services, safeSelectedCounterId || undefined);
+  const selectedCounterStorageKey = `${SELECTED_COUNTER_STORAGE_PREFIX}:${currentUser.businessId || currentUser.id}`;
+
+  useEffect(() => {
+    if (currentRole === 'Admin') {
+      setHasLoadedStoredCounter(true);
+      return;
+    }
+
+    if (hasLoadedStoredCounter || availableCounters.length === 0) {
+      if (availableCounters.length === 0) {
+        setHasLoadedStoredCounter(true);
+      }
+      return;
+    }
+
+    const storedCounterId = window.localStorage.getItem(selectedCounterStorageKey)?.trim() || '';
+    const nextCounterId = availableCounters.some((counter) => counter.id === storedCounterId)
+      ? storedCounterId
+      : '';
+
+    if (nextCounterId) {
+      setSelectedCounterId(nextCounterId);
+    }
+    setHasLoadedStoredCounter(true);
+  }, [availableCounters, currentRole, hasLoadedStoredCounter, selectedCounterStorageKey]);
+
+  useEffect(() => {
+    if (currentRole === 'Admin' || !hasLoadedStoredCounter) {
+      return;
+    }
+
+    if (safeSelectedCounterId) {
+      window.localStorage.setItem(selectedCounterStorageKey, safeSelectedCounterId);
+    }
+  }, [currentRole, hasLoadedStoredCounter, safeSelectedCounterId, selectedCounterStorageKey]);
+
+  const shouldShowDepartmentSelectionModal = currentRole !== 'Admin'
+    && !shouldShowBusinessOnboarding
+    && !isBusinessSubscriptionLocked
+    && hasLoadedStoredCounter
+    && availableCounters.length > 0
+    && !safeSelectedCounterId;
+  const departmentScopedServices = safeSelectedCounterId
+    ? getServicesForDepartment(services, safeSelectedCounterId)
+    : [];
   const visibleServices = useVisibleServiceRecords(accessContext, departmentScopedServices);
   const visibleCustomers = useVisibleCustomerRecords(accessContext, customers);
   const visibleBusinessCustomers = useMemo(
@@ -1118,7 +1156,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const serviceCategoryCount = new Set(visibleServices.map((service) => service.category)).size;
   const scopedTransactionRecords = selectedCounter?.id
     ? visibleTransactionHistory.filter((transaction) => transaction.departmentId === selectedCounter.id)
-    : visibleTransactionHistory;
+    : currentRole === 'Admin'
+      ? visibleTransactionHistory
+      : emptyTransactionRecords;
   const scopedCollectedAmount = scopedTransactionRecords.reduce((total, transaction) => total + transaction.paidAmount, 0);
 
   const serviceSummary = [
@@ -1180,12 +1220,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     { title: 'Review Needed', value: `${accounts.length - activeAccounts}`, detail: 'Inactive or paused accounts', icon: <FaHourglassHalf />, colorClass: 'bg-warning' },
   ], [accounts.length, activeAccounts, totalAccountBalance]);
 
-  const transactionStats = useTransactionStats(visibleTransactionHistory);
+  const transactionStats = useTransactionStats(scopedTransactionRecords);
   const {
     accounts: transactionAccountOptions,
-  } = useTransactionFilterOptions(visibleTransactionHistory);
+  } = useTransactionFilterOptions(scopedTransactionRecords);
   const transactionDateFilter = readDataTableDateRangeFilter(transactionFilters, 'date');
-  const filteredTransactionRecords = useFilteredTransactionRecords(visibleTransactionHistory, {
+  const filteredTransactionRecords = useFilteredTransactionRecords(scopedTransactionRecords, {
     query: transactionFilters.search,
     transactionAccount: typeof transactionFilters.fields.transactionAccount === 'string'
       ? transactionFilters.fields.transactionAccount
@@ -1451,10 +1491,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const departmentRows = useMemo(
     () => counters.map((counter) => ({
       counter,
-      linkedAccounts: getDepartmentLinkedAccounts(counter, accounts),
-      defaultAccount: getDepartmentDefaultAccount(counter, accounts) || null,
     })),
-    [accounts, counters],
+    [counters],
   );
 
   const filteredDepartments = useMemo(
@@ -1478,9 +1516,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const departmentSummary = useMemo(() => [
     { title: 'Total Departments', value: `${counters.length}`, detail: 'Counters mapped for business operations', icon: <FaBuilding />, colorClass: 'bg-primary' },
     { title: 'Active Departments', value: `${counters.filter((counter) => counter.status === 'Active').length}`, detail: 'Departments currently running', icon: <FaChartLine />, colorClass: 'bg-success' },
-    { title: 'Linked Accounts', value: `${departmentRows.filter((row) => row.linkedAccounts.length > 0).length}`, detail: 'Departments already assigned to bank accounts', icon: <FaUniversity />, colorClass: 'bg-info' },
-    { title: 'Inactive Accounts', value: `${departmentRows.filter((row) => row.linkedAccounts.some((account) => account.status === 'Inactive')).length}`, detail: 'Departments tied to paused accounts', icon: <FaHourglassHalf />, colorClass: 'bg-warning' },
-  ], [counters, departmentRows]);
+    { title: 'Opening Balance', value: `Rs. ${counters.reduce((total, counter) => total + counter.openingBalance, 0).toLocaleString('en-IN')}`, detail: 'Starting balance across departments', icon: <FaDollarSign />, colorClass: 'bg-info' },
+    { title: 'Current Balance', value: `Rs. ${counters.reduce((total, counter) => total + counter.currentBalance, 0).toLocaleString('en-IN')}`, detail: 'Backend-reported department balance', icon: <FaReceipt />, colorClass: 'bg-warning' },
+  ], [counters]);
 
   const expenseSummary = useMemo(() => [
     { title: 'Total Expenses', value: `${expenses.length}`, detail: 'Tracked entries in the ledger', icon: <FaReceipt />, colorClass: 'bg-primary' },
@@ -1592,7 +1630,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateUiState('editingEmployee', null);
     updateUiState('editingDepartment', null);
     updateUiState('editingAccount', null);
-    updateUiState('linkingAccount', null);
     updateUiState('editingExpense', null);
     updateUiState('editingTransaction', null);
     updateUiState('selectedTransaction', null);
@@ -1602,9 +1639,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateUiState('selectedOption', null);
     updateUiState('pendingDelete', null);
     updateUiState('transactionDeleteReason', '');
-    setSelectedAccountLinkDepartmentId('');
     setDepartmentSubmitError('');
     setIsDepartmentSubmitting(false);
+    setIsEmployeeSubmitting(false);
     setServiceSubmitError('');
     setIsServiceSubmitting(false);
   };
@@ -1762,17 +1799,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     showPermissionWarning(moduleId, 'delete from');
     closeModal();
-    return false;
-  };
-
-  const canEmployeeOperateOnDepartment = currentRole !== 'Employee' || Boolean(employeeAssignedDepartment);
-
-  const ensureEmployeeDepartmentAccess = (capability: string) => {
-    if (canEmployeeOperateOnDepartment) {
-      return true;
-    }
-
-    addNotification('warning', `Assign this employee to a department before they can ${capability}.`);
     return false;
   };
 
@@ -2067,28 +2093,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateUiState('activeModal', 'edit-account');
   };
 
-  const canLinkAccountToDepartment = () =>
-    canPerformModuleAction('accounts', 'edit') || canPerformModuleAction('departments', 'edit');
-
-  const handleLinkAccount = (account: Account) => {
-    if (!canLinkAccountToDepartment()) {
-      addNotification('warning', 'You do not have permission to link accounts to departments.');
-      return;
-    }
-
-    if (counters.length === 0) {
-      addNotification('warning', 'Create a department before linking this account.');
-      return;
-    }
-
-    updateUiState('linkingAccount', account);
-    setSelectedAccountLinkDepartmentId(account.counterId || counters[0]?.id || '');
-    updateUiState('activeModal', 'link-account');
-  };
-
   const handleEditService = (service: Service) => {
     if (!requireModuleAction('services', 'edit')) return;
-    if (!ensureEmployeeDepartmentAccess('update services')) return;
 
     updateUiState('editingService', service);
     updateUiState('activeModal', 'edit-service');
@@ -2127,7 +2133,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleEditTransaction = (transaction: Transaction) => {
     if (!requireModuleAction('transactions', 'edit')) return;
-    if (!ensureEmployeeDepartmentAccess('edit transactions')) return;
 
     updateUiState('editingTransaction', transaction);
     updateUiState('activeModal', 'edit-transaction');
@@ -2149,6 +2154,58 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     updateUiState('selectedTransaction', transaction);
     updateUiState('activeModal', 'view-transaction');
+  };
+
+  const handlePayTransaction = (transaction: Transaction) => {
+    if (!requireModuleAction('transactions', 'add')) return;
+    if (!safeSelectedCounterId) {
+      addNotification('error', 'Please select department first.');
+      return;
+    }
+
+    setPayingTransaction(transaction);
+    setTransactionPaymentAmount(transaction.dueAmount > 0 ? String(transaction.dueAmount) : '');
+    setTransactionPaymentMode('cash');
+    setTransactionPaymentAccountId('');
+    setTransactionPaymentRemark('');
+    setTransactionPaymentError('');
+  };
+
+  const closeTransactionPayment = () => {
+    if (isPayingTransaction) return;
+    setPayingTransaction(null);
+    setTransactionPaymentError('');
+  };
+
+  const submitTransactionPayment = async () => {
+    if (!payingTransaction) return;
+
+    const numericAmount = Number(transactionPaymentAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setTransactionPaymentError('Enter a valid payment amount.');
+      return;
+    }
+
+    if (transactionPaymentMode === 'account' && !transactionPaymentAccountId) {
+      setTransactionPaymentError('Select an account for account payment.');
+      return;
+    }
+
+    setIsPayingTransaction(true);
+    const success = await handleCustomerBalancePayment({
+      customerId: payingTransaction.customerId,
+      paymentAmount: numericAmount,
+      paymentMode: transactionPaymentMode,
+      accountId: transactionPaymentMode === 'account' ? transactionPaymentAccountId : null,
+      counterId: safeSelectedCounterId,
+      remark: transactionPaymentRemark.trim() || null,
+    });
+    setIsPayingTransaction(false);
+
+    if (success) {
+      reloadTransactions();
+      closeTransactionPayment();
+    }
   };
 
   const handleDownloadReceipt = (transaction: Transaction) => {
@@ -2206,7 +2263,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleCancelTransaction = (transaction: Transaction) => {
     if (!requireModuleAction('transactions', 'edit')) return;
-    if (!ensureEmployeeDepartmentAccess('cancel transactions')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
@@ -2306,7 +2362,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       DELETE_EMPLOYEE: {
         actionType,
         id,
-        label: employees.find((employee) => employee.id === id)?.name || 'this employee',
+        label: employees.find((employee) => employee.id === id)?.displayName || employees.find((employee) => employee.id === id)?.name || 'this employee',
         module: getModuleLabel('employee'),
       },
       DELETE_COUNTER: {
@@ -2378,6 +2434,17 @@ const Dashboard: React.FC<DashboardProps> = ({
         return;
       }
 
+      if (shouldLoadWorkspaceApi) {
+        const result = await deleteTransaction(pendingDelete.id);
+
+        if (!result.success) {
+          addNotification('error', result.message || 'Unable to delete transaction right now.');
+          return;
+        }
+
+        reloadTransactions();
+      }
+
       dispatch({
         type: 'DELETE_TRANSACTION',
         businessId,
@@ -2432,6 +2499,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
 
       reloadCustomers();
+    } else if (pendingDelete.actionType === 'DELETE_EMPLOYEE' && shouldLoadWorkspaceApi) {
+      const result = await deleteEmployee(pendingDelete.id);
+
+      if (!result.success) {
+        addNotification('error', result.message || 'Unable to delete employee right now.');
+        return;
+      }
+
+      reloadEmployees();
     } else {
       const businessId = requireBusinessWorkspaceId();
       if (!businessId) return;
@@ -2473,7 +2549,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     switch (action) {
       case 'new-transaction':
         if (!requireModuleManagement('transactions', 'start')) return;
-        if (!ensureEmployeeDepartmentAccess('create transactions')) return;
+        if (!safeSelectedCounterId) {
+          addNotification('error', 'Please select department first.');
+          return;
+        }
 
         startWorkflowWithDraft({}, {
           notice: 'New transaction workflow is ready.',
@@ -2481,7 +2560,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         break;
       case 'repeat-customer': {
         if (!requireModuleManagement('transactions', 'repeat')) return;
-        if (!ensureEmployeeDepartmentAccess('repeat transactions')) return;
+        if (!safeSelectedCounterId) {
+          addNotification('error', 'Please select department first.');
+          return;
+        }
         if (transactionHistory.length === 0) {
           addNotification('warning', 'No previous transaction found to repeat.');
           return;
@@ -2527,7 +2609,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         break;
       case 'add-service':
         if (!requireModuleAction('services', 'add')) return;
-        if (!ensureEmployeeDepartmentAccess('create services')) return;
+        if (!safeSelectedCounterId) {
+          addNotification('error', 'Please select department first.');
+          return;
+        }
 
         openModule('services');
         updateUiState('activeModal', 'add-service');
@@ -2615,9 +2700,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleServiceSubmit = async (values: ServiceFormValues) => {
     if (!requireModuleAction('services', editingService ? 'edit' : 'add')) return;
-    if (!ensureEmployeeDepartmentAccess(editingService ? 'update inventory' : 'create inventory')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
+    const inventoryCounterIdForSubmit = values.counterId || values.departmentId;
+    if (!inventoryCounterIdForSubmit) {
+      setServiceSubmitError('Counter/Department is required.');
+      addNotification('warning', 'Select a department before saving inventory.');
+      return;
+    }
 
     if (editingService) {
       if (shouldLoadWorkspaceApi) {
@@ -2631,7 +2721,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             type: values.type || 'service',
             quantity: values.quantity ?? 0,
             remark: values.remark ?? values.description ?? null,
-            counterId: values.counterId ?? values.departmentId ?? null,
+            counterId: inventoryCounterIdForSubmit,
             status: values.status === 'Active' ? 1 : 0,
           });
 
@@ -2668,7 +2758,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             type: values.type || 'service',
             quantity: values.quantity ?? 0,
             remark: values.remark ?? values.description ?? null,
-            counterId: values.counterId ?? values.departmentId ?? null,
+            counterId: inventoryCounterIdForSubmit,
           });
 
           if (!result.success) {
@@ -2980,32 +3070,18 @@ const Dashboard: React.FC<DashboardProps> = ({
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
-    const primaryAccountId = accounts[0]?.id;
-    if (!primaryAccountId) {
-      addNotification('warning', 'Create a bank account before creating a department.');
-      return;
-    }
-
     const departmentValues: DepartmentFormValues = {
       name: values.name,
+      openingBalance: 0,
       remark: values.remark,
-      accountIds: [primaryAccountId],
-      defaultAccountId: primaryAccountId,
     };
     const departmentPayload = toStoredDepartmentValues(departmentValues);
 
     if (shouldLoadWorkspaceApi) {
-      const numericAccountId = Number(primaryAccountId);
-      if (!Number.isFinite(numericAccountId)) {
-        addNotification('error', 'Selected bank account value is invalid.');
-        return;
-      }
-
       const result = await createDepartmentResponse({
         name: values.name,
+        openingBalance: 0,
         remark: values.remark,
-        accountIds: [numericAccountId],
-        defaultAccountId: numericAccountId,
       });
 
       if (!result.success) {
@@ -3265,15 +3341,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     closeModal();
   };
 
-  const handleEmployeeSubmit = (values: EmployeeFormValues) => {
+  const handleEmployeeSubmit = async (values: EmployeeFormValues) => {
     if (!requireModuleAction('employee', editingEmployee ? 'edit' : 'add')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
-
-    if (!values.departmentId) {
-      addNotification('warning', 'Assign a department before saving the employee.');
-      return;
-    }
 
     if (isEmployeeEmailTaken(values.email, editingEmployee?.id)) {
       addNotification('error', 'That employee email is already assigned to another login.');
@@ -3282,12 +3353,63 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     if (editingEmployee) {
       const stateValues = toEmployeeStateValues(values);
-      dispatch({ type: 'UPDATE_EMPLOYEE', businessId, payload: { ...stateValues, id: editingEmployee.id } });
+      if (shouldLoadWorkspaceApi) {
+        setIsEmployeeSubmitting(true);
+        const result = await updateEmployee({
+          id: editingEmployee.id,
+          fullName: values.fullName || values.name,
+          nickName: values.nickName || values.name,
+          mobile: values.mobile || values.phone,
+          email: values.email,
+          password: values.password,
+          gender: values.gender || null,
+          dob: values.dob || null,
+          address: values.address || null,
+          remark: values.remark || null,
+          permissions: values.permissions,
+          status: values.status,
+        });
+        setIsEmployeeSubmitting(false);
+
+        if (!result.success) {
+          addNotification('error', result.message || 'Unable to update employee.');
+          return;
+        }
+
+        reloadEmployees();
+      } else {
+        dispatch({ type: 'UPDATE_EMPLOYEE', businessId, payload: { ...stateValues, id: editingEmployee.id } });
+      }
       addHistoryEvent(`${values.name} employee updated`, 'Employees');
       addNotification('success', 'Employee updated successfully.');
     } else {
       const stateValues = toEmployeeStateValues(values);
-      dispatch({ type: 'ADD_EMPLOYEE', businessId, payload: stateValues });
+      if (shouldLoadWorkspaceApi) {
+        setIsEmployeeSubmitting(true);
+        const result = await createEmployee({
+          fullName: values.fullName || values.name,
+          nickName: values.nickName || values.name,
+          mobile: values.mobile || values.phone,
+          email: values.email,
+          password: values.password,
+          gender: values.gender || null,
+          dob: values.dob || null,
+          address: values.address || null,
+          remark: values.remark || null,
+          permissions: values.permissions,
+          status: values.status,
+        });
+        setIsEmployeeSubmitting(false);
+
+        if (!result.success) {
+          addNotification('error', result.message || 'Unable to create employee.');
+          return;
+        }
+
+        reloadEmployees();
+      } else {
+        dispatch({ type: 'ADD_EMPLOYEE', businessId, payload: stateValues });
+      }
       addHistoryEvent(`${values.name} employee added`, 'Employees');
       addNotification('success', 'Employee added successfully.');
     }
@@ -3305,23 +3427,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       addHistoryEvent(`${values.name} department updated`, 'Department');
       addNotification('success', 'Department updated successfully.');
     } else {
-      const accountIds = values.accountIds.map((accountId) => Number(accountId)).filter(Number.isFinite);
-      const defaultAccountId = Number(values.defaultAccountId);
-
-      // if (accountIds.length !== values.accountIds.length || !Number.isFinite(defaultAccountId)) {
-      //   setDepartmentSubmitError('Selected bank account values are invalid.');
-      //   return;
-      // }
-
       if (shouldLoadWorkspaceApi) {
         setIsDepartmentSubmitting(true);
         setDepartmentSubmitError('');
 
         const result = await createDepartmentResponse({
           name: values.name,
+          openingBalance: values.openingBalance,
           remark: values.remark,
-          accountIds,
-          defaultAccountId,
         });
 
         setIsDepartmentSubmitting(false);
@@ -3345,7 +3458,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (!requireModuleAction('accounts', editingAccount ? 'edit' : 'add')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
-    const storedValues = toStoredAccountValues(values);
+    const storedValues = toStoredAccountValues(values, editingAccount);
 
     if (editingAccount) {
       dispatch({ type: 'UPDATE_ACCOUNT', businessId, payload: { ...storedValues, id: editingAccount.id, date: editingAccount.date } });
@@ -3364,9 +3477,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             ...currentAccounts,
           ]);
           reloadAccounts();
-          if (values.counterId) {
-            reloadDepartments();
-          }
         } catch (error) {
           addNotification(
             'error',
@@ -3380,71 +3490,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       addHistoryEvent(`${values.accountHolder} account added`, 'Accounts');
       addNotification('success', 'Account added successfully.');
     }
-    closeModal();
-  };
-
-  const handleConfirmAccountDepartmentLink = async () => {
-    if (!linkingAccount) return;
-
-    if (!canLinkAccountToDepartment()) {
-      addNotification('warning', 'You do not have permission to link accounts to departments.');
-      return;
-    }
-
-    const businessId = requireBusinessWorkspaceId();
-    if (!businessId) return;
-
-    const selectedDepartment = counters.find((counter) => counter.id === selectedAccountLinkDepartmentId);
-    if (!selectedDepartment) {
-      addNotification('warning', 'Select a department before linking this account.');
-      return;
-    }
-
-    if (shouldLoadWorkspaceApi) {
-      try {
-        await linkAccountToDepartment(linkingAccount.id, selectedDepartment.id);
-        setOptimisticAccounts((currentAccounts) =>
-          currentAccounts.map((account) =>
-            account.id === linkingAccount.id
-              ? { ...account, counterId: selectedDepartment.id }
-              : account
-          )
-        );
-        reloadAccounts();
-        reloadDepartments();
-      } catch (error) {
-        addNotification(
-          'error',
-          error instanceof Error ? error.message : 'Unable to link account right now.',
-        );
-        return;
-      }
-    } else {
-      dispatch({
-        type: 'UPDATE_ACCOUNT',
-        businessId,
-        payload: {
-          ...linkingAccount,
-          counterId: selectedDepartment.id,
-        },
-      });
-      dispatch({
-        type: 'UPDATE_COUNTER',
-        businessId,
-        payload: {
-          ...selectedDepartment,
-          linkedAccountIds: Array.from(new Set([
-            ...getDepartmentLinkedAccountIds(selectedDepartment),
-            linkingAccount.id,
-          ])),
-          defaultAccountId: selectedDepartment.defaultAccountId || linkingAccount.id,
-          linkedAccountId: selectedDepartment.linkedAccountId || linkingAccount.id,
-        },
-      });
-    }
-
-    addHistoryEvent(`${linkingAccount.accountHolder} linked to ${selectedDepartment.name}`, 'Accounts');
-    addNotification('success', 'Account linked to department successfully.');
     closeModal();
   };
 
@@ -3465,7 +3510,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     closeModal();
   };
 
-  const handleTransactionSubmit = (values: TransactionEditorValues[]) => {
+  const handleTransactionSubmit = async (values: TransactionEditorValues[]) => {
     if (!editingTransaction) return;
     if (!requireModuleAction('transactions', 'edit')) return;
     const businessId = requireBusinessWorkspaceId();
@@ -3478,7 +3523,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
-    const missingAccountRow = transactionRows.find((row) => !accounts.some((account) => account.id === row.transactionAccountId));
+    const missingAccountRow = transactionRows.find((row) => row.transactionAccountId !== 'cash' && !accounts.some((account) => account.id === row.transactionAccountId));
     if (missingAccountRow) {
       addNotification('warning', 'Select a valid transaction account before saving.');
       return;
@@ -3488,11 +3533,45 @@ const Dashboard: React.FC<DashboardProps> = ({
     const activeStatus = editingTransaction.status === 'cancelled' || editingTransaction.status === 'refunded'
       ? editingTransaction.status
       : 'completed';
-    const selectedAccount = accounts.find((account) => account.id === firstRow.transactionAccountId);
+    const selectedAccount = firstRow.transactionAccountId === 'cash'
+      ? null
+      : accounts.find((account) => account.id === firstRow.transactionAccountId);
 
-    if (!selectedAccount) {
+    if (firstRow.transactionAccountId !== 'cash' && !selectedAccount) {
       addNotification('warning', 'Select a valid transaction account before saving.');
       return;
+    }
+
+    if (!editingTransaction.departmentId) {
+      addNotification('warning', 'Select a counter before saving transaction.');
+      return;
+    }
+
+    if (shouldLoadWorkspaceApi) {
+      const result = await updateTransaction({
+        transactionId: editingTransaction.id,
+        customerId: editingTransaction.customerId,
+        counterId: editingTransaction.departmentId,
+        rows: transactionRows.map((row) => ({
+          formName: row.formName,
+          noOfTransaction: row.noOfTransaction,
+          inventoryId: row.inventoryId,
+          inventoryName: row.serviceProduct,
+          transactionAccount: row.transactionAccount,
+          amount: row.amount,
+          serviceCharge: row.serviceCharge,
+          bankCharge: row.bankCharge,
+          otherCharge: row.otherCharge,
+          totalAmount: row.totalAmount,
+          remark: row.remark || null,
+        })),
+        status: activeStatus === 'completed' ? 1 : 0,
+      });
+
+      if (!result.success) {
+        addNotification('error', result.message || 'Unable to update transaction.');
+        return;
+      }
     }
 
     const updatedTransaction: Transaction = {
@@ -3500,6 +3579,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       formName: firstRow.formName,
       transactionNo: firstRow.transactionNo,
       transactionNumber: firstRow.transactionNo || editingTransaction.transactionNumber,
+      noOfTransaction: firstRow.noOfTransaction,
       serviceProduct: firstRow.serviceProduct,
       inventoryItemId: firstRow.inventoryItemId,
       inventoryItemType: firstRow.inventoryItemType,
@@ -3507,7 +3587,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       service: firstRow.serviceProduct,
       transactionAccountId: firstRow.transactionAccountId,
       accountId: firstRow.transactionAccountId,
-      accountLabel: `${selectedAccount.accountHolder} | ${selectedAccount.bankName}`,
+      accountLabel: selectedAccount ? `${selectedAccount.accountHolder} | ${selectedAccount.bankName}` : 'Cash',
       amount: firstRow.amount,
       servicePrice: firstRow.amount,
       serviceCharge: firstRow.serviceCharge,
@@ -3531,8 +3611,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
 
     transactionRows.slice(1).forEach((row) => {
-      const rowAccount = accounts.find((account) => account.id === row.transactionAccountId);
-      if (!rowAccount) return;
+      const rowAccount = row.transactionAccountId === 'cash'
+        ? null
+        : accounts.find((account) => account.id === row.transactionAccountId);
+      if (row.transactionAccountId !== 'cash' && !rowAccount) return;
 
       dispatch({
         type: 'ADD_TRANSACTION',
@@ -3540,6 +3622,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         payload: {
           formName: row.formName,
           transactionNo: row.transactionNo || undefined,
+          noOfTransaction: row.noOfTransaction,
           customerId: editingTransaction.customerId,
           customerName: editingTransaction.customerName,
           customerPhone: editingTransaction.customerPhone,
@@ -3562,7 +3645,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           departmentId: editingTransaction.departmentId,
           departmentName: editingTransaction.departmentName,
           accountId: row.transactionAccountId,
-          accountLabel: `${rowAccount.accountHolder} | ${rowAccount.bankName}`,
+          accountLabel: rowAccount ? `${rowAccount.accountHolder} | ${rowAccount.bankName}` : 'Cash',
           handledById: editingTransaction.handledById,
           handledByName: editingTransaction.handledByName,
           handledByRole: editingTransaction.handledByRole,
@@ -3579,7 +3662,36 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     addHistoryEvent(`${transactionRows.length} transaction row${transactionRows.length === 1 ? '' : 's'} saved for ${updatedTransaction.customerName}`, 'Transactions');
     addNotification('success', `${transactionRows.length} transaction row${transactionRows.length === 1 ? '' : 's'} saved.`);
+    reloadTransactions();
     closeModal();
+  };
+
+  const handleCustomerBalancePayment = async (payload: PayCustomerBalancePayload) => {
+    const paymentCounterId = payload.counterId || safeSelectedCounterId;
+    if (!paymentCounterId) {
+      addNotification('error', 'Please select department first.');
+      return false;
+    }
+
+    const result = await payCustomerBalance({
+      ...payload,
+      counterId: paymentCounterId,
+      paymentAmount: payload.paymentAmount ?? payload.amount,
+    });
+
+    if (!result.success) {
+      addNotification('error', result.message || 'Unable to pay customer balance.');
+      return false;
+    }
+
+    addNotification('success', result.message || 'Customer balance payment completed.');
+    reloadTransactions();
+    reloadCustomerBalance();
+    reloadDepartments();
+    if (payload.paymentMode === 'account') {
+      reloadAccounts();
+    }
+    return true;
   };
 
   const handleToggleOption = () => {
@@ -3762,12 +3874,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       return { moduleId: 'additions', permission: 'edit' as const };
     }
 
-    if (modal === 'link-account') {
-      return canLinkAccountToDepartment()
-        ? null
-        : { moduleId: 'accounts', permission: 'edit' as const };
-    }
-
     const modalPermissions: Partial<Record<Exclude<ModalMode, null>, { moduleId: string; permission: 'access' | 'add' | 'edit' | 'delete' }>> = {
       favorites: { moduleId: 'services', permission: 'access' },
       'add-service': { moduleId: 'services', permission: 'add' },
@@ -3837,6 +3943,97 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const renderModal = () => {
+    if (payingTransaction) {
+      return (
+        <ActionModal
+          title="Customer Payment"
+          eyebrow="Pay Customer Balance"
+          description={`Collect payment for ${payingTransaction.customerName}.`}
+          onClose={closeTransactionPayment}
+        >
+          {transactionPaymentError ? (
+            <div className="form-alert" role="alert">{transactionPaymentError}</div>
+          ) : null}
+          <div className="row g-3">
+            <div className="col-12 col-md-6">
+              <label className="form-label" htmlFor="transaction-pay-customer">Customer Name</label>
+              <input className="form-control" id="transaction-pay-customer" value={payingTransaction.customerName} readOnly />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label" htmlFor="transaction-pay-balance">Current Balance</label>
+              <input
+                className={`form-control ${getCustomerBalanceClassName(payingTransaction.currentBalance ?? payingTransaction.dueAmount)}`}
+                id="transaction-pay-balance"
+                value={formatCustomerBalance(payingTransaction.currentBalance ?? payingTransaction.dueAmount)}
+                readOnly
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label" htmlFor="transaction-pay-amount">Payment Amount</label>
+              <input
+                className="form-control"
+                id="transaction-pay-amount"
+                min="0"
+                type="number"
+                value={transactionPaymentAmount}
+                onChange={(event) => {
+                  setTransactionPaymentAmount(event.target.value);
+                  setTransactionPaymentError('');
+                }}
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label" htmlFor="transaction-pay-mode">Payment Mode</label>
+              <select
+                className="form-select"
+                id="transaction-pay-mode"
+                value={transactionPaymentMode}
+                onChange={(event) => setTransactionPaymentMode(event.target.value as 'cash' | 'account')}
+              >
+                <option value="cash">Cash</option>
+                <option value="account">Account</option>
+              </select>
+            </div>
+            {transactionPaymentMode === 'account' ? (
+              <div className="col-12">
+                <label className="form-label" htmlFor="transaction-pay-account">Account</label>
+                <select
+                  className="form-select"
+                  id="transaction-pay-account"
+                  value={transactionPaymentAccountId}
+                  onChange={(event) => setTransactionPaymentAccountId(event.target.value)}
+                >
+                  <option value="">Select Account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.accountHolder} | {account.bankName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="col-12">
+              <label className="form-label" htmlFor="transaction-pay-remark">Remark Optional</label>
+              <input
+                className="form-control"
+                id="transaction-pay-remark"
+                value={transactionPaymentRemark}
+                onChange={(event) => setTransactionPaymentRemark(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn-app btn-app-secondary" onClick={closeTransactionPayment} disabled={isPayingTransaction}>
+              Cancel
+            </button>
+            <button type="button" className="btn-app btn-app-primary" onClick={submitTransactionPayment} disabled={isPayingTransaction}>
+              {isPayingTransaction ? 'Paying...' : 'Pay'}
+            </button>
+          </div>
+        </ActionModal>
+      );
+    }
+
     if (!activeModal) return null;
 
     if (!canUseModal(activeModal)) {
@@ -4078,11 +4275,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         >
           <EmployeeForm
             businessPermissions={currentBusiness?.permissions ?? buildDefaultCustomerPermissions()}
-            departments={counters}
             initialValues={editingEmployee || undefined}
             submitLabel={editingEmployee ? 'Update Employee' : 'Add Employee'}
             onCancel={closeModal}
             onSubmit={handleEmployeeSubmit}
+            isSubmitting={isEmployeeSubmitting}
           />
         </ActionModal>
       );
@@ -4093,21 +4290,16 @@ const Dashboard: React.FC<DashboardProps> = ({
         <ActionModal
           title={editingDepartment ? 'Edit Department' : 'Add Department'}
           eyebrow="Department"
-          description={editingDepartment ? 'Update the department, linked account, and balance details.' : 'Create a department so the business team can track counter and account mapping clearly.'}
+          description={editingDepartment ? 'Update the department name, balance, and remark.' : 'Create a department with an opening balance for transaction tracking.'}
           onClose={closeModal}
         >
           <DepartmentForm
-            accounts={departmentFormAccounts}
             initialValues={editingDepartment || undefined}
             submitLabel={editingDepartment ? 'Update Department' : 'Add Department'}
             onCancel={closeModal}
             onSubmit={handleDepartmentSubmit}
             isSubmitting={isDepartmentSubmitting}
-            submitError={
-              departmentSubmitError
-              || departmentAccountsError
-              || (isDepartmentAccountsLoading ? 'Loading bank accounts...' : '')
-            }
+            submitError={departmentSubmitError}
           />
         </ActionModal>
       );
@@ -4154,61 +4346,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         <ActionModal title={editingAccount ? 'Edit Account' : 'Add Account'} onClose={closeModal}>
           <AccountForm
             initialValues={editingAccount || undefined}
-            departments={counters}
             submitLabel={editingAccount ? 'Update Account' : 'Add Account'}
             onCancel={closeModal}
             onSubmit={handleAccountSubmit}
           />
-        </ActionModal>
-      );
-    }
-
-    if (activeModal === 'link-account' && linkingAccount) {
-      return (
-        <ActionModal
-          title="Link Account"
-          eyebrow="Account"
-          description="Select the department this account should be linked with."
-          onClose={closeModal}
-        >
-          <div className="form-section-card">
-            <div className="form-section-title">Department Mapping</div>
-            <div className="row g-3">
-              <div className="col-12">
-                <div className="counter-chip">
-                  <p className="eyebrow mb-2">Account</p>
-                  <p className="fw-semibold mb-1">{linkingAccount.accountHolder}</p>
-                  <p className="page-muted small mb-0">{linkingAccount.bankName} | A/C {linkingAccount.accountNumber}</p>
-                </div>
-              </div>
-              <div className="col-12">
-                <label className="form-label">Department</label>
-                <select
-                  className="form-select"
-                  value={selectedAccountLinkDepartmentId}
-                  onChange={(event) => setSelectedAccountLinkDepartmentId(event.target.value)}
-                >
-                  <option value="">Choose department</option>
-                  {counters.map((counter) => (
-                    <option key={counter.id} value={counter.id}>
-                      {counter.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn-app btn-app-secondary" onClick={closeModal}>Cancel</button>
-            <button
-              type="button"
-              className="btn-app btn-app-primary"
-              onClick={handleConfirmAccountDepartmentLink}
-              disabled={!selectedAccountLinkDepartmentId}
-            >
-              Link Account
-            </button>
-          </div>
         </ActionModal>
       );
     }
@@ -4269,6 +4410,40 @@ const Dashboard: React.FC<DashboardProps> = ({
             ['Remark', selectedTransaction.remark || selectedTransaction.note || 'No remark'],
             ['Date', selectedTransaction.date],
           ]} />
+          {selectedTransaction.rows && selectedTransaction.rows.length > 0 ? (
+            <div className="data-table-wrapper mt-4">
+              <table className="table data-table whitespace-nowrap">
+                <thead>
+                  <tr>
+                    <th>Form Name</th>
+                    <th>No. of Transaction</th>
+                    <th>Inventory</th>
+                    <th>Transaction Account</th>
+                    <th>Service Charge</th>
+                    <th>Bank Charge</th>
+                    <th>Other Charge</th>
+                    <th>Total Amount</th>
+                    <th>Remark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedTransaction.rows.map((row, index) => (
+                    <tr key={row.id || `${row.inventoryId}-${index}`}>
+                      <td>{row.formName}</td>
+                      <td>{row.noOfTransaction}</td>
+                      <td>{row.inventoryName || row.inventoryId}</td>
+                      <td>{row.transactionAccount}</td>
+                      <td>Rs. {row.serviceCharge.toLocaleString('en-IN')}</td>
+                      <td>Rs. {row.bankCharge.toLocaleString('en-IN')}</td>
+                      <td>Rs. {row.otherCharge.toLocaleString('en-IN')}</td>
+                      <td>Rs. {row.totalAmount.toLocaleString('en-IN')}</td>
+                      <td>{row.remark || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
           <div className="modal-actions">
             {canPerformModuleAction('transactions', 'edit') ? (
               <button
@@ -4542,7 +4717,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     servicesError,
     roleTemplatesError,
     workflowDraft,
-    employeeAssignedDepartment,
     displayUserName,
     filteredTransactionRecords,
     filteredHistoryEvents,
@@ -4551,6 +4725,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     customerDirectoryRecords,
     customerOutstandingRows,
     customerPaymentTransactions,
+    customerBalanceRows,
+    isCustomerBalanceLoading,
+    customerBalanceError,
     customerPageView,
     customerPageOptions,
     customerSectionTitle,
@@ -4579,7 +4756,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     historySummary,
     reportSummary,
     expenseSummary,
-    canEmployeeOperateOnDepartment,
     canAddCustomerRecords,
     canViewCustomerRecords,
     canEditCustomerRecords,
@@ -4608,14 +4784,20 @@ const Dashboard: React.FC<DashboardProps> = ({
     getRoleLabel,
     showNotification: addNotification,
     reloadCustomers,
+    reloadTransactions,
+    reloadServices,
+    reloadCustomerBalance,
     reloadRoleTemplates,
+    handleCustomerBalancePayment,
     handleLogout: onLogout,
     handleAdminProfileSave,
     handleBusinessProfileSave,
     handleEmployeeProfileSave,
     handleQuickAction,
     handleDismissNotification,
+    handlePayTransaction,
     handleViewTransaction,
+    handlePrintReceipt,
     handleDeleteRecord,
     handleEditService,
     handleDeleteService,
@@ -4627,12 +4809,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     clearDepartmentFilters,
     handleEditDepartment,
     handleEditAccount,
-    handleLinkAccount,
     handleEditTransaction,
     handleViewReport,
     handleEditExpense,
     handleConfigureOption,
     setIsTransactionFiltersOpen,
+    setTransactionDraftDirty: setIsTransactionDraftDirty,
     setDepartmentSearchInput,
     setDepartmentAccountStatusFilter,
     setBusinessDirectoryFilters,
@@ -4753,7 +4935,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           eyebrow={shouldCreateAccountFirst ? 'Account Setup' : 'Department Setup'}
           title={shouldCreateAccountFirst ? 'Create your first account' : 'Create your first department'}
           description={shouldCreateAccountFirst
-            ? 'Add a bank account first, then create a department and link it for daily operations.'
+            ? 'Add a bank account first, then create a department for daily operations.'
             : 'This business workspace does not have any departments yet. Open the Departments page and add one before continuing with daily operations.'}
           action={{
             label: shouldCreateAccountFirst ? 'Open Accounts' : 'Open Departments',
@@ -4837,7 +5019,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           notificationCount={notifications.length}
           searchValue={searchQuery}
           currentUser={{ ...currentUser, name: displayUserName }}
-          onCounterChange={setSelectedCounterId}
+          onCounterChange={handleCounterChange}
           onSearch={handleSearch}
           onProfileOpen={() => onNavigate('profile')}
           onNotificationsClick={() => updateUiState('activeModal', 'notifications')}
@@ -4853,6 +5035,43 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
       {renderModal()}
       {renderIdentityConflictModal()}
+      {shouldShowDepartmentSelectionModal ? (
+        <ActionModal
+          title="Select Department"
+          eyebrow="Department Required"
+          description="Please select department first. Transactions and inventory are loaded from the selected department."
+          onClose={() => addNotification('warning', 'Please select department first.')}
+        >
+          <div className="row g-3">
+            <div className="col-12">
+              <label className="form-label" htmlFor="login-department-select">Department</label>
+              <select
+                id="login-department-select"
+                className="form-select"
+                value={departmentPromptCounterId}
+                onChange={(event) => setDepartmentPromptCounterId(event.target.value)}
+              >
+                <option value="">Select Department</option>
+                {availableCounters.map((counter) => (
+                  <option key={counter.id} value={counter.id}>
+                    {counter.code ? `${counter.code} / ${counter.name}` : counter.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-app btn-app-primary"
+              disabled={!departmentPromptCounterId}
+              onClick={() => handleCounterChange(departmentPromptCounterId)}
+            >
+              Continue
+            </button>
+          </div>
+        </ActionModal>
+      ) : null}
     </div>
   );
 };

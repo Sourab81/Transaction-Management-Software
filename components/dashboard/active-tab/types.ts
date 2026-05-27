@@ -19,6 +19,7 @@ import type {
   Transaction,
 } from '../../../lib/store';
 import type { CustomerWorkspaceView } from '../../../lib/workspace-routes';
+import type { CustomerBalance, PayCustomerBalancePayload } from '../../../lib/api/customerBalance';
 import type { ServiceWorkflowDraft } from '../../forms/ServiceForm';
 import type { DataTablePagination } from '../../tables/DataTable';
 import type { DataTableFiltersValue } from '../../common/DataTableFilters';
@@ -33,8 +34,6 @@ export interface CustomerPageOption {
 
 export interface DepartmentTableRow {
   counter: Counter;
-  linkedAccounts: Account[];
-  defaultAccount: Account | null;
 }
 
 export type DashboardDeleteActionType =
@@ -84,7 +83,6 @@ export interface DashboardTabContext {
   servicesError: string;
   roleTemplatesError: string;
   workflowDraft: ServiceWorkflowDraft | null;
-  employeeAssignedDepartment: Counter | null | undefined;
   displayUserName: string;
   filteredTransactionRecords: Transaction[];
   filteredHistoryEvents: HistoryEvent[];
@@ -93,6 +91,9 @@ export interface DashboardTabContext {
   customerDirectoryRecords: Array<Business | BusinessCustomer>;
   customerOutstandingRows: CustomerOutstandingRow[];
   customerPaymentTransactions: Transaction[];
+  customerBalanceRows: CustomerBalance[];
+  isCustomerBalanceLoading: boolean;
+  customerBalanceError: string;
   customerPageView: CustomerWorkspaceView;
   customerPageOptions: CustomerPageOption[];
   customerSectionTitle: string;
@@ -121,7 +122,6 @@ export interface DashboardTabContext {
   historySummary: SummaryCardProps[];
   reportSummary: SummaryCardProps[];
   expenseSummary: SummaryCardProps[];
-  canEmployeeOperateOnDepartment: boolean;
   canAddCustomerRecords: boolean;
   canViewCustomerRecords: boolean;
   canEditCustomerRecords: boolean;
@@ -150,7 +150,11 @@ export interface DashboardTabContext {
   getRoleLabel: (role: SessionUser['role']) => string;
   showNotification: (type: 'success' | 'warning' | 'error' | 'info', message: string) => void;
   reloadCustomers: () => void;
+  reloadTransactions: () => void;
+  reloadServices: () => void;
+  reloadCustomerBalance: () => void;
   reloadRoleTemplates: () => void;
+  handleCustomerBalancePayment: (payload: PayCustomerBalancePayload) => Promise<boolean>;
   handleLogout: () => void;
   handleAdminProfileSave: (values: { name: string; email: string }) => void;
   handleBusinessProfileSave: (values: { name: string; phone: string; email: string; password?: string }) => void;
@@ -158,6 +162,8 @@ export interface DashboardTabContext {
   handleQuickAction: (action: string) => void;
   handleDismissNotification: (id: string) => void;
   handleViewTransaction: (transaction: Transaction) => void;
+  handlePayTransaction: (transaction: Transaction) => void;
+  handlePrintReceipt: (transaction: Transaction) => void;
   handleDeleteRecord: (actionType: DashboardDeleteActionType, id: string) => void;
   handleEditService: (service: Service) => void;
   handleDeleteService: (id: string) => void;
@@ -169,12 +175,12 @@ export interface DashboardTabContext {
   clearDepartmentFilters: () => void;
   handleEditDepartment: (counter: Counter) => void;
   handleEditAccount: (account: Account) => void;
-  handleLinkAccount: (account: Account) => void;
   handleEditTransaction: (transaction: Transaction) => void;
   handleViewReport: (report: ReportItem) => void;
   handleEditExpense: (expense: Expense) => void;
   handleConfigureOption: (option: AdditionOption) => void;
   setIsTransactionFiltersOpen: Dispatch<SetStateAction<boolean>>;
+  setTransactionDraftDirty: (isDirty: boolean) => void;
   setDepartmentSearchInput: Dispatch<SetStateAction<string>>;
   setDepartmentAccountStatusFilter: Dispatch<SetStateAction<'All' | 'Active' | 'Inactive' | 'Unassigned'>>;
   setBusinessDirectoryFilters: Dispatch<SetStateAction<DataTableFiltersValue>>;

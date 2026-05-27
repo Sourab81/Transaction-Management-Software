@@ -1,7 +1,7 @@
 'use client';
 
 import type { Employee } from '../store';
-import { requestAppApi } from '../api/client';
+import { getEmployees } from '../api/employees';
 import { mapEmployeesResponse } from '../mappers/employee-mapper';
 import { useApiCollection } from './useApiCollection';
 
@@ -19,7 +19,7 @@ export function useEmployees(
   const { data, isLoading, error, reload } = useApiCollection({
     enabled,
     initialData,
-    request: () => requestAppApi('/api/employees'),
+    request: () => getEmployees(),
     mapResponse: (payload) => mapEmployeesResponse(payload),
   });
 

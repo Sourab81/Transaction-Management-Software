@@ -36,19 +36,7 @@ const readLoginErrorMessage = (body: LoginApiResponseBody | null) => {
 };
 
 const isFailedLoginBody = (body: LoginApiResponseBody | null) => {
-  if (body?.status === false || body?.status === 'false') {
-    return true;
-  }
-
-  if (typeof body?.status === 'number') {
-    return body.status >= 400;
-  }
-
-  if (typeof body?.status === 'string' && /^\d+$/.test(body.status)) {
-    return Number(body.status) >= 400;
-  }
-
-  return false;
+  return body?.status !== true;
 };
 
 const LoginScreen = () => {
@@ -80,14 +68,13 @@ const LoginScreen = () => {
 
     try {
       setIsSubmitting(true);
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: normalizedEmail,
           email: normalizedEmail,
           password,
         }),

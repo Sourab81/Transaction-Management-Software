@@ -6,6 +6,7 @@ import { FaFilter, FaPlusCircle } from 'react-icons/fa';
 import { getCustomerWorkspaceViewUi, getModuleUi } from '../../../lib/module-ui';
 import { customerPermissionOptions } from '../../../lib/platform-structure';
 import { getCustomerWorkspacePath } from '../../../lib/workspace-routes';
+import { formatCustomerBalance, getCustomerBalanceClassName } from '../../../lib/customer-balance-format';
 import ActionModal from '../../ui/ActionModal';
 import EmptyState from '../../ui/state/EmptyState';
 import ErrorState from '../../ui/state/ErrorState';
@@ -16,6 +17,7 @@ import CustomerPaymentsTable from '../../tables/CustomerPaymentsTable';
 import CustomerOutstandingTable from '../../tables/CustomerOutstandingTable';
 import DataTableFilters, { type DataTableFiltersConfig } from '../../common/DataTableFilters';
 import type { DashboardTabContext } from './types';
+import type { CustomerBalance } from '../../../lib/api/customerBalance';
 
 interface CustomersTabProps {
   ctx: DashboardTabContext;
@@ -37,12 +39,16 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     canViewCustomerRecords,
     customerDirectoryRecords,
     customerOutstandingRows,
-    customerPaymentTransactions,
+    customerBalanceRows,
     isCustomersLoading,
     isTransactionsLoading,
+    isCustomerBalanceLoading,
+    customerBalanceError,
     handleViewCustomerHistory,
     handleEditCustomer,
-    handleViewTransaction,
+    handleCustomerBalancePayment,
+    selectedCounter,
+    accounts,
     canEditCustomerRecords,
     handleDeleteRecord,
     canDeleteCustomerRecords,
@@ -59,6 +65,13 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   } = ctx;
   const [isBusinessFilterOpen, setIsBusinessFilterOpen] = useState(false);
   const [draftBusinessFilters, setDraftBusinessFilters] = useState(businessDirectoryFilters);
+  const [payingBalance, setPayingBalance] = useState<CustomerBalance | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'account'>('cash');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentRemark, setPaymentRemark] = useState('');
+  const [paymentError, setPaymentError] = useState('');
+  const [isPayingBalance, setIsPayingBalance] = useState(false);
   const businessDirectoryFiltersConfig: DataTableFiltersConfig = {
     search: {
       enabled: true,
@@ -109,7 +122,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   const isCustomerDirectoryLoading = currentRole === 'Admin'
     ? isBusinessDirectoryLoading
     : isCustomersLoading;
-  const isCustomerPaymentsLoading = currentRole !== 'Admin' && isTransactionsLoading;
+  const isCustomerPaymentsLoading = currentRole !== 'Admin' && isCustomerBalanceLoading;
   const isCustomerOutstandingLoading = currentRole !== 'Admin' && (isCustomersLoading || isTransactionsLoading);
   const openBusinessFilter = () => {
     setDraftBusinessFilters(businessDirectoryFilters);
@@ -130,6 +143,48 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
       ) : null}
     </div>
   ) : undefined;
+  const openPayModal = (balance: CustomerBalance) => {
+    setPayingBalance(balance);
+    setPaymentAmount('');
+    setPaymentMode('cash');
+    setPaymentAccountId('');
+    setPaymentRemark('');
+    setPaymentError('');
+  };
+  const closePayModal = () => {
+    if (isPayingBalance) return;
+    setPayingBalance(null);
+    setPaymentError('');
+  };
+  const submitBalancePayment = async () => {
+    if (!payingBalance) return;
+
+    const numericAmount = Number(paymentAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setPaymentError('Enter a valid payment amount.');
+      return;
+    }
+
+    if (paymentMode === 'account' && !paymentAccountId) {
+      setPaymentError('Select an account for account payment.');
+      return;
+    }
+
+    setIsPayingBalance(true);
+    const success = await handleCustomerBalancePayment({
+      customerId: payingBalance.customerId,
+      paymentAmount: numericAmount,
+      paymentMode,
+      accountId: paymentMode === 'account' ? paymentAccountId : null,
+      counterId: selectedCounter?.id || null,
+      remark: paymentRemark.trim() || null,
+    });
+    setIsPayingBalance(false);
+
+    if (success) {
+      closePayModal();
+    }
+  };
 
   return (
     <div className="row g-4">
@@ -154,6 +209,88 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
             </button>
             <button type="button" className="btn-app btn-app-primary" onClick={applyBusinessFilter}>
               Filter
+            </button>
+          </div>
+        </ActionModal>
+      ) : null}
+
+      {payingBalance ? (
+        <ActionModal
+          title="Pay Customer Balance"
+          eyebrow="Customer Payment"
+          description={`Collect payment for ${payingBalance.customerName || `Customer #${payingBalance.customerId}`}.`}
+          onClose={closePayModal}
+        >
+          {paymentError ? (
+            <div className="form-alert" role="alert">{paymentError}</div>
+          ) : null}
+          <div className="row g-3">
+            <div className="col-12">
+              <label className="form-label" htmlFor="customer-balance-current-balance">Current Balance</label>
+              <input
+                className={`form-control ${getCustomerBalanceClassName(payingBalance.currentBalanceStatus)}`}
+                id="customer-balance-current-balance"
+                value={formatCustomerBalance(payingBalance.currentBalanceStatus)}
+                readOnly
+              />
+            </div>
+            <div className="col-12">
+              <label className="form-label" htmlFor="customer-balance-payment-amount">Payment Amount</label>
+              <input
+                className="form-control"
+                id="customer-balance-payment-amount"
+                min="0"
+                type="number"
+                value={paymentAmount}
+                onChange={(event) => setPaymentAmount(event.target.value)}
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label" htmlFor="customer-balance-payment-mode">Payment Mode</label>
+              <select
+                className="form-select"
+                id="customer-balance-payment-mode"
+                value={paymentMode}
+                onChange={(event) => setPaymentMode(event.target.value as 'cash' | 'account')}
+              >
+                <option value="cash">Cash</option>
+                <option value="account">Account</option>
+              </select>
+            </div>
+            {paymentMode === 'account' ? (
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="customer-balance-payment-account">Account</label>
+                <select
+                  className="form-select"
+                  id="customer-balance-payment-account"
+                  value={paymentAccountId}
+                  onChange={(event) => setPaymentAccountId(event.target.value)}
+                >
+                  <option value="">Select Account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.accountHolder} | {account.bankName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="col-12">
+              <label className="form-label" htmlFor="customer-balance-payment-remark">Remark Optional</label>
+              <input
+                className="form-control"
+                id="customer-balance-payment-remark"
+                value={paymentRemark}
+                onChange={(event) => setPaymentRemark(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn-app btn-app-secondary" onClick={closePayModal} disabled={isPayingBalance}>
+              Cancel
+            </button>
+            <button type="button" className="btn-app btn-app-primary" onClick={submitBalancePayment} disabled={isPayingBalance}>
+              {isPayingBalance ? 'Paying...' : 'Pay'}
             </button>
           </div>
         </ActionModal>
@@ -238,7 +375,13 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               />
             )
           ) : customerPageView === 'payments' ? (
-            customerPaymentTransactions.length === 0 && !isCustomerPaymentsLoading ? (
+            customerBalanceError && customerBalanceRows.length === 0 && !isCustomerPaymentsLoading ? (
+              <ErrorState
+                eyebrow={customerModuleUi?.label}
+                title="Unable to load customer payment list"
+                description={customerBalanceError}
+              />
+            ) : customerBalanceRows.length === 0 && !isCustomerPaymentsLoading ? (
               <EmptyState
                 eyebrow={customerModuleUi?.label}
                 title={getCustomerWorkspaceViewUi('payments').emptyTitle}
@@ -246,9 +389,9 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               />
             ) : (
               <CustomerPaymentsTable
-                transactions={customerPaymentTransactions}
+                balances={customerBalanceRows}
                 isLoading={isCustomerPaymentsLoading}
-                onView={handleViewTransaction}
+                onPay={openPayModal}
               />
             )
           ) : (

@@ -22,28 +22,32 @@ export type EmployeeFormValues = Omit<Employee, 'id'> & {
 
 interface EmployeeFormProps {
   businessPermissions: CustomerPermissions;
-  departments: Counter[];
+  departments?: Counter[];
   initialValues?: Employee;
   submitLabel: string;
   onCancel: () => void;
-  onSubmit: (values: EmployeeFormValues) => void;
+  onSubmit: (values: EmployeeFormValues) => void | Promise<void>;
+  isSubmitting?: boolean;
 }
 
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
   businessPermissions,
-  departments,
   initialValues,
   submitLabel,
   onCancel,
   onSubmit,
+  isSubmitting = false,
 }) => {
-  const [name, setName] = useState(initialValues?.name || '');
-  const [phone, setPhone] = useState(initialValues?.phone || '');
+  const [fullName, setFullName] = useState(initialValues?.fullName || initialValues?.name || '');
+  const [nickName, setNickName] = useState(initialValues?.nickName || initialValues?.displayName || initialValues?.name || '');
+  const [gender, setGender] = useState(initialValues?.gender || '');
+  const [dob, setDob] = useState(initialValues?.dob || '');
+  const [mobile, setMobile] = useState(initialValues?.mobile || initialValues?.phone || '');
+  const [address, setAddress] = useState(initialValues?.address || '');
+  const [remark, setRemark] = useState(initialValues?.remark || '');
   const [email, setEmail] = useState(initialValues?.email || '');
   const [password, setPassword] = useState('');
-  const [departmentId, setDepartmentId] = useState(initialValues?.departmentId || '');
   const [status, setStatus] = useState<Employee['status']>(initialValues?.status || 'Active');
-  const [joinedDate, setJoinedDate] = useState(initialValues?.joinedDate || new Date().toISOString().split('T')[0]);
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -57,6 +61,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const enabledPermissionCount = Object.values(permissions).filter((enabled) => enabled === 1).length;
 
   const isPermissionAvailable = (permissionId: string) => businessPermissions[permissionId] === 1;
+  const availablePermissionSections = customerPermissionSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) =>
+        item.kind === 'label'
+          ? section.items.some((sectionItem) => sectionItem.kind !== 'label' && isPermissionAvailable(sectionItem.id))
+          : isPermissionAvailable(item.id)
+      ),
+    }))
+    .filter((section) => section.items.some((item) => item.kind !== 'label'));
 
   const togglePermission = (permissionId: string) => {
     if (!isPermissionAvailable(permissionId)) {
@@ -96,36 +110,56 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!isValidPhoneNumber(phone)) {
+    if (!fullName.trim()) {
+      setValidationError('Full Name is required.');
+      return;
+    }
+
+    if (!nickName.trim()) {
+      setValidationError('Nick Name is required.');
+      return;
+    }
+
+    if (!isValidPhoneNumber(mobile)) {
       setPhoneError(phoneNumberValidationMessage);
       return;
     }
 
-    if (!departmentId) {
-      setValidationError('Assign a department before saving the employee.');
+    if (!email.trim()) {
+      setValidationError('Email is required.');
+      return;
+    }
+
+    if (!initialValues && !password.trim()) {
+      setValidationError('Password is required when creating an employee.');
+      return;
+    }
+
+    if (enabledPermissionCount === 0) {
+      setValidationError('Select at least one permission.');
       return;
     }
 
     setValidationError('');
-    onSubmit({
-      name,
-      phone: normalizePhoneNumber(phone),
-      email,
+    void onSubmit({
+      name: nickName.trim() || fullName.trim(),
+      fullName: fullName.trim(),
+      nickName: nickName.trim(),
+      displayName: nickName.trim() || fullName.trim(),
+      phone: normalizePhoneNumber(mobile),
+      mobile: normalizePhoneNumber(mobile),
+      email: email.trim().toLowerCase(),
       password: password || undefined,
+      gender: gender || undefined,
+      dob: dob || undefined,
+      address: address.trim() || undefined,
+      remark: remark.trim() || undefined,
       permissions: intersectCustomerPermissions(permissions, businessPermissions),
-      departmentId: departmentId || undefined,
       status,
-      joinedDate,
+      joinedDate: initialValues?.joinedDate || initialValues?.addedDate,
+      addedDate: initialValues?.addedDate,
     });
   };
-
-  const departmentOptions = [
-    { value: '', label: departments.length > 0 ? 'Select Department' : 'No department available yet' },
-    ...departments.map((department) => ({
-      value: department.id,
-      label: `${department.name} | ${department.code}`,
-    })),
-  ];
 
   return (
     <form onSubmit={handleSubmit}>
@@ -139,7 +173,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         <div>
           <p className="eyebrow mb-2">Employee</p>
           <h3 className="h5 fw-semibold mb-1">{initialValues ? 'Update employee profile' : 'Create employee profile'}</h3>
-          <p className="page-muted small mb-0">Keep the employee directory current so the business team can manage staff access and department ownership clearly.</p>
+          <p className="page-muted small mb-0">Keep staff details and access permissions current for this business workspace.</p>
         </div>
         <span className={`status-chip ${status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
           {status}
@@ -147,21 +181,39 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       </div>
 
       <div className="form-section-card mb-4">
-        <div className="form-section-title">Employee Details</div>
-        <p className="form-hint mt-0 mb-3">Each employee must be assigned to one department, and their transactions will stay locked to that department.</p>
+        <div className="form-section-title">Personal Details</div>
         <div className="row g-3">
           <div className="col-12 col-md-6">
-            <Input label="Employee Name" placeholder="Example: Aarav Patel" value={name} onChange={(event) => setName(event.target.value)} required />
+            <Input label="Full Name" placeholder="Example: Aarav Patel" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+          </div>
+          <div className="col-12 col-md-6">
+            <Input label="Nick Name" placeholder="Example: Aarav" value={nickName} onChange={(event) => setNickName(event.target.value)} required />
+          </div>
+          <div className="col-12 col-md-6">
+            <Select
+              label="Gender"
+              value={gender}
+              onChange={(event) => setGender(event.target.value)}
+              options={[
+                { value: '', label: 'Select Gender' },
+                { value: 'Male', label: 'Male' },
+                { value: 'Female', label: 'Female' },
+                { value: 'Other', label: 'Other' },
+              ]}
+            />
+          </div>
+          <div className="col-12 col-md-6">
+            <Input label="DOB" type="date" value={dob} onChange={(event) => setDob(event.target.value)} />
           </div>
           <div className="col-12 col-md-6">
             <Input
-              label="Phone"
+              label="Mobile"
               type="tel"
               inputMode="numeric"
               placeholder="Enter 10-digit mobile number"
-              value={phone}
+              value={mobile}
               onChange={(event) => {
-                setPhone(event.target.value);
+                setMobile(event.target.value);
                 setPhoneError('');
               }}
               error={phoneError}
@@ -169,20 +221,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             />
           </div>
           <div className="col-12 col-md-6">
-            <Input label="Joined Date" type="date" value={joinedDate} onChange={(event) => setJoinedDate(event.target.value)} />
+            <Input label="Address" placeholder="Optional address" value={address} onChange={(event) => setAddress(event.target.value)} />
           </div>
           <div className="col-12">
-            <Select
-              label="Assigned Department"
-              value={departmentId}
-              onChange={(event) => {
-                setDepartmentId(event.target.value);
-                setValidationError('');
-              }}
-              options={departmentOptions}
-              disabled={departments.length === 0}
-              required
-            />
+            <Input label="Remark" placeholder="Optional remark" value={remark} onChange={(event) => setRemark(event.target.value)} />
           </div>
         </div>
       </div>
@@ -205,6 +247,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required={!initialValues}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
@@ -246,7 +289,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         </div>
 
         <div className="permission-builder">
-          {customerPermissionSections.map((section) => {
+          {availablePermissionSections.map((section) => {
             const toggleItems = section.items.filter((item) => item.kind !== 'label');
             const grantableItems = toggleItems.filter((item) => isPermissionAvailable(item.id));
             const enabledCount = grantableItems.filter((item) => permissions[item.id] === 1).length;
@@ -285,25 +328,20 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                     }
 
                     const isEnabled = permissions[item.id] === 1;
-                    const isAvailable = isPermissionAvailable(item.id);
 
                     return (
                       <div key={item.id} className={`permission-row ${item.indent ? 'permission-row--child' : ''}`}>
                         <div>
                           <span className="permission-label">{item.label}</span>
-                          {!isAvailable ? (
-                            <span className="form-hint d-block mt-1">Enable this first on the business profile.</span>
-                          ) : null}
                         </div>
                         <button
                           type="button"
                           className={`permission-toggle ${isEnabled ? 'is-enabled' : ''}`}
                           aria-pressed={isEnabled}
                           onClick={() => togglePermission(item.id)}
-                          disabled={!isAvailable}
                         >
                           <span className="permission-toggle__thumb" />
-                          <span className="permission-toggle__text">{!isAvailable ? 'Locked' : isEnabled ? 'On' : 'Off'}</span>
+                          <span className="permission-toggle__text">{isEnabled ? 'On' : 'Off'}</span>
                         </button>
                       </div>
                     );
@@ -316,8 +354,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       </div>
 
       <div className="modal-actions">
-        <button type="button" className="btn-app btn-app-secondary" onClick={onCancel}>Cancel</button>
-        <Button type="submit">{submitLabel}</Button>
+        <button type="button" className="btn-app btn-app-secondary" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
+        <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : submitLabel}</Button>
       </div>
     </form>
   );

@@ -6,6 +6,7 @@ import { AppApiError } from '../api/client';
 interface UseApiCollectionOptions<T> {
   enabled: boolean;
   initialData?: T[];
+  requestKey?: string;
   revalidateOnMount?: boolean;
   request: () => Promise<unknown>;
   mapResponse: (payload: unknown) => T[];
@@ -22,6 +23,7 @@ interface UseApiCollectionResult<T> {
 export function useApiCollection<T>({
   enabled,
   initialData,
+  requestKey = '',
   revalidateOnMount = false,
   request,
   mapResponse,
@@ -95,7 +97,7 @@ export function useApiCollection<T>({
     return () => {
       isCancelled = true;
     };
-  }, [enabled, hasInitialData, initialData, reloadToken, revalidateOnMount]);
+  }, [enabled, hasInitialData, initialData, reloadToken, requestKey, revalidateOnMount]);
 
   return {
     data,

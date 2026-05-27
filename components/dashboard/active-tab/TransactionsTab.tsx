@@ -18,7 +18,6 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     renderSummaryCards,
     transactionSummary,
     currentRole,
-    employeeAssignedDepartment,
     canManageModule,
     accounts,
     visibleCustomers,
@@ -34,14 +33,14 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     hasActiveTransactionFilters,
     renderTransactionFilters,
     filteredTransactionRecords,
+    handlePayTransaction,
     handleViewTransaction,
-    handleDeleteRecord,
-    canDeleteModule,
     setIsTransactionFiltersOpen,
-    canPerformModuleAction,
-    handleEditTransaction,
+    handlePrintReceipt,
     getRoleLabel,
     reloadCustomers,
+    reloadTransactions,
+    setTransactionDraftDirty,
   } = ctx;
   const transactionsUi = getModuleUi('transactions');
   const isShowingFilteredTransactionState = isTransactionFiltersOpen && filteredTransactionRecords.length === 0;
@@ -81,11 +80,11 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
       {renderSummaryCards(transactionSummary)}
 
       <div id="service-workflow" className="col-12">
-        {currentRole === 'Employee' && !employeeAssignedDepartment ? (
+        {canManageModule('transactions') && !selectedCounter ? (
           <PermissionState
             eyebrow="Transaction Workflow"
-            title="Department assignment required"
-            description="Assign this employee to a department before they can create transactions or post inventory payments."
+            title="Please select department first."
+            description="Choose a department from the topbar before creating transactions or loading service/product inventory."
           />
         ) : canManageModule('transactions') ? (
           <ServiceForm
@@ -103,6 +102,9 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
             }}
             draft={workflowDraft}
             onCustomersChanged={reloadCustomers}
+            onTransactionsChanged={reloadTransactions}
+            onInventoryChanged={ctx.reloadServices}
+            onDirtyChange={setTransactionDraftDirty}
           />
         ) : (
           <PermissionState
@@ -135,9 +137,9 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
           <TransactionTable
             transactions={filteredTransactionRecords}
             isLoading={isTransactionsLoading}
-            onEdit={canPerformModuleAction('transactions', 'edit') ? handleEditTransaction : undefined}
+            onPay={handlePayTransaction}
             onView={handleViewTransaction}
-            onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
+            onPrint={handlePrintReceipt}
             headerAction={transactionFilterAction}
           />
         )}

@@ -7,7 +7,6 @@ export type BackendApiResource =
   | 'accounts'
   | 'accountCreate'
   | 'accountDelete'
-  | 'accountLinkDepartment'
   | 'customers'
   | 'employees'
   | 'transactions'
@@ -73,12 +72,6 @@ const backendApiResources: Record<BackendApiResource, BackendApiResourceConfig> 
     label: 'delete account',
     defaultPath: 'deleteAccount',
     envPathKey: 'NEXT_PUBLIC_API_ACCOUNT_DELETE_PATH',
-    method: 'POST',
-  },
-  accountLinkDepartment: {
-    label: 'link account to department',
-    defaultPath: 'linkAccountToDepartment',
-    envPathKey: 'NEXT_PUBLIC_API_ACCOUNT_LINK_DEPARTMENT_PATH',
     method: 'POST',
   },
   customers: {

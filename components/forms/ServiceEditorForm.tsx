@@ -53,6 +53,7 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
   const [status, setStatus] = useState<Service['status']>(initialValues?.status || 'Active');
   const [remark, setRemark] = useState(initialValues?.remark ?? initialValues?.description ?? '');
   const [validationError, setValidationError] = useState('');
+  const isServiceType = type === 'service';
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -68,13 +69,18 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
       return;
     }
 
-    const parsedQuantity = parseNonNegativeNumber(quantity);
+    const parsedQuantity = isServiceType ? 0 : parseNonNegativeNumber(quantity);
     if (parsedQuantity === null) {
       setValidationError('Quantity must be a valid zero or positive number.');
       return;
     }
 
     const selectedDepartment = departments.find((department) => department.id === departmentId);
+    if (!selectedDepartment) {
+      setValidationError('Counter/Department is required.');
+      return;
+    }
+
     const trimmedRemark = remark.trim();
 
     setValidationError('');
@@ -135,7 +141,11 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
               label="Type"
               value={type}
               onChange={(event) => {
-                setType(event.target.value as InventoryFormType);
+                const nextType = event.target.value as InventoryFormType;
+                setType(nextType);
+                if (nextType === 'service') {
+                  setQuantity('0');
+                }
                 setValidationError('');
               }}
               options={typeOptions}
@@ -148,14 +158,17 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
               label="Quantity"
               type="number"
               min="0"
-              value={quantity}
+              value={isServiceType ? '0' : quantity}
               onChange={(event) => {
                 setQuantity(event.target.value);
                 setValidationError('');
               }}
-              disabled={isSubmitting}
-              required
+              disabled={isSubmitting || isServiceType}
+              required={!isServiceType}
             />
+            {isServiceType ? (
+              <p className="form-hint">Quantity is used for products only.</p>
+            ) : null}
           </div>
           <div className="col-12 col-md-6">
             <Select
@@ -166,13 +179,14 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
                 setValidationError('');
               }}
               options={[
-                { value: '', label: 'No Counter/Department' },
+                { value: '', label: 'Select Counter/Department' },
                 ...departments.map((department) => ({
                   value: department.id,
                   label: `${department.name} (${department.code})`,
                 })),
               ]}
               disabled={departmentLocked || departments.length === 0 || isSubmitting}
+              required
             />
             {departmentLocked ? (
               <p className="form-hint">Employees can create or update inventory only inside their assigned department.</p>

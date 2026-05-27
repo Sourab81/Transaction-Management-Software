@@ -27,8 +27,9 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
     customerDirectoryRecords,
     handleQuickAction,
     handleDismissNotification,
+    handlePayTransaction,
     handleViewTransaction,
-    handleDeleteRecord,
+    handlePrintReceipt,
     renderTransactionFilters,
     isTransactionFiltersOpen,
     hasActiveTransactionFilters,
@@ -36,7 +37,6 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
     canManageModule,
     canDeleteModule,
     canAccessModuleForSession,
-    canEmployeeOperateOnDepartment,
     handleEditService,
     handleDeleteService,
     availableCounters,
@@ -84,7 +84,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
                 : 'A quick glance at the live inventory operators can open right away.'}
             </p>
           </div>
-          {canManageModule('services') && canEmployeeOperateOnDepartment ? (
+          {canManageModule('services') && selectedCounter ? (
             <button type="button" className="btn-app btn-app-primary" onClick={() => handleQuickAction('add-service')}>
               <FaPlusCircle />
               Add Inventory
@@ -211,8 +211,9 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
 
           <TransactionTable
             transactions={filteredTransactionRecords}
+            onPay={handlePayTransaction}
             onView={handleViewTransaction}
-            onDelete={canDeleteModule('transactions') ? (id: string) => handleDeleteRecord('DELETE_TRANSACTION', id) : undefined}
+            onPrint={handlePrintReceipt}
             headerAction={transactionFilterAction}
           />
 

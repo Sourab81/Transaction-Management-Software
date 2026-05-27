@@ -8,9 +8,12 @@ import Button from '../ui/Button';
 export interface TransactionEditorValues {
   formName: string;
   transactionNo: string;
+  noOfTransaction: number;
   serviceProduct: string;
+  inventoryId: string;
   inventoryItemId?: string;
   inventoryItemType?: 'service' | 'product';
+  transactionAccount: string;
   transactionAccountId: string;
   amount: number;
   serviceCharge: number;
@@ -50,21 +53,23 @@ const numberToFieldValue = (value: number | undefined) => (
 );
 
 const getInitialAmount = (transaction: Transaction) => (
-  typeof transaction.amount === 'number'
-    ? transaction.amount
-    : typeof transaction.totalAmount === 'number'
-      ? transaction.totalAmount
-      : 0
+  (
+    typeof transaction.amount === 'number'
+      ? transaction.amount
+      : typeof transaction.totalAmount === 'number'
+        ? transaction.totalAmount
+        : 0
+  ) / (transaction.noOfTransaction && transaction.noOfTransaction > 0 ? transaction.noOfTransaction : 1)
 );
 
 const toSafeAmount = (value: string) => parseNonNegativeNumber(value) ?? 0;
 
 const createEmptyRow = (): TransactionEditorDraftRow => ({
   formName: '',
-  transactionNo: '',
+  transactionNo: '1',
   serviceProduct: '',
   inventoryItemId: '',
-  transactionAccountId: '',
+  transactionAccountId: 'cash',
   amount: '',
   serviceCharge: '0',
   bankCharge: '0',
@@ -74,16 +79,33 @@ const createEmptyRow = (): TransactionEditorDraftRow => ({
 
 const isCurrentRowEmpty = (row: TransactionEditorDraftRow) => (
   !row.formName.trim()
-  && !row.transactionNo.trim()
   && !row.serviceProduct.trim()
   && !row.inventoryItemId
-  && !row.transactionAccountId
   && !row.amount.trim()
   && !row.remark.trim()
   && toSafeAmount(row.serviceCharge) === 0
   && toSafeAmount(row.bankCharge) === 0
   && toSafeAmount(row.otherCharge) === 0
 );
+
+const idsMatch = (
+  left: string | number | null | undefined,
+  right: string | number | null | undefined,
+) => {
+  const normalizedLeft = String(left ?? '').trim();
+  const normalizedRight = String(right ?? '').trim();
+
+  if (!normalizedLeft || !normalizedRight) return false;
+
+  const leftNumber = Number(normalizedLeft);
+  const rightNumber = Number(normalizedRight);
+
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber === rightNumber;
+  }
+
+  return normalizedLeft === normalizedRight;
+};
 
 const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
   accounts,
@@ -95,14 +117,19 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
   onSubmit,
 }) => {
   const initialInventoryItemId = initialValues.inventoryItemId || initialValues.serviceId || '';
+  const selectedDepartmentId = initialValues.departmentId || '';
+  const availableServices = useMemo(() => services.filter((service) => (
+    service.status === 'Active'
+    && (!selectedDepartmentId || idsMatch(service.counterId ?? service.departmentId, selectedDepartmentId))
+  )), [selectedDepartmentId, services]);
 
   // currentRow is the active entry row shown at the top of the table.
   const [currentRow, setCurrentRow] = useState<TransactionEditorDraftRow>({
     formName: initialValues.formName || '',
-    transactionNo: initialValues.transactionNo || initialValues.transactionNumber || '',
+    transactionNo: initialValues.noOfTransaction ? String(initialValues.noOfTransaction) : '1',
     serviceProduct: initialValues.serviceProduct || initialValues.service || '',
     inventoryItemId: initialInventoryItemId,
-    transactionAccountId: initialValues.transactionAccountId || initialValues.accountId || '',
+    transactionAccountId: initialValues.transactionAccountId || initialValues.accountId || 'cash',
     amount: numberToFieldValue(getInitialAmount(initialValues)),
     serviceCharge: numberToFieldValue(initialValues.serviceCharge ?? 0),
     bankCharge: numberToFieldValue(initialValues.bankCharge ?? 0),
@@ -115,14 +142,15 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
   const [isSaving, setIsSaving] = useState(false);
 
   const currentAmounts = useMemo(() => ({
+    noOfTransaction: toSafeAmount(currentRow.transactionNo),
     amount: toSafeAmount(currentRow.amount),
     serviceCharge: toSafeAmount(currentRow.serviceCharge),
     bankCharge: toSafeAmount(currentRow.bankCharge),
     otherCharge: toSafeAmount(currentRow.otherCharge),
-  }), [currentRow.amount, currentRow.bankCharge, currentRow.otherCharge, currentRow.serviceCharge]);
+  }), [currentRow.amount, currentRow.bankCharge, currentRow.otherCharge, currentRow.serviceCharge, currentRow.transactionNo]);
 
   const currentTotal = useMemo(() => (
-    currentAmounts.amount
+    (currentAmounts.noOfTransaction * currentAmounts.amount)
     + currentAmounts.serviceCharge
     + currentAmounts.bankCharge
     + currentAmounts.otherCharge
@@ -130,7 +158,7 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
 
   const totals = useMemo(() => {
     const base = {
-      amount: isCurrentRowEmpty(currentRow) ? 0 : currentAmounts.amount,
+      amount: isCurrentRowEmpty(currentRow) ? 0 : currentAmounts.noOfTransaction * currentAmounts.amount,
       serviceCharge: isCurrentRowEmpty(currentRow) ? 0 : currentAmounts.serviceCharge,
       bankCharge: isCurrentRowEmpty(currentRow) ? 0 : currentAmounts.bankCharge,
       otherCharge: isCurrentRowEmpty(currentRow) ? 0 : currentAmounts.otherCharge,
@@ -147,8 +175,8 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
   }, [currentAmounts, currentRow, currentTotal, savedRows]);
 
   const accountOptions = [
-    { value: '', label: accounts.length > 0 ? 'Select Account' : 'No accounts available' },
-    ...(currentRow.transactionAccountId && !accounts.some((account) => account.id === currentRow.transactionAccountId)
+    { value: 'cash', label: 'Cash' },
+    ...(currentRow.transactionAccountId && currentRow.transactionAccountId !== 'cash' && !accounts.some((account) => account.id === currentRow.transactionAccountId)
       ? [{ value: currentRow.transactionAccountId, label: initialValues.accountLabel || currentRow.transactionAccountId }]
       : []),
     ...accounts.map((account) => ({
@@ -160,13 +188,10 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
   const legacyServiceOptionValue = currentRow.serviceProduct ? `legacy:${currentRow.serviceProduct}` : '';
   const serviceOptions = [
     { value: '', label: 'Select' },
-    ...(initialInventoryItemId && !services.some((service) => service.id === initialInventoryItemId)
-      ? [{ value: initialInventoryItemId, label: currentRow.serviceProduct || initialInventoryItemId }]
-      : []),
-    ...(!initialInventoryItemId && currentRow.serviceProduct && !services.some((service) => service.name === currentRow.serviceProduct)
+    ...(!initialInventoryItemId && currentRow.serviceProduct && !availableServices.some((service) => service.name === currentRow.serviceProduct)
       ? [{ value: legacyServiceOptionValue, label: currentRow.serviceProduct }]
       : []),
-    ...services.map((service) => ({
+    ...availableServices.map((service) => ({
       value: service.id,
       label: `${service.name} - ${service.type === 'product' ? 'Product' : 'Service'}`,
     })),
@@ -194,7 +219,7 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
       return;
     }
 
-    const selectedService = services.find((service) => service.id === nextValue);
+    const selectedService = availableServices.find((service) => service.id === nextValue);
 
     updateCurrentRow({
       inventoryItemId: nextValue,
@@ -214,8 +239,14 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
       return null;
     }
 
-    if (!row.formName.trim() || !row.serviceProduct.trim() || !row.transactionAccountId || !row.amount.trim()) {
-      setValidationError('Form Name, Service/Product, Transaction Account, and Amount are required.');
+    if (!row.formName.trim() || !row.transactionNo.trim() || !row.inventoryItemId || !row.transactionAccountId || !row.amount.trim()) {
+      setValidationError('Form Name, No. of Txn, Service/Product, Transaction Account, and Amount are required.');
+      return null;
+    }
+
+    const noOfTransaction = toSafeAmount(row.transactionNo);
+    if (noOfTransaction <= 0 || !Number.isInteger(noOfTransaction)) {
+      setValidationError('No. of Txn must be a whole number greater than zero.');
       return null;
     }
 
@@ -223,20 +254,28 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
     const serviceChargeValue = toSafeAmount(row.serviceCharge);
     const bankChargeValue = toSafeAmount(row.bankCharge);
     const otherChargeValue = toSafeAmount(row.otherCharge);
-    const selectedService = services.find((service) => service.id === row.inventoryItemId);
+    const transactionAmount = noOfTransaction * amountValue;
+    const selectedService = availableServices.find((service) => service.id === row.inventoryItemId);
+    if (!selectedService) {
+      setValidationError('Please select an active service/product from the selected department.');
+      return null;
+    }
 
     return {
       formName: row.formName.trim(),
       transactionNo: row.transactionNo.trim(),
+      noOfTransaction,
       serviceProduct: row.serviceProduct.trim(),
+      inventoryId: row.inventoryItemId,
       inventoryItemId: row.inventoryItemId || undefined,
-      inventoryItemType: selectedService?.type || undefined,
+      inventoryItemType: selectedService.type || undefined,
+      transactionAccount: row.transactionAccountId,
       transactionAccountId: row.transactionAccountId,
-      amount: amountValue,
+      amount: transactionAmount,
       serviceCharge: serviceChargeValue,
       bankCharge: bankChargeValue,
       otherCharge: otherChargeValue,
-      totalAmount: amountValue + serviceChargeValue + bankChargeValue + otherChargeValue,
+      totalAmount: transactionAmount + serviceChargeValue + bankChargeValue + otherChargeValue,
       remark: row.remark.trim(),
     };
   };
@@ -328,7 +367,10 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
                     <input
                       aria-label="No. of Txn"
                       className="form-control"
-                      placeholder="TXN"
+                      min="1"
+                      placeholder="1"
+                      step="1"
+                      type="number"
                       value={currentRow.transactionNo}
                       onChange={(event) => updateCurrentRow({ transactionNo: event.target.value })}
                     />
@@ -459,7 +501,7 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
               {savedRows.map((row) => (
                 <tr key={row.id}>
                   <td data-label="Form Name">{row.formName}</td>
-                  <td data-label="No. of Txn">{row.transactionNo || '-'}</td>
+                  <td data-label="No. of Txn">{row.noOfTransaction}</td>
                   <td data-label="Service/Product">{row.serviceProduct}</td>
                   <td data-label="Transaction Account">
                     {accounts.find((account) => account.id === row.transactionAccountId)

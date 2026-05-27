@@ -17,9 +17,13 @@ export const mapCounterRecord = (record: UnknownRecord): Counter | null => {
     return null;
   }
 
-  const code = readStringValue(record, ['code', 'department_code', 'counter_code']) || `CTR-${id}`;
-  const openingBalance = readNumberValue(record, ['opening_balance', 'openingBalance']) || 0;
-  const currentBalance = readNumberValue(record, ['current_balance', 'currentBalance', 'balance']) || openingBalance;
+  const departmentDisplay = readStringValue(record, ['department_display', 'departmentDisplay']);
+  const fallbackCode = Number.isFinite(Number(id))
+    ? `DPT-${String(Number(id)).padStart(4, '0')}`
+    : id;
+  const code = readStringValue(record, ['code', 'department_code', 'counter_code']) || fallbackCode;
+  const openingBalance = readNumberValue(record, ['opening_balance', 'openingBalance']) ?? 0;
+  const currentBalance = readNumberValue(record, ['current_balance', 'currentBalance', 'balance']) ?? 0;
   const rawStatus = readStringValue(record, ['status', 'is_active']);
   const remark = readStringValue(record, ['remark', 'remarks', 'note']);
   const date = readStringValue(record, ['date', 'create_date', 'added_date', 'created_at', 'createdAt']);
@@ -33,6 +37,7 @@ export const mapCounterRecord = (record: UnknownRecord): Counter | null => {
     id,
     name,
     code,
+    ...(departmentDisplay ? { departmentDisplay } : {}),
     ...(linkedAccountIds.length > 0 ? { linkedAccountIds } : {}),
     ...(defaultAccountId ? { defaultAccountId, linkedAccountId: defaultAccountId } : {}),
     openingBalance,

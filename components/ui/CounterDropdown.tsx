@@ -24,6 +24,7 @@ const CounterDropdown: React.FC<CounterDropdownProps> = ({ counters, selectedCou
       aria-label="Select department"
       disabled={disabled}
     >
+      <option value="">Select department</option>
       {counters.map((counter) => (
         <option key={counter.id} value={counter.id}>
           {counter.name}

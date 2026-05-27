@@ -11,6 +11,7 @@ import {
   type InventoryItemType,
   type InventoryMutationResult,
   type UpdateInventoryPayload,
+  type InventoryFilters,
 } from '../api/inventory';
 import {
   extractCollectionItems,
@@ -73,7 +74,7 @@ const mapInventoryResponse = (payload: unknown): InventoryItem[] =>
         type: readInventoryType(entry),
         quantity: readNumberValue(entry, ['quantity', 'qty']) || 0,
         remark: readStringValue(entry, ['remark', 'description']) || null,
-        counterId: readStringValue(entry, ['counter_id', 'counterId']) || null,
+        counterId: readStringValue(entry, ['counter_id', 'counterId']) || '',
         userId: readStringValue(entry, ['user_id', 'userId']) || undefined,
         status: readInventoryStatus(entry),
         addedDate: readStringValue(entry, ['added_date', 'addedDate', 'created_at', 'createdAt']) || undefined,
@@ -109,7 +110,7 @@ const mapServiceToInventory = (service: Service): InventoryItem => ({
   type: service.type || (service.category.toLowerCase() === 'product' ? 'product' : 'service'),
   quantity: service.quantity ?? 0,
   remark: service.remark ?? service.description ?? null,
-  counterId: service.counterId ?? service.departmentId ?? null,
+  counterId: service.counterId ?? service.departmentId ?? '',
   userId: service.userId,
   status: service.status === 'Inactive' ? 0 : 1,
   addedDate: service.addedDate,
@@ -119,11 +120,15 @@ const mapServiceToInventory = (service: Service): InventoryItem => ({
 export function useInventory(
   enabled: boolean,
   initialData?: Service[],
+  filters?: InventoryFilters,
 ): UseInventoryResult {
+  const counterId = filters?.counterId ? String(filters.counterId) : '';
+  const requestKey = `${counterId}:${typeof filters?.status === 'undefined' ? '' : filters.status}`;
   const { data, isLoading, error, hasLoaded, reload } = useApiCollection({
-    enabled,
+    enabled: enabled && Boolean(counterId),
     initialData: initialData?.map(mapServiceToInventory),
-    request: getInventory,
+    requestKey,
+    request: () => getInventory({ ...filters, counterId }),
     mapResponse: mapInventoryResponse,
   });
 

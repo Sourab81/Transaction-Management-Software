@@ -21,7 +21,6 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
     canDeleteModule,
     isServicesLoading,
     servicesError,
-    canEmployeeOperateOnDepartment,
     handleQuickAction,
     handleEditService,
     handleDeleteRecord,
@@ -29,7 +28,7 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
     serviceSummary,
   } = ctx;
   const servicesUi = getModuleUi('services');
-  const addServiceAction = canAddServiceRecords && canEmployeeOperateOnDepartment
+  const addServiceAction = canAddServiceRecords && selectedCounter
     ? {
         label: 'Add Inventory',
         onClick: () => handleQuickAction('add-service'),
@@ -47,7 +46,7 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
               ? `Track services, products, quantity, and status for ${selectedCounter.name}.`
               : 'Track services, products, quantity, and status with the latest metrics.'
           }
-          action={canAddServiceRecords && canEmployeeOperateOnDepartment ? {
+          action={canAddServiceRecords && selectedCounter ? {
             label: 'Add Inventory',
             icon: <FaPlusCircle />,
             onClick: () => handleQuickAction('add-service'),
@@ -58,7 +57,13 @@ export default function ServicesTab({ ctx }: ServicesTabProps) {
       {renderSummaryCards(serviceSummary)}
 
       <div className="col-12">
-        {!isServicesLoading && servicesError && visibleServices.length === 0 ? (
+        {!selectedCounter ? (
+          <EmptyState
+            eyebrow={servicesUi?.label}
+            title="Select a department"
+            description="Please select a department to view inventory."
+          />
+        ) : !isServicesLoading && servicesError && visibleServices.length === 0 ? (
           <ErrorState
             eyebrow="Inventory Unavailable"
             title="Unable to load inventory"

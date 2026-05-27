@@ -1,46 +1,36 @@
 import React, { useState } from 'react';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
-import type { Account, Counter } from '../../lib/store';
+import type { Account } from '../../lib/store';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 
-export type AccountFormValues = Omit<Account, 'id' | 'date' | 'currentBalance'> & {
-  currentBalance?: number;
-};
+export type AccountFormValues = Omit<Account, 'id' | 'date' | 'currentBalance' | 'counterId'>;
 
 interface AccountFormProps {
   initialValues?: Account;
-  departments?: Counter[];
   submitLabel: string;
   onCancel: () => void;
   onSubmit: (values: AccountFormValues) => void | Promise<void>;
 }
 
-const AccountForm: React.FC<AccountFormProps> = ({ initialValues, departments = [], submitLabel, onCancel, onSubmit }) => {
+const AccountForm: React.FC<AccountFormProps> = ({ initialValues, submitLabel, onCancel, onSubmit }) => {
   const [accountHolder, setAccountHolder] = useState(initialValues?.accountHolder || '');
   const [bankName, setBankName] = useState(initialValues?.bankName || '');
   const [accountNumber, setAccountNumber] = useState(initialValues?.accountNumber || '');
   const [ifsc, setIfsc] = useState(initialValues?.ifsc || '');
   const [branch, setBranch] = useState(initialValues?.branch || '');
   const [remark, setRemark] = useState(initialValues?.remark || '');
-  const [counterId, setCounterId] = useState(initialValues?.counterId || '');
   const [openingBalance, setOpeningBalance] = useState(String(initialValues?.openingBalance ?? 0));
-  const [currentBalance, setCurrentBalance] = useState(
-    typeof initialValues?.currentBalance === 'number' ? String(initialValues.currentBalance) : '',
-  );
   const [status, setStatus] = useState<Account['status']>(initialValues?.status || 'Active');
   const [validationError, setValidationError] = useState('');
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const parsedOpeningBalance = parseNonNegativeNumber(openingBalance);
-    const parsedCurrentBalance = currentBalance.trim()
-      ? parseNonNegativeNumber(currentBalance)
-      : undefined;
 
-    if (parsedOpeningBalance === null || parsedCurrentBalance === null) {
-      setValidationError('Balances must be valid zero or positive numbers.');
+    if (parsedOpeningBalance === null) {
+      setValidationError('Opening balance must be a valid zero or positive number.');
       return;
     }
 
@@ -52,9 +42,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialValues, departments = 
       ifsc,
       branch: branch.trim() || undefined,
       openingBalance: parsedOpeningBalance,
-      currentBalance: parsedCurrentBalance,
       status,
-      counterId: counterId || null,
       remark: remark.trim() || undefined,
     });
   };
@@ -105,7 +93,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialValues, departments = 
       <div className="form-section-card">
         <div className="form-section-title">Balance And Status</div>
         <div className="row g-3">
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-md-6">
             <Input
               label="Opening Balance"
               type="number"
@@ -118,20 +106,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialValues, departments = 
               required
             />
           </div>
-          <div className="col-12 col-md-4">
-            <Input
-              label="Current Balance"
-              type="number"
-              min="0"
-              value={currentBalance}
-              placeholder="Defaults to opening balance"
-              onChange={(event) => {
-                setCurrentBalance(event.target.value);
-                setValidationError('');
-              }}
-            />
-          </div>
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-md-6">
             <Select
               label="Status"
               value={status}
@@ -142,22 +117,14 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialValues, departments = 
               ]}
             />
           </div>
-          {departments.length > 0 && (
-            <div className="col-12 col-md-6">
-              <Select
-                label="Linked Department"
-                value={counterId}
-                onChange={(event) => setCounterId(event.target.value)}
-                options={[
-                  { value: '', label: 'No department selected' },
-                  ...departments.map((department) => ({
-                    value: department.id,
-                    label: department.name,
-                  })),
-                ]}
-              />
+          {initialValues ? (
+            <div className="col-12">
+              <div className="counter-chip">
+                <p className="eyebrow mb-1">Current Balance</p>
+                <p className="fw-semibold mb-0">Rs. {initialValues.currentBalance.toLocaleString('en-IN')}</p>
+              </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
       <div className="modal-actions">

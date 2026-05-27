@@ -18,7 +18,6 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
     currentUser,
     currentBusinessProfile,
     currentEmployeeProfile,
-    employeeAssignedDepartment,
     getRoleLabel,
     handleLogout,
     handleAdminProfileSave,
@@ -126,7 +125,6 @@ export default function ProfileTab({ ctx }: ProfileTabProps) {
       ? [
           ['Email Address', currentEmployeeProfile?.email || currentUser.email],
           ['Phone Number', currentEmployeeProfile?.phone || 'Not added'],
-          ['Department', employeeAssignedDepartment?.name || 'Not assigned'],
           ['Joined Date', currentJoinedDate],
         ]
       : [

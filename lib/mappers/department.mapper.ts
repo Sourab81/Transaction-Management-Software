@@ -12,12 +12,14 @@ import {
 export interface DepartmentRecord {
   departmentId: string;
   departmentName: string;
+  departmentDisplay?: string;
   remark?: string;
   status: 'Active' | 'Inactive';
   linkedAccountIds: string[];
   defaultAccountId?: string;
   createdAt?: string;
   openingBalance: number;
+  currentBalance: number;
 }
 
 const readIdArray = (record: UnknownRecord, keys: string[]) => {
@@ -55,12 +57,15 @@ export const mapDepartmentRecord = (record: UnknownRecord): DepartmentRecord | n
   const createdAt = readStringValue(record, ['create_date', 'createdAt', 'created_at', 'added_date']);
   const remark = readStringValue(record, ['remark', 'remarks', 'note']);
   const rawStatus = readStringValue(record, ['status', 'is_active']);
+  const departmentDisplay = readStringValue(record, ['department_display', 'departmentDisplay']);
 
   return {
     departmentId,
     departmentName,
+    ...(departmentDisplay ? { departmentDisplay } : {}),
     linkedAccountIds,
     openingBalance: readNumberValue(record, ['opening_balance', 'openingBalance']) ?? 0,
+    currentBalance: readNumberValue(record, ['current_balance', 'currentBalance', 'balance']) ?? 0,
     status: normalizeActiveStatus(rawStatus),
     ...(defaultAccountId ? { defaultAccountId } : {}),
     ...(createdAt ? { createdAt } : {}),
@@ -85,12 +90,15 @@ export const mapDepartmentsResponse = (payload: unknown) =>
 export const mapDepartmentToCounter = (department: DepartmentRecord): Counter => ({
   id: department.departmentId,
   name: department.departmentName,
-  code: department.departmentId,
+  code: Number.isFinite(Number(department.departmentId))
+    ? `DPT-${String(Number(department.departmentId)).padStart(4, '0')}`
+    : department.departmentId,
+  departmentDisplay: department.departmentDisplay,
   linkedAccountIds: department.linkedAccountIds,
   defaultAccountId: department.defaultAccountId,
   linkedAccountId: department.defaultAccountId,
   openingBalance: department.openingBalance,
-  currentBalance: department.openingBalance,
+  currentBalance: department.currentBalance,
   status: department.status,
   remark: department.remark,
   date: department.createdAt,

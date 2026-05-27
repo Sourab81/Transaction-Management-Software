@@ -142,7 +142,7 @@ const buildLoginApiError = (statusCode: number, body: LoginApiResponseBody | nul
   }
 
   if (statusCode === 400 || statusCode === 401 || statusCode === 403) {
-    return new LoginApiError('Invalid username or password.', {
+    return new LoginApiError('Invalid email or password.', {
       statusCode,
       body,
     });
@@ -155,14 +155,10 @@ const buildLoginApiError = (statusCode: number, body: LoginApiResponseBody | nul
 };
 
 export const loginWithApi = async (
-  username: string,
+  email: string,
   password: string,
 ): Promise<LoginApiResult> => {
   const endpoint = getLoginEndpoint();
-  const requestBody = new URLSearchParams({
-    username,
-    password,
-  });
 
   let response: Response;
 
@@ -171,9 +167,9 @@ export const loginWithApi = async (
       method: 'POST',
       headers: {
         Accept: 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'Content-Type': 'application/json',
       },
-      body: requestBody.toString(),
+      body: JSON.stringify({ email, password }),
       cache: 'no-store',
     });
   } catch {
@@ -194,21 +190,20 @@ export const loginWithApi = async (
 };
 
 export const loginWithAppApi = async (
-  username: string,
+  email: string,
   password: string,
 ): Promise<LoginApiResult> => {
   let response: Response;
 
   try {
-    response = await fetch('/api/auth/login', {
+    response = await fetch('/api/login', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        username,
-        email: username,
+        email,
         password,
       }),
       cache: 'no-store',

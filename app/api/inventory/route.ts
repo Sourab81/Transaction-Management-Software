@@ -153,8 +153,18 @@ const readOptionalId = (value: unknown, label: string) => {
 const buildInventoryQuery = (request: Request) => {
   const source = new URL(request.url).searchParams;
   const params = new URLSearchParams();
+  const counterId = source.get('counter_id')?.trim();
 
-  ['type', 'counter_id', 'status', 'search'].forEach((key) => {
+  if (!counterId) {
+    return Response.json(
+      { success: false, message: 'Please select a department to view inventory.' },
+      { status: 400 },
+    );
+  }
+
+  params.set('counter_id', counterId);
+
+  ['type', 'status', 'search'].forEach((key) => {
     const value = source.get(key);
     if (value?.trim()) {
       params.set(key, value.trim());
@@ -166,8 +176,11 @@ const buildInventoryQuery = (request: Request) => {
 };
 
 export async function GET(request: Request) {
+  const endpoint = buildInventoryQuery(request);
+  if (endpoint instanceof Response) return endpoint;
+
   try {
-    return Response.json(await backendFetch(buildInventoryQuery(request)));
+    return Response.json(await backendFetch(endpoint));
   } catch (error) {
     return errorResponse(error, 'Unable to load inventory from the backend.');
   }
@@ -229,8 +242,16 @@ export async function POST(request: Request) {
     if (quantity instanceof Response) return quantity;
     if (typeof quantity !== 'undefined') backendPayload.quantity = quantity;
 
-    const counterId = readOptionalId(payload.counterId ?? payload.counter_id, 'Counter');
+    const counterId = action === 'create'
+      ? readOptionalId(payload.counterId ?? payload.counter_id, 'Counter')
+      : readOptionalId(payload.counterId ?? payload.counter_id, 'Counter');
     if (counterId instanceof Response) return counterId;
+    if (action === 'create' && typeof counterId === 'undefined') {
+      return Response.json(
+        { success: false, message: 'Counter is required.' },
+        { status: 400 },
+      );
+    }
     if (typeof counterId !== 'undefined') backendPayload.counter_id = counterId;
 
     const status = readOptionalStatus(payload.status);

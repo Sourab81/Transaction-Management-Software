@@ -25,7 +25,7 @@ describe('login workspace bootstrap', () => {
 
       if (url.endsWith('/login')) {
         return new Response(JSON.stringify({
-          status: 200,
+          status: true,
           message: 'User login successfully.',
           data: {
             id: 2,
@@ -59,7 +59,7 @@ describe('login workspace bootstrap', () => {
 
       if (url.endsWith('/login')) {
         return new Response(JSON.stringify({
-          status: 200,
+          status: true,
           message: 'User login successfully.',
           data: {
             user: {

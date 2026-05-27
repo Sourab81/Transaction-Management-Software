@@ -168,7 +168,9 @@ export function useFilteredTransactionRecords(
       .toLowerCase()
       .includes(deferredQuery);
     const transactionAccount = transaction.accountLabel || transaction.transactionAccountId || '';
-    const matchesTransactionAccount = filters.transactionAccount === 'All' || transactionAccount === filters.transactionAccount;
+    const matchesTransactionAccount = !filters.transactionAccount
+      || filters.transactionAccount === 'All'
+      || transactionAccount === filters.transactionAccount;
     const matchesFromDate = !filters.dateFrom || transaction.date >= filters.dateFrom;
     const matchesToDate = !filters.dateTo || transaction.date <= filters.dateTo;
 

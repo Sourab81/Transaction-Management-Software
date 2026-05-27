@@ -49,8 +49,8 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
       <div className="col-12">
         <SectionHero
           eyebrow="Department Hub"
-          title="Manage departments and linked counters"
-          description="Add departments and review identifiers, names, remarks, status, and creation dates."
+          title="Manage departments"
+          description="Add departments and review identifiers, balances, remarks, status, and creation dates."
           action={canAddDepartmentRecords ? {
             label: 'Add Department',
             icon: <FaPlusCircle />,

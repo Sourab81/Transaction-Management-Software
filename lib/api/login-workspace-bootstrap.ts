@@ -23,6 +23,25 @@ export class LoginWorkspaceBootstrapError extends Error {
   }
 }
 
+const readLoginMessage = (body: LoginApiResponseBody | null, fallback: string) => {
+  const message = body?.message;
+
+  if (typeof message === 'string' && message.trim()) {
+    return message.trim();
+  }
+
+  if (message && typeof message === 'object') {
+    const joinedMessage = Object.values(message)
+      .map((value) => typeof value === 'string' ? value.trim() : '')
+      .filter(Boolean)
+      .join(' ');
+
+    if (joinedMessage) return joinedMessage;
+  }
+
+  return fallback;
+};
+
 export const loginAndLoadWorkspaceBootstrap = async (
   username: string,
   password: string,
@@ -47,6 +66,14 @@ export const loginAndLoadWorkspaceBootstrap = async (
       'Unable to reach the login service. Check the API server and try again.',
       502,
       null,
+    );
+  }
+
+  if (loginResult.body?.status !== true) {
+    throw new LoginWorkspaceBootstrapError(
+      readLoginMessage(loginResult.body, 'Invalid email or password.'),
+      loginResult.statusCode >= 400 ? loginResult.statusCode : 401,
+      loginResult.body,
     );
   }
 

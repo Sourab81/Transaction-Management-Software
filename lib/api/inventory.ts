@@ -9,7 +9,7 @@ export interface InventoryItem {
   type: InventoryItemType;
   quantity: number;
   remark?: string | null;
-  counterId?: number | string | null;
+  counterId: number | string;
   userId?: number | string;
   status: number;
   addedDate?: string;
@@ -21,7 +21,7 @@ export interface CreateInventoryPayload {
   type: InventoryItemType;
   quantity?: number;
   remark?: string | null;
-  counterId?: number | string | null;
+  counterId: number | string;
 }
 
 export interface UpdateInventoryPayload {
@@ -36,7 +36,7 @@ export interface UpdateInventoryPayload {
 
 export interface InventoryFilters {
   type?: InventoryItemType;
-  counterId?: number | string;
+  counterId: number | string;
   status?: 0 | 1;
   search?: string;
 }
@@ -47,8 +47,12 @@ export interface InventoryMutationResult {
   item?: unknown;
 }
 
-const appendInventoryFilters = (filters: InventoryFilters = {}) => {
+const appendInventoryFilters = (filters: InventoryFilters) => {
   const params = new URLSearchParams();
+
+  if (!String(filters.counterId).trim()) {
+    throw new AppApiError('Please select a department to view inventory.', 400, null);
+  }
 
   if (filters.type) params.set('type', filters.type);
   if (typeof filters.counterId !== 'undefined' && filters.counterId !== null && String(filters.counterId).trim()) {
@@ -102,7 +106,7 @@ const handleInventoryMutation = async (
   }
 };
 
-export const getInventory = (filters?: InventoryFilters) =>
+export const getInventory = (filters: InventoryFilters) =>
   requestAppApi(appendInventoryFilters(filters));
 
 export const createInventory = (payload: CreateInventoryPayload) =>
@@ -113,7 +117,7 @@ export const createInventory = (payload: CreateInventoryPayload) =>
       type: payload.type,
       quantity: payload.quantity ?? 0,
       remark: payload.remark ?? null,
-      counterId: payload.counterId ?? null,
+      counterId: payload.counterId,
     }),
     'Inventory item created successfully.',
   );

@@ -14,13 +14,6 @@ const readPayload = async (request: Request) => {
   }
 };
 
-const readNumberArray = (value: unknown) =>
-  Array.isArray(value)
-    ? value
-        .map((entry) => Number(entry))
-        .filter((entry) => Number.isFinite(entry))
-    : [];
-
 const readRequiredName = (payload: Record<string, unknown>) => {
   if (typeof payload.name === 'string' && payload.name.trim()) {
     return payload.name.trim();
@@ -32,32 +25,28 @@ const readRequiredName = (payload: Record<string, unknown>) => {
   );
 };
 
-const readAccountSelection = (payload: Record<string, unknown>) => {
-  const accountIds = readNumberArray(payload.accountIds);
-  const defaultAccountId = Number(payload.defaultAccountId);
+const readRequiredNonNegativeNumber = (
+  payload: Record<string, unknown>,
+  keys: string[],
+  label: string,
+) => {
+  for (const key of keys) {
+    const value = payload[key];
+    const numericValue = typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value)
+        : Number.NaN;
 
-  if (accountIds.length === 0) {
-    return Response.json(
-      { success: false, message: 'At least one linked account is required.' },
-      { status: 400 },
-    );
+    if (Number.isFinite(numericValue) && numericValue >= 0) {
+      return numericValue;
+    }
   }
 
-  if (!Number.isFinite(defaultAccountId)) {
-    return Response.json(
-      { success: false, message: 'Default account id is required.' },
-      { status: 400 },
-    );
-  }
-
-  if (!accountIds.includes(defaultAccountId)) {
-    return Response.json(
-      { success: false, message: 'Default account must be one of the linked accounts.' },
-      { status: 400 },
-    );
-  }
-
-  return { accountIds, defaultAccountId };
+  return Response.json(
+    { success: false, message: `${label} must be a zero or positive number.` },
+    { status: 400 },
+  );
 };
 
 const errorResponse = (error: unknown, fallbackMessage: string) => {
@@ -110,9 +99,9 @@ export async function POST(request: Request) {
     return name;
   }
 
-  const accountSelection = readAccountSelection(payload);
-  if (accountSelection instanceof Response) {
-    return accountSelection;
+  const openingBalance = readRequiredNonNegativeNumber(payload, ['openingBalance', 'opening_balance'], 'Opening balance');
+  if (openingBalance instanceof Response) {
+    return openingBalance;
   }
 
   try {
@@ -120,9 +109,8 @@ export async function POST(request: Request) {
       method: 'POST',
       body: {
         name,
+        opening_balance: openingBalance,
         remark: typeof payload.remark === 'string' ? payload.remark : '',
-        account_ids: accountSelection.accountIds,
-        default_account_id: accountSelection.defaultAccountId,
       },
     });
 

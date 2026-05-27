@@ -16,15 +16,12 @@ export default function AccountsTab({ ctx }: AccountsTabProps) {
     renderSummaryCards,
     accountSummary,
     accounts,
-    counters,
     isAccountsLoading,
     canAddAccountRecords,
     canEditAccountRecords,
     canDeleteAccountRecords,
-    canEditDepartmentRecords,
     handleQuickAction,
     handleEditAccount,
-    handleLinkAccount,
     handleDeleteRecord,
   } = ctx;
   const accountsUi = getModuleUi('accounts');
@@ -57,16 +54,14 @@ export default function AccountsTab({ ctx }: AccountsTabProps) {
           <EmptyState
             eyebrow={accountsUi?.label}
             title={accountsUi?.emptyTitle || 'No accounts available yet'}
-            description={accountsUi?.emptyDescription || 'Add a payment account to connect departments and track balances.'}
+            description={accountsUi?.emptyDescription || 'Add a payment account to track balances.'}
             action={addAccountAction}
           />
         ) : (
           <AccountsTable
             accounts={accounts}
-            departments={counters}
             isLoading={isAccountsLoading}
             onEdit={canEditAccountRecords ? handleEditAccount : undefined}
-            onLink={canEditAccountRecords || canEditDepartmentRecords ? handleLinkAccount : undefined}
             onDelete={canDeleteAccountRecords ? (id: string) => handleDeleteRecord('DELETE_ACCOUNT', id) : undefined}
           />
         )}

@@ -47,7 +47,7 @@ export async function loginWithServerAction(
     return {
       ok: false,
       body: null,
-      message: 'Username and password are required.',
+      message: 'Email and password are required.',
       statusCode: 400,
       email: normalizedEmail,
       submitted: true,

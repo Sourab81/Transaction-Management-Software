@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
-import { POST } from '../app/api/auth/login/route';
+import { POST } from '../app/api/login/route';
 import { readLoginPayload } from '../app/api/auth/login/login-payload';
 import { loginWithServerAction, type LoginActionResult } from '../app/login/actions';
 import { readLoginFormValues } from '../app/login/login-form-values';
@@ -68,7 +68,7 @@ describe('login password fidelity', () => {
         loginRequestBody = String(init?.body ?? '');
 
         return new Response(JSON.stringify({
-          status: 200,
+            status: true,
           message: 'User login successfully.',
           data: {
             id: 2,
@@ -87,19 +87,19 @@ describe('login password fidelity', () => {
 
     await loginAndLoadWorkspaceBootstrap('user@example.test', '  Exact PaSSword  ');
 
-    const params = new URLSearchParams(loginRequestBody);
-    assert.equal(params.get('username'), 'user@example.test');
-    assert.equal(params.get('password'), '  Exact PaSSword  ');
+    const payload = JSON.parse(loginRequestBody) as Record<string, unknown>;
+    assert.equal(payload.email, 'user@example.test');
+    assert.equal(payload.password, '  Exact PaSSword  ');
   });
 
   test('empty passwords are rejected by route and server action validation', async () => {
-    const routeResponse = await POST(new Request('http://localhost/api/auth/login', {
+    const routeResponse = await POST(new Request('http://localhost/api/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        username: ' user@example.test ',
+        email: ' user@example.test ',
         password: '',
       }),
     }));

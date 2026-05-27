@@ -62,8 +62,6 @@ const Header: React.FC<HeaderProps> = ({
     : getModuleLabel(activeTab) || currentModule?.label || 'Dashboard';
   const roleLabel = getRoleLabel(currentUser.role);
   const showDepartmentSelector = (currentUser.role === 'Customer' || currentUser.role === 'Employee') && counters.length > 0;
-  const showMissingDepartmentState = currentUser.role === 'Employee' && counters.length === 0;
-  const isDepartmentLocked = currentUser.role === 'Employee';
   const headerRef = useRef<HTMLElement | null>(null);
   const compactSearchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -124,20 +122,7 @@ const Header: React.FC<HeaderProps> = ({
               counters={counters}
               selectedCounterId={selectedCounterId}
               onChange={onCounterChange}
-              disabled={isDepartmentLocked}
             />
-          </div>
-        </div>
-      );
-    }
-
-    if (showMissingDepartmentState) {
-      return (
-        <div className={['header-counter', 'header-counter--empty', className].filter(Boolean).join(' ')}>
-          <p className="header-counter__label">Department</p>
-          <div className="counter-chip">
-            <span className="fw-semibold d-block">Department not assigned</span>
-            <span className="page-muted small d-block mt-1">Ask the business user to assign your department.</span>
           </div>
         </div>
       );

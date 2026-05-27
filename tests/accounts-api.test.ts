@@ -5,7 +5,6 @@ import {
   createAccount,
   deleteAccount,
   getAccountsResponse,
-  linkAccountToDepartment,
 } from '../lib/api/accounts';
 
 const originalFetch = globalThis.fetch;
@@ -58,7 +57,6 @@ describe('accounts api client', () => {
       ifsc: '0',
       openingBalance: 41549,
       status: 'Active',
-      counterId: null,
       branch: 'Main',
       remark: 'OB 01102024',
     });
@@ -76,7 +74,7 @@ describe('accounts api client', () => {
     });
   });
 
-  test('posts soft delete and link department actions through the local route', async () => {
+  test('posts soft delete action through the local route', async () => {
     const postedPayloads: unknown[] = [];
 
     globalThis.fetch = async (input, init) => {
@@ -87,11 +85,9 @@ describe('accounts api client', () => {
     };
 
     await deleteAccount('5');
-    await linkAccountToDepartment('5', '9');
 
     assert.deepEqual(postedPayloads, [
       { action: 'delete', id: '5' },
-      { action: 'linkDepartment', account_id: '5', counter_id: '9' },
     ]);
   });
 

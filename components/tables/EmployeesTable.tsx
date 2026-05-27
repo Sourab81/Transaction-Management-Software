@@ -1,10 +1,9 @@
 import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
-import type { Counter, Employee } from '../../lib/store';
+import type { Employee } from '../../lib/store';
 import DataTable from './DataTable';
 
 interface EmployeesTableProps {
-  departments: Counter[];
   employees: Employee[];
   onEdit?: (employee: Employee) => void;
   onDelete?: (employeeId: string) => void;
@@ -12,14 +11,12 @@ interface EmployeesTableProps {
 }
 
 const EmployeesTable: React.FC<EmployeesTableProps> = ({
-  departments,
   employees,
   onEdit,
   onDelete,
   isLoading = false,
 }) => {
   const hasActions = Boolean(onEdit || onDelete);
-  const departmentById = new Map(departments.map((department) => [department.id, department]));
 
   return (
     <DataTable
@@ -31,23 +28,11 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({
       emptyLabel="No employee records found."
       isLoading={isLoading}
       columns={[
-        { key: 'serial', header: 'S.No', render: (_employee, index) => index + 1 },
-        { key: 'employee', header: 'Employee', render: (employee) => <span className="data-table__primary">{employee.name}</span> },
-        {
-          key: 'department',
-          header: 'Department',
-          render: (employee) => {
-            const department = employee.departmentId ? departmentById.get(employee.departmentId) : undefined;
-            return department ? `${department.name} (${department.code})` : 'Not assigned';
-          },
-        },
-        {
-          key: 'permissions',
-          header: 'Permissions',
-          render: (employee) => `${Object.values(employee.permissions || {}).filter((enabled) => enabled === 1).length} enabled`,
-        },
-        { key: 'phone', header: 'Phone', render: (employee) => employee.phone },
+        { key: 'displayName', header: 'Display Name', render: (employee) => <span className="data-table__primary">{employee.displayName || employee.nickName || employee.name}</span> },
+        { key: 'fullName', header: 'Full Name', render: (employee) => employee.fullName || employee.name },
+        { key: 'mobile', header: 'Mobile', render: (employee) => employee.mobile || employee.phone },
         { key: 'email', header: 'Email', render: (employee) => employee.email || 'Not added' },
+        { key: 'gender', header: 'Gender', render: (employee) => employee.gender || '-' },
         {
           key: 'status',
           header: 'Status',
@@ -60,7 +45,7 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({
             );
           },
         },
-        { key: 'joined', header: 'Joined', render: (employee) => employee.joinedDate || 'Not added' },
+        { key: 'addedDate', header: 'Added Date', render: (employee) => employee.addedDate || employee.createDate || employee.joinedDate || 'Not added' },
       ]}
       renderActions={(employee) => (
         <div className="table-actions">

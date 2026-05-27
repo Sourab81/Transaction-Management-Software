@@ -102,6 +102,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [validationError, setValidationError] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isServiceInventoryType = serviceCategory === 'service';
 
   const resetDepartmentForm = () => {
     setDepartmentName('');
@@ -193,7 +194,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
 
   const handleServiceSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const parsedQuantity = parseNonNegativeNumber(servicePrice);
+    const parsedQuantity = isServiceInventoryType ? 0 : parseNonNegativeNumber(servicePrice);
 
     if (!serviceName.trim() || (serviceCategory !== 'service' && serviceCategory !== 'product')) {
       setValidationError('Inventory name and type are required.');
@@ -635,6 +636,9 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                         value={serviceCategory}
                         onChange={(event) => {
                           setServiceCategory(event.target.value as 'service' | 'product');
+                          if (event.target.value === 'service') {
+                            setServicePrice('0');
+                          }
                           setValidationError('');
                         }}
                         options={[
@@ -649,14 +653,18 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                         label="Quantity"
                         type="number"
                         min="0"
-                        value={servicePrice}
+                        value={isServiceInventoryType ? '0' : servicePrice}
                         onChange={(event) => {
                           setServicePrice(event.target.value);
                           setValidationError('');
                         }}
                         placeholder="0"
-                        required
+                        disabled={isServiceInventoryType}
+                        required={!isServiceInventoryType}
                       />
+                      {isServiceInventoryType ? (
+                        <p className="form-hint">Quantity is used for products only.</p>
+                      ) : null}
                     </div>
                     <div className="col-12">
                       <label className="form-label">Remark</label>

@@ -20,26 +20,31 @@ export const mapAccountRecord = (record: UnknownRecord): Account | null => {
   }
 
   const openingBalance = readNumberValue(record, ['openingBalance', 'opening_balance']) ?? 0;
-  const currentBalance = readNumberValue(record, ['currentBalance', 'current_balance', 'balance']) ?? openingBalance;
+  const currentBalance = readNumberValue(record, ['currentBalance', 'current_balance', 'balance']) ?? 0;
   const rawStatus = readStringValue(record, ['status', 'is_active']);
-  const counterId = readStringValue(record, ['counterId', 'counter_id', 'departmentId', 'department_id']);
   const branch = readStringValue(record, ['branch']) || undefined;
   const remark = readStringValue(record, ['remark', 'remarks', 'note']) || undefined;
-  const date = readStringValue(record, ['date', 'added_date', 'created_at', 'createdAt']) || '';
+  const addedByName = readStringValue(record, ['added_by_name', 'addedByName']) || undefined;
+  const addedDate = readStringValue(record, ['added_date', 'addedDate', 'created_at', 'createdAt']) || '';
 
   return {
     id,
     accountHolder,
+    accHolder: accountHolder,
     bankName,
     accountNumber,
+    accNo: accountNumber,
     ifsc,
+    ifscCode: ifsc,
     branch,
     openingBalance,
     currentBalance,
     status: normalizeActiveStatus(rawStatus),
-    counterId: counterId || null,
+    counterId: null,
     remark,
-    date,
+    addedByName,
+    addedDate,
+    date: addedDate,
   };
 };
 

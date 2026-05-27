@@ -96,23 +96,51 @@ export type TransactionPaymentDetails =
   | TransactionCardPaymentDetails
   | TransactionBankPaymentDetails;
 
+export interface TransactionChildRow {
+  id?: string;
+  transactionId?: string;
+  formName: string;
+  noOfTransaction: number;
+  inventoryId: string;
+  inventoryName?: string;
+  transactionAccount: string;
+  amount?: number;
+  serviceCharge: number;
+  bankCharge: number;
+  otherCharge: number;
+  totalAmount: number;
+  remark?: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
+  fullName?: string;
+  nickName?: string;
+  displayName?: string;
   phone: string;
+  mobile?: string;
   email: string;
   permissions: CustomerPermissions;
-  departmentId?: string;
   status?: 'Active' | 'Inactive';
+  gender?: string;
+  dob?: string;
+  address?: string;
+  remark?: string;
   joinedDate?: string;
+  createDate?: string;
+  updateDate?: string;
+  addedDate?: string;
 }
 
 export interface Transaction {
   id: string;
+  invoiceId?: string;
   formName?: string;
   transactionNo?: string;
   transactionNumber: string;
   customerId: string;
+  customerCode?: string;
   customerName: string;
   customerPhone: string;
   serviceProduct?: string;
@@ -123,9 +151,14 @@ export interface Transaction {
   servicePrice: number;
   transactionAccountId?: string;
   amount?: number;
+  transactionAmount?: number;
   serviceCharge?: number;
   bankCharge?: number;
   otherCharge?: number;
+  noOfTransaction?: number;
+  numberOfTransactions?: number;
+  currentBalance?: number;
+  rows?: TransactionChildRow[];
   totalAmount: number;
   paidAmount: number;
   dueAmount: number;
@@ -133,6 +166,7 @@ export interface Transaction {
   paymentDetails?: TransactionPaymentDetails;
   departmentId?: string;
   departmentName: string;
+  counterName?: string;
   accountId?: string;
   accountLabel: string;
   handledById: string;
@@ -144,6 +178,8 @@ export interface Transaction {
   date: string;
   createdAt: string;
   createdBy?: string;
+  addedDate?: string;
+  addedByName?: string;
   updatedAt?: string;
   updatedBy?: string;
   cancelledAt?: string;
@@ -162,6 +198,7 @@ export interface Counter {
   id: string;
   name: string;
   code: string;
+  departmentDisplay?: string;
   linkedAccountIds?: string[];
   defaultAccountId?: string;
   linkedAccountId?: string;
@@ -175,9 +212,12 @@ export interface Counter {
 export interface Account {
   id: string;
   accountHolder: string;
+  accHolder?: string;
   bankName: string;
   accountNumber: string;
+  accNo?: string;
   ifsc: string;
+  ifscCode?: string;
   openingBalance: number;
   currentBalance: number;
   status: 'Active' | 'Inactive';
@@ -185,6 +225,8 @@ export interface Account {
   counterId?: string | null;
   branch?: string;
   remark?: string;
+  addedByName?: string;
+  addedDate?: string;
 }
 
 export interface Service {
@@ -541,11 +583,23 @@ const normalizeEmployee = (
 
   return {
     ...employeeWithoutPassword,
+    fullName: employee.fullName || employee.name,
+    nickName: employee.nickName || employee.name,
+    displayName: employee.displayName || employee.nickName || employee.name,
+    name: employee.displayName || employee.nickName || employee.name,
+    phone: employee.mobile || employee.phone,
+    mobile: employee.mobile || employee.phone,
     email: employee.email?.trim().toLowerCase() ?? '',
     permissions: normalizeCustomerPermissions(employee.permissions ?? fallbackPermissions ?? buildDefaultCustomerPermissions()),
-    departmentId: employee.departmentId || undefined,
     status: employee.status || 'Active',
-    joinedDate: employee.joinedDate || today(),
+    gender: employee.gender || undefined,
+    dob: employee.dob || undefined,
+    address: employee.address || undefined,
+    remark: employee.remark || undefined,
+    joinedDate: employee.joinedDate || employee.addedDate || employee.createDate || today(),
+    createDate: employee.createDate,
+    updateDate: employee.updateDate,
+    addedDate: employee.addedDate || employee.createDate || employee.joinedDate || undefined,
   };
 };
 
@@ -555,7 +609,7 @@ const normalizeCounter = (counter: Counter): Counter => ({
   defaultAccountId: getDepartmentDefaultAccountId(counter),
   linkedAccountId: getDepartmentDefaultAccountId(counter),
   openingBalance: counter.openingBalance ?? 0,
-  currentBalance: counter.currentBalance ?? counter.openingBalance ?? 0,
+  currentBalance: counter.currentBalance ?? 0,
   status: counter.status || 'Active',
   remark: counter.remark || undefined,
   date: counter.date || undefined,
@@ -563,13 +617,18 @@ const normalizeCounter = (counter: Counter): Counter => ({
 
 const normalizeAccount = (account: Account): Account => ({
   ...account,
+  accHolder: account.accHolder || account.accountHolder,
+  accNo: account.accNo || account.accountNumber,
+  ifscCode: account.ifscCode || account.ifsc,
   openingBalance: account.openingBalance ?? 0,
-  currentBalance: account.currentBalance ?? account.openingBalance ?? 0,
+  currentBalance: account.currentBalance ?? 0,
   status: account.status || 'Active',
-  date: account.date || today(),
-  counterId: account.counterId || null,
+  date: account.addedDate || account.date || today(),
+  addedDate: account.addedDate || account.date || undefined,
+  counterId: null,
   branch: account.branch || undefined,
   remark: account.remark || undefined,
+  addedByName: account.addedByName || undefined,
 });
 
 const normalizeTransactionStatus = (status?: string): Transaction['status'] => {
@@ -699,9 +758,13 @@ const normalizeTransaction = (
     servicePrice: typeof transaction.servicePrice === 'number' ? transaction.servicePrice : amount,
     transactionAccountId: transaction.transactionAccountId || transaction.accountId || undefined,
     amount,
+    transactionAmount: transaction.transactionAmount,
     serviceCharge,
     bankCharge,
     otherCharge,
+    noOfTransaction: transaction.noOfTransaction,
+    numberOfTransactions: transaction.numberOfTransactions ?? transaction.noOfTransaction,
+    currentBalance: transaction.currentBalance,
     totalAmount: legacyAmount,
     paidAmount,
     dueAmount,

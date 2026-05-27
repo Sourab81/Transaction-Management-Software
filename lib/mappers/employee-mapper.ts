@@ -17,21 +17,38 @@ export const mapEmployeeRecord = (
   fallbackPermissions?: CustomerPermissions,
 ): Employee | null => {
   const id = readStringValue(record, ['id', 'employee_id', 'user_id', 'staff_id']);
-  const name = readStringValue(record, ['name', 'employee_name', 'full_name', 'fullName']);
+  const fullName = readStringValue(record, ['fullname', 'full_name', 'fullName', 'employee_name', 'name']);
+  const nickName = readStringValue(record, ['nickname', 'nick_name', 'nickName', 'display_name', 'displayName']);
+  const displayName = nickName || fullName;
 
-  if (!id || !name) {
+  if (!id || !displayName) {
     return null;
   }
 
+  const mobile = readStringValue(record, ['contact_no', 'contactNo', 'mobile', 'mobile_no', 'phone', 'phone_number']) || 'Not added';
+  const createDate = readStringValue(record, ['create_date', 'createDate', 'created_at', 'createdAt']) || undefined;
+  const updateDate = readStringValue(record, ['update_date', 'updateDate', 'updated_at', 'updatedAt']) || undefined;
+  const addedDate = readStringValue(record, ['added_date', 'addedDate', 'date']) || createDate;
+
   return {
     id,
-    name,
-    phone: readStringValue(record, ['phone', 'mobile', 'mobile_no', 'phone_number']) || 'Not added',
-    email: readStringValue(record, ['email', 'employee_email', 'user_email', 'username']) || '',
+    name: displayName,
+    fullName: fullName || displayName,
+    nickName: nickName || displayName,
+    displayName,
+    phone: mobile,
+    mobile,
+    email: readStringValue(record, ['email_id', 'email', 'employee_email', 'user_email', 'username']) || '',
+    gender: readStringValue(record, ['gender']) || undefined,
+    dob: readStringValue(record, ['dob', 'date_of_birth', 'dateOfBirth']) || undefined,
+    address: readStringValue(record, ['address']) || undefined,
+    remark: readStringValue(record, ['remark', 'remarks', 'note']) || undefined,
     permissions: readPermissionsFromSources(record) || fallbackPermissions || buildDefaultCustomerPermissions(),
-    departmentId: readStringValue(record, ['department_id', 'departmentId', 'counter_id', 'counterId']) || undefined,
     status: normalizeActiveStatus(readStringValue(record, ['status', 'is_active'])),
-    joinedDate: readStringValue(record, ['joined_date', 'joinedDate', 'created_at', 'createdAt', 'date']) || undefined,
+    joinedDate: addedDate,
+    createDate,
+    updateDate,
+    addedDate,
   };
 };
 

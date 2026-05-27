@@ -12,9 +12,7 @@ export interface AccountMutationInput {
   accountNumber: string;
   ifsc: string;
   openingBalance: number;
-  currentBalance?: number;
   status?: Account['status'];
-  counterId?: string | null;
   branch?: string;
   remark?: string;
 }
@@ -57,10 +55,8 @@ const buildCreateAccountPayload = (input: AccountMutationInput) => ({
   ifsc_code: input.ifsc,
   branch: input.branch,
   opening_balance: input.openingBalance,
-  current_balance: input.currentBalance,
   remark: input.remark,
   status: input.status === 'Inactive' ? 0 : 1,
-  counter_id: input.counterId || undefined,
 });
 
 export const getAccountsResponse = async () => {
@@ -89,17 +85,4 @@ export const deleteAccount = async (id: string) => {
   });
 
   return ensureSuccessPayload(payload, 'Unable to delete account.');
-};
-
-export const linkAccountToDepartment = async (
-  accountId: string,
-  counterId: string,
-) => {
-  const payload = await requestAppApiMutation('/api/accounts', {
-    action: 'linkDepartment',
-    account_id: accountId,
-    counter_id: counterId,
-  });
-
-  return ensureSuccessPayload(payload, 'Unable to link account to department.');
 };

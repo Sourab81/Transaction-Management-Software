@@ -1,13 +1,14 @@
-import React from 'react';
-import { FaEdit, FaEye, FaFilter, FaTrashAlt } from 'react-icons/fa';
+import React, { useState } from 'react';
+import { FaChevronDown, FaChevronUp, FaEye, FaFilter, FaMoneyBillWave, FaPrint, FaReceipt } from 'react-icons/fa';
 import type { Transaction } from '../../lib/store';
+import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
 import DataTable from './DataTable';
 
 interface TransactionTableProps {
   transactions: Transaction[];
-  onEdit?: (transaction: Transaction) => void;
+  onPay?: (transaction: Transaction) => void;
   onView?: (transaction: Transaction) => void;
-  onDelete?: (transactionId: string) => void;
+  onPrint?: (transaction: Transaction) => void;
   onToggleFilters?: () => void;
   isFilterOpen?: boolean;
   headerAction?: React.ReactNode;
@@ -20,23 +21,30 @@ const formatCurrency = (value: number | undefined) => (
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
   transactions,
-  onEdit,
+  onPay,
   onView,
-  onDelete,
+  onPrint,
   onToggleFilters,
   isFilterOpen = false,
   headerAction,
   isLoading = false,
 }) => {
-  const hasActions = Boolean(onEdit || onView || onDelete);
+  const hasActions = Boolean(onPay || onView || onPrint);
+  const [expandedChargeRows, setExpandedChargeRows] = useState<Record<string, boolean>>({});
+  const toggleCharges = (transactionId: string) => {
+    setExpandedChargeRows((current) => ({
+      ...current,
+      [transactionId]: !current[transactionId],
+    }));
+  };
 
   return (
     <DataTable
       rows={transactions}
       getRowKey={(transaction) => transaction.id}
       eyebrow="Transactions"
-      title="Recent activity"
-      copy="Track form, service or product, account, charges, and totals in one clean view."
+      title="Recent Transactions"
+      copy="Transaction that are registered waiting for the setelment "
       emptyLabel="No transaction records found."
       isLoading={isLoading}
       headerAction={headerAction || (onToggleFilters ? (
@@ -53,86 +61,101 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       ) : null)}
       columns={[
         {
-          key: 'serial',
-          header: 'S.No',
-          render: (_transaction, index) => index + 1,
+          key: 'date',
+          header: 'Transaction Date',
+          render: (transaction) => transaction.date,
         },
         {
-          key: 'formName',
-          header: 'Form Name',
-          render: (transaction) => transaction.formName || 'Not added',
-        },
-        {
-          key: 'transactionNo',
-          header: 'Txn No.',
-          render: (transaction) => transaction.transactionNo || transaction.transactionNumber,
-        },
-        {
-          key: 'serviceProduct',
-          header: 'Service/Product',
+          key: 'customer',
+          header: 'ID/Customer',
           render: (transaction) => (
-            <span className="data-table__primary">{transaction.serviceProduct || transaction.service}</span>
+            <span className="data-table__primary">
+              {transaction.customerCode || transaction.customerId || '-'}
+            </span>
           ),
         },
         {
-          key: 'transactionAccount',
-          header: 'Transaction Account',
-          render: (transaction) => transaction.accountLabel || transaction.transactionAccountId || 'Not linked',
+          key: 'numberOfTransactions',
+          header: 'No. of Transactions',
+          render: (transaction) => transaction.numberOfTransactions ?? transaction.noOfTransaction ?? transaction.rows?.length ?? 1,
         },
         {
-          key: 'amount',
-          header: 'Amount',
-          render: (transaction) => formatCurrency(transaction.amount ?? transaction.totalAmount),
-        },
-        {
-          key: 'serviceCharge',
-          header: 'Service Charge',
-          render: (transaction) => formatCurrency(transaction.serviceCharge),
-        },
-        {
-          key: 'bankCharge',
-          header: 'Bank Charge',
-          render: (transaction) => formatCurrency(transaction.bankCharge),
-        },
-        {
-          key: 'otherCharge',
-          header: 'Other Charge',
-          render: (transaction) => formatCurrency(transaction.otherCharge),
+          key: 'transactionAmount',
+          header: 'Transaction Amount',
+          render: (transaction) => formatCurrency(transaction.transactionAmount ?? transaction.amount ?? transaction.totalAmount),
         },
         {
           key: 'totalAmount',
           header: 'Total Amount',
-          render: (transaction) => formatCurrency(transaction.totalAmount),
+          render: (transaction) => {
+            const isExpanded = Boolean(expandedChargeRows[transaction.id]);
+
+            return (
+              <div className="transaction-charges-cell">
+                <div className="d-flex align-items-center gap-2">
+                  <span className="data-table__primary">{formatCurrency(transaction.totalAmount)}</span>
+                  <button
+                    type="button"
+                    className="btn-icon-sm btn-icon-sm--primary"
+                    onClick={() => toggleCharges(transaction.id)}
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded ? 'Hide charges' : 'View charges'}
+                    title={isExpanded ? 'Hide charges' : 'View charges'}
+                  >
+                    <FaReceipt size={12} />
+                    {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+                  </button>
+                </div>
+                {isExpanded ? (
+                  <div className="transaction-charges-cell__details mt-2">
+                    <div>Service Charge: {formatCurrency(transaction.serviceCharge)}</div>
+                    <div>Bank Charge: {formatCurrency(transaction.bankCharge)}</div>
+                    <div>Other Charge: {formatCurrency(transaction.otherCharge)}</div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          },
         },
         {
-          key: 'remark',
-          header: 'Remark',
-          render: (transaction) => transaction.remark || transaction.note || 'No remark',
+          key: 'currentBalance',
+          header: 'Current Balance',
+          render: (transaction) => {
+            const balance = typeof transaction.currentBalance !== 'undefined'
+              ? transaction.currentBalance
+              : transaction.dueAmount;
+
+            return (
+              <span className={getCustomerBalanceClassName(balance)}>
+                {formatCustomerBalance(balance)}
+              </span>
+            );
+          },
         },
         {
-          key: 'date',
-          header: 'Date',
-          render: (transaction) => transaction.date,
+          key: 'added',
+          header: 'Added By',
+          render: (transaction) => transaction.addedByName || '-',
         },
       ]}
       renderActions={(transaction) => (
         <div className="table-actions">
+          {onPay && (
+            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onPay(transaction)}>
+              <FaMoneyBillWave size={12} />
+              Pay
+            </button>
+          )}
           {onView && (
             <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onView(transaction)}>
               <FaEye size={12} />
               View
             </button>
           )}
-          {onEdit && (
-            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onEdit(transaction)}>
-              <FaEdit size={12} />
-              Edit
-            </button>
-          )}
-          {onDelete && (
-            <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => onDelete(transaction.id)}>
-              <FaTrashAlt size={12} />
-              Delete
+          {onPrint && (
+            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onPrint(transaction)}>
+              <FaPrint size={12} />
+              Print
             </button>
           )}
           {!hasActions && <span className="page-muted small">View only</span>}

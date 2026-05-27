@@ -48,33 +48,6 @@ const readRequiredNonNegativeNumber = (
   );
 };
 
-const readOptionalNonNegativeNumber = (
-  payload: Record<string, unknown>,
-  key: string,
-  label: string,
-) => {
-  const value = payload[key];
-
-  if (typeof value === 'undefined' || value === null || value === '') {
-    return undefined;
-  }
-
-  const numericValue = typeof value === 'number'
-    ? value
-    : typeof value === 'string' && value.trim()
-      ? Number(value)
-      : Number.NaN;
-
-  if (Number.isFinite(numericValue) && numericValue >= 0) {
-    return numericValue;
-  }
-
-  return Response.json(
-    { success: false, message: `${label} must be a zero or positive number.` },
-    { status: 400 },
-  );
-};
-
 const readRequiredId = (
   payload: Record<string, unknown>,
   key: string,
@@ -143,14 +116,12 @@ export async function POST(request: Request) {
     const accountNumber = readRequiredValue(payload, 'acc_no', 'Account number');
     const ifscCode = readRequiredValue(payload, 'ifsc_code', 'IFSC code');
     const openingBalance = readRequiredNonNegativeNumber(payload, 'opening_balance', 'Opening balance');
-    const currentBalance = readOptionalNonNegativeNumber(payload, 'current_balance', 'Current balance');
     const invalidResponse = [
       accountHolder,
       bankName,
       accountNumber,
       ifscCode,
       openingBalance,
-      currentBalance,
     ].find((value): value is Response => value instanceof Response);
 
     if (invalidResponse) {
@@ -168,10 +139,8 @@ export async function POST(request: Request) {
           ifsc_code: ifscCode,
           branch: toBodyValue(payload.branch),
           opening_balance: openingBalance,
-          current_balance: currentBalance,
           remark: toBodyValue(payload.remark),
           status: toBodyValue(payload.status),
-          counter_id: toBodyValue(payload.counter_id),
         },
       });
 
@@ -198,30 +167,6 @@ export async function POST(request: Request) {
       return Response.json(responsePayload);
     } catch (error) {
       return errorResponse(error, 'Unable to delete account in the backend.');
-    }
-  }
-
-  if (action === 'linkDepartment') {
-    const accountId = readRequiredId(payload, 'account_id', 'Account id');
-    const counterId = readRequiredId(payload, 'counter_id', 'Department id');
-    const invalidResponse = [accountId, counterId]
-      .find((value): value is Response => value instanceof Response);
-    if (invalidResponse) {
-      return invalidResponse;
-    }
-
-    try {
-      const responsePayload = await backendFetch('linkAccountToDepartment', {
-        method: 'POST',
-        body: {
-          account_id: accountId,
-          counter_id: counterId,
-        },
-      });
-
-      return Response.json(responsePayload);
-    } catch (error) {
-      return errorResponse(error, 'Unable to link account to department in the backend.');
     }
   }
 

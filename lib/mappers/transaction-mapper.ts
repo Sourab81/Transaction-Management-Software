@@ -12,6 +12,7 @@ import {
   readBooleanLikeValue,
   readNumberValue,
   readRecordValue,
+  readArrayValue,
   readStringValue,
   type UnknownRecord,
 } from './legacy-record';
@@ -29,6 +30,8 @@ const normalizePaymentMode = (value: string | null): TransactionPaymentMode => {
 const normalizeTransactionStatus = (value: string | null): Transaction['status'] => {
   const normalizedValue = value?.trim().toLowerCase();
 
+  if (normalizedValue === '1' || normalizedValue === 'active' || normalizedValue === 'success') return 'completed';
+  if (normalizedValue === '0' || normalizedValue === 'inactive' || normalizedValue === 'deleted') return 'cancelled';
   if (normalizedValue === 'pending') return 'pending';
   if (normalizedValue === 'cancelled' || normalizedValue === 'canceled') return 'cancelled';
   if (normalizedValue === 'refunded' || normalizedValue === 'refund') return 'refunded';
@@ -111,16 +114,34 @@ const readPaymentDetails = (
   return undefined;
 };
 
-export const mapTransactionRecord = (record: UnknownRecord): Transaction | null => {
-  const id = readStringValue(record, ['id', 'transaction_id', 'txn_id']);
-  const customerName = readStringValue(record, ['customer_name', 'customerName', 'name']);
+const mapTransactionChildRow = (record: UnknownRecord) => ({
+  id: readStringValue(record, ['id', 'transaction_child_id', 'child_id']) || undefined,
+  transactionId: readStringValue(record, ['transaction_id', 'transactionId']) || undefined,
+  formName: readStringValue(record, ['form_name', 'formName']) || '',
+  noOfTransaction: readNumberValue(record, ['no_of_transaction', 'noOfTransaction']) || 1,
+  inventoryId: readStringValue(record, ['inventory_id', 'inventoryId', 'inventoryItemId']) || '',
+  inventoryName: readStringValue(record, ['inventory_name', 'inventoryName', 'service_name', 'product_name']) || undefined,
+  transactionAccount: readStringValue(record, ['transaction_account', 'transactionAccount', 'transaction_account_id', 'transactionAccountId']) || 'cash',
+  amount: readNumberValue(record, ['amount', 'transaction_amount', 'transactionAmount']) || 0,
+  serviceCharge: readNumberValue(record, ['service_charge', 'serviceCharge']) || 0,
+  bankCharge: readNumberValue(record, ['bank_charge', 'bankCharge']) || 0,
+  otherCharge: readNumberValue(record, ['other_charge', 'otherCharge']) || 0,
+  totalAmount: readNumberValue(record, ['total_amount', 'totalAmount']) || 0,
+  remark: readStringValue(record, ['remark', 'remarks', 'note']) || undefined,
+});
 
-  if (!id || !customerName) {
+export const mapTransactionRecord = (record: UnknownRecord): Transaction | null => {
+  const id = readStringValue(record, ['transaction_id', 'transactionId', 'id', 'txn_id']);
+
+  if (!id) {
     return null;
   }
 
+  const customerId = readStringValue(record, ['customerId', 'customer_id']) || '';
+  const customerCode = readStringValue(record, ['customer_code', 'customerCode']) || undefined;
+  const customerDisplay = customerCode || (customerId ? `Customer #${customerId}` : 'Customer');
   const paymentMode = normalizePaymentMode(readStringValue(record, ['payment_mode', 'paymentMode', 'mode']));
-  const amount = readNumberValue(record, ['amount', 'base_amount', 'baseAmount', 'total_amount', 'totalAmount']) || 0;
+  const amount = readNumberValue(record, ['transactionAmount', 'transaction_amount', 'amount', 'base_amount', 'baseAmount']) || 0;
   const serviceCharge = readNumberValue(record, ['service_charge', 'serviceCharge']) || 0;
   const bankCharge = readNumberValue(record, ['bank_charge', 'bankCharge']) || 0;
   const otherCharge = readNumberValue(record, ['other_charge', 'otherCharge']) || 0;
@@ -128,35 +149,60 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
     ?? amount + serviceCharge + bankCharge + otherCharge;
   const paidAmount = readNumberValue(record, ['paid_amount', 'paidAmount', 'received_amount', 'receivedAmount']) || 0;
   const dueAmount = readNumberValue(record, ['due_amount', 'dueAmount', 'pending_amount']) ?? Math.max(totalAmount - paidAmount, 0);
-  const transactionNo = readStringValue(record, ['transaction_no', 'transactionNo', 'transaction_number', 'transactionNumber', 'txn_number']) || `TXN-${id}`;
+  const currentBalance = readNumberValue(record, ['current_balance', 'currentBalance']);
+  const invoiceId = readStringValue(record, ['invoiceId', 'invoice_id']) || `TXN-${id}`;
+  const transactionNo = readStringValue(record, ['transaction_no', 'transactionNo', 'transaction_number', 'transactionNumber', 'txn_number']) || invoiceId;
   const serviceProduct = readStringValue(record, ['service_product', 'serviceProduct', 'service_name', 'service', 'service_title']) || 'Service';
   const transactionAccountId = readStringValue(record, ['transaction_account_id', 'transactionAccountId', 'account_id', 'accountId']) || undefined;
   const remark = readStringValue(record, ['remark', 'remarks', 'note']) || undefined;
+  const departmentId = readStringValue(record, ['department_id', 'departmentId', 'counter_id', 'counterId']) || undefined;
+  const departmentName = readStringValue(record, ['department_name', 'departmentName', 'counter_name', 'counterName']) || 'General';
+  const addedDate = readStringValue(record, ['added_date', 'addedDate', 'created_at', 'createdAt']) || undefined;
+  const addedByName = readStringValue(record, ['added_by_name', 'addedByName']) || undefined;
+  const rows = (readArrayValue(record, ['rows', 'children', 'child_rows', 'transaction_child', 'transactionChildren']) || [])
+    .filter(isRecord)
+    .map(mapTransactionChildRow);
+  const numberOfTransactions = readNumberValue(record, [
+    'number_of_transactions',
+    'numberOfTransactions',
+    'child_row_count',
+    'noOfTransaction',
+    'no_of_transaction',
+    'no_of_items',
+  ]) || rows.length || 1;
 
   return {
     id,
+    invoiceId,
     formName: readStringValue(record, ['form_name', 'formName']) || '',
     transactionNo,
     transactionNumber: transactionNo,
-    customerId: readStringValue(record, ['customer_id', 'customerId']) || id,
-    customerName,
-    customerPhone: readStringValue(record, ['customer_phone', 'customerPhone', 'phone', 'mobile']) || 'Not added',
+    customerId: customerId || id,
+    customerCode,
+    customerName: customerDisplay,
+    customerPhone: '',
     serviceId: readStringValue(record, ['service_id', 'serviceId']) || id,
     serviceProduct,
     service: serviceProduct,
     servicePrice: readNumberValue(record, ['service_price', 'servicePrice', 'price']) || amount,
     transactionAccountId,
     amount,
+    transactionAmount: amount,
     serviceCharge,
     bankCharge,
     otherCharge,
+    currentBalance: currentBalance ?? undefined,
+    noOfTransaction: numberOfTransactions,
+    numberOfTransactions,
+    rows,
     totalAmount,
     paidAmount,
     dueAmount,
     paymentMode,
     paymentDetails: readPaymentDetails(record, paymentMode),
-    departmentId: readStringValue(record, ['department_id', 'departmentId', 'counter_id', 'counterId']) || undefined,
-    departmentName: readStringValue(record, ['department_name', 'departmentName', 'counter_name', 'counterName']) || 'General',
+    departmentId,
+    departmentName,
+    counterName: departmentName,
     accountId: transactionAccountId,
     accountLabel: readStringValue(record, ['account_label', 'accountLabel', 'account_name']) || 'Cash',
     handledById: readStringValue(record, ['handled_by_id', 'handledById', 'user_id']) || '',
@@ -165,11 +211,12 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
     remark,
     note: remark,
     status: normalizeTransactionStatus(readStringValue(record, ['status', 'transaction_status'])),
-    date: readStringValue(record, ['date', 'transaction_date', 'transactionDate']) || new Date().toISOString().split('T')[0],
-    createdAt: readStringValue(record, ['created_at', 'createdAt', 'date']) || new Date().toISOString(),
+    date: readStringValue(record, ['date', 'transaction_date', 'transactionDate', 'added_date', 'addedDate']) || new Date().toISOString().split('T')[0],
+    createdAt: readStringValue(record, ['created_at', 'createdAt', 'added_date', 'addedDate', 'date']) || new Date().toISOString(),
     createdBy: readStringValue(record, ['created_by', 'createdBy']) || undefined,
+    addedDate,
+    addedByName,
     updatedAt: readStringValue(record, ['updated_at', 'updatedAt']) || undefined,
-    updatedBy: readStringValue(record, ['updated_by', 'updatedBy']) || undefined,
     cancelledAt: readStringValue(record, ['cancelled_at', 'cancelledAt']) || undefined,
     cancelledBy: readStringValue(record, ['cancelled_by', 'cancelledBy']) || undefined,
     refundedAt: readStringValue(record, ['refunded_at', 'refundedAt']) || undefined,

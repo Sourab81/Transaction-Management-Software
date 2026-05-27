@@ -20,7 +20,6 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
     canViewEmployeeRecords,
     isEmployeesLoading,
     employees,
-    counters,
     canEditEmployeeRecords,
     canDeleteEmployeeRecords,
     handleQuickAction,
@@ -63,7 +62,6 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
             />
           ) : (
             <EmployeesTable
-              departments={counters}
               employees={employees}
               isLoading={isEmployeesLoading}
               onEdit={canEditEmployeeRecords ? handleEditEmployee : undefined}

@@ -17,6 +17,10 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
   isLoading = false,
 }) => {
   const hasActions = Boolean(onEdit || onDelete);
+  const formatMoney = (value: number) => `Rs. ${value.toLocaleString('en-IN')}`;
+  const getDepartmentDisplay = (counter: Counter) => (
+    counter.departmentDisplay || `${counter.code || counter.id} / ${counter.name}`
+  );
 
   return (
     <DataTable
@@ -29,12 +33,13 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
       isLoading={isLoading}
       columns={[
         { key: 'serial', header: 'S.No', render: (_counter, index) => index + 1 },
-        { key: 'code', header: 'Department Code / ID', render: (counter) => counter.code || counter.id },
         {
           key: 'department',
-          header: 'Department Name',
-          render: (counter) => <span className="data-table__primary">{counter.name}</span>,
+          header: 'Department Name/ID',
+          render: (counter) => <span className="data-table__primary">{getDepartmentDisplay(counter)}</span>,
         },
+        { key: 'openingBalance', header: 'Opening Balance', render: (counter) => formatMoney(counter.openingBalance) },
+        { key: 'currentBalance', header: 'Current Balance', render: (counter) => formatMoney(counter.currentBalance) },
         { key: 'remark', header: 'Remark', render: (counter) => counter.remark || '-' },
         {
           key: 'departmentStatus',
@@ -45,7 +50,7 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
             </span>
           ),
         },
-        { key: 'date', header: 'Created Date', render: (counter) => counter.date || '-' },
+        { key: 'date', header: 'Added Date', render: (counter) => counter.date || '-' },
       ]}
       renderActions={(counter) => (
         <div className="table-actions">
