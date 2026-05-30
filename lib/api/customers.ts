@@ -3,6 +3,7 @@ import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface Customer {
   id: number | string;
+  customerCode?: string;
   customerName: string;
   mobileNo: string;
   email?: string | null;

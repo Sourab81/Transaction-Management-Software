@@ -11,8 +11,10 @@ import {
   LOGIN_ROUTE,
   getWorkspaceModulePath,
   isCustomerWorkspaceView,
+  isTransactionWorkspaceView,
   isWorkspaceModuleId,
   type CustomerWorkspaceView,
+  type TransactionWorkspaceView,
 } from '../../lib/workspace-routes';
 import AppLoadingScreen from '../layout/AppLoadingScreen';
 import Dashboard from './Dashboard';
@@ -26,6 +28,7 @@ interface WorkspaceLayoutShellProps {
 interface WorkspaceRouteState {
   activeTab: string;
   customerPageView: CustomerWorkspaceView;
+  transactionPageView: TransactionWorkspaceView;
 }
 
 const resolveWorkspaceRouteState = (pathname: string): WorkspaceRouteState => {
@@ -36,6 +39,17 @@ const resolveWorkspaceRouteState = (pathname: string): WorkspaceRouteState => {
     return {
       activeTab: 'customers',
       customerPageView: nestedSegment,
+      transactionPageView: 'add',
+    };
+  }
+
+  if (moduleId === 'transactions') {
+    return {
+      activeTab: 'transactions',
+      customerPageView: 'list',
+      transactionPageView: nestedSegment && isTransactionWorkspaceView(nestedSegment)
+        ? nestedSegment
+        : 'add',
     };
   }
 
@@ -43,12 +57,14 @@ const resolveWorkspaceRouteState = (pathname: string): WorkspaceRouteState => {
     return {
       activeTab: moduleId,
       customerPageView: 'list',
+      transactionPageView: 'add',
     };
   }
 
   return {
     activeTab: DEFAULT_WORKSPACE_MODULE_ID,
     customerPageView: 'list',
+    transactionPageView: 'add',
   };
 };
 
@@ -135,6 +151,7 @@ const WorkspaceLayoutShell = ({
       onSessionUserChange={handleSessionUserChange}
       activeTab={routeState.activeTab}
       customerPageView={routeState.customerPageView}
+      transactionPageView={routeState.transactionPageView}
       onNavigate={handleNavigate}
     >
       {children}

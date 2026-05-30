@@ -152,54 +152,56 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
   );
 
   return (
-    <div className="dashboard-page-stack">
-      <WelcomeHero
-        userName={displayUserName}
-        role={currentRole}
-        counterName={selectedCounter?.name || 'No counter selected'}
-        counterStatus={selectedCounter?.status || 'Inactive'}
-        onPrimaryAction={() => handleQuickAction('new-transaction')}
-        onSecondaryAction={() => handleQuickAction('favorites')}
-      />
+    <div className="dashboard-page-stack dashboard-page-stack--modern">
+      <div className="dashboard-command-grid">
+        <WelcomeHero
+          userName={displayUserName}
+          role={currentRole}
+          counterName={selectedCounter?.name || 'No counter selected'}
+          counterStatus={selectedCounter?.status || 'Inactive'}
+          onPrimaryAction={() => handleQuickAction('new-transaction')}
+          onSecondaryAction={() => handleQuickAction('favorites')}
+        />
 
-      <section className="panel dashboard-kpi-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Workspace Overview</p>
-            <h2 className="panel-title">Operating pulse</h2>
+        <section className="panel dashboard-kpi-panel dashboard-kpi-panel--command">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Workspace Overview</p>
+              <h2 className="panel-title">Operating pulse</h2>
+            </div>
           </div>
-        </div>
-        <div className="dashboard-kpi-grid">
-          <DashboardCard
-            title="Collected Amount"
-            value={`Rs. ${collectedAmount.toLocaleString('en-IN')}`}
-            icon={<FaDollarSign />}
-            color="green"
-            loading={showDashboardSummarySkeletons}
-          />
-          <DashboardCard
-            title="Pending Transactions"
-            value={pendingTransactions}
-            icon={<FaHourglassHalf />}
-            color="orange"
-            loading={showDashboardSummarySkeletons}
-          />
-          <DashboardCard
-            title="Customers"
-            value={customerCount}
-            icon={<FaUsers />}
-            color="blue"
-            loading={showDashboardSummarySkeletons}
-          />
-          <DashboardCard
-            title="Active Inventory"
-            value={activeServiceCount}
-            icon={<FaCog />}
-            color="purple"
-            loading={showDashboardSummarySkeletons}
-          />
-        </div>
-      </section>
+          <div className="dashboard-kpi-grid dashboard-kpi-grid--command">
+            <DashboardCard
+              title="Collected Amount"
+              value={`Rs. ${collectedAmount.toLocaleString('en-IN')}`}
+              icon={<FaDollarSign />}
+              color="green"
+              loading={showDashboardSummarySkeletons}
+            />
+            <DashboardCard
+              title="Pending Transactions"
+              value={pendingTransactions}
+              icon={<FaHourglassHalf />}
+              color="orange"
+              loading={showDashboardSummarySkeletons}
+            />
+            <DashboardCard
+              title="Customers"
+              value={customerCount}
+              icon={<FaUsers />}
+              color="blue"
+              loading={showDashboardSummarySkeletons}
+            />
+            <DashboardCard
+              title="Active Inventory"
+              value={activeServiceCount}
+              icon={<FaCog />}
+              color="purple"
+              loading={showDashboardSummarySkeletons}
+            />
+          </div>
+        </section>
+      </div>
 
       <div className="dashboard-main-grid">
         <div className="dashboard-main-column">
@@ -215,6 +217,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
             onView={handleViewTransaction}
             onPrint={handlePrintReceipt}
             headerAction={transactionFilterAction}
+            compact
           />
 
           {isBusinessWorkspace ? serviceSnapshotSection : null}

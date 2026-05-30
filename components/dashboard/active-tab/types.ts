@@ -18,7 +18,7 @@ import type {
   Service,
   Transaction,
 } from '../../../lib/store';
-import type { CustomerWorkspaceView } from '../../../lib/workspace-routes';
+import type { CustomerWorkspaceView, TransactionWorkspaceView } from '../../../lib/workspace-routes';
 import type { CustomerBalance, PayCustomerBalancePayload } from '../../../lib/api/customerBalance';
 import type { ServiceWorkflowDraft } from '../../forms/ServiceForm';
 import type { DataTablePagination } from '../../tables/DataTable';
@@ -95,6 +95,7 @@ export interface DashboardTabContext {
   isCustomerBalanceLoading: boolean;
   customerBalanceError: string;
   customerPageView: CustomerWorkspaceView;
+  transactionPageView: TransactionWorkspaceView;
   customerPageOptions: CustomerPageOption[];
   customerSectionTitle: string;
   customerSectionDescription: string;
@@ -153,6 +154,8 @@ export interface DashboardTabContext {
   reloadTransactions: () => void;
   reloadServices: () => void;
   reloadCustomerBalance: () => void;
+  reloadAccounts: () => void;
+  reloadDepartments: () => void;
   reloadRoleTemplates: () => void;
   handleCustomerBalancePayment: (payload: PayCustomerBalancePayload) => Promise<boolean>;
   handleLogout: () => void;

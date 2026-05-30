@@ -2,5 +2,5 @@ import WorkspaceModulePage from '../../../components/dashboard/WorkspaceModulePa
 import TransactionsTab from '../../../components/dashboard/active-tab/TransactionsTab';
 
 export default function TransactionsPage() {
-  return <WorkspaceModulePage activeTab="transactions" ContentComponent={TransactionsTab} />;
+  return <WorkspaceModulePage activeTab="transactions" transactionPageView="add" ContentComponent={TransactionsTab} />;
 }

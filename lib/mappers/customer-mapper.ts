@@ -30,6 +30,7 @@ export const mapCustomerRecord = (record: UnknownRecord): BusinessCustomer | nul
 
   return {
     id,
+    customerCode: readStringValue(record, ['customerCode', 'customer_code', 'code', 'customer_id_code']) || undefined,
     name,
     customerName: name,
     phone,

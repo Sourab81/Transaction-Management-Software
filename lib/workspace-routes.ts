@@ -3,11 +3,17 @@ import { getAllowedModules, getModuleById, type UserRole } from './platform-stru
 export const DEFAULT_WORKSPACE_MODULE_ID = 'dashboard';
 export const LOGIN_ROUTE = '/login';
 export type CustomerWorkspaceView = 'list' | 'payments' | 'outstanding';
+export type TransactionWorkspaceView = 'add' | 'list';
 
 const customerWorkspaceViewPathMap: Record<CustomerWorkspaceView, string> = {
   list: '/customers',
   payments: '/customers/payments',
   outstanding: '/customers/outstanding',
+};
+
+const transactionWorkspaceViewPathMap: Record<TransactionWorkspaceView, string> = {
+  add: '/transactions/add',
+  list: '/transactions/list',
 };
 
 export const isWorkspaceModuleId = (moduleId: string) => Boolean(getModuleById(moduleId));
@@ -29,3 +35,8 @@ export const isCustomerWorkspaceView = (view: string): view is Exclude<CustomerW
   view === 'payments' || view === 'outstanding';
 
 export const getCustomerWorkspacePath = (view: CustomerWorkspaceView = 'list') => customerWorkspaceViewPathMap[view];
+
+export const isTransactionWorkspaceView = (view: string): view is TransactionWorkspaceView =>
+  view === 'add' || view === 'list';
+
+export const getTransactionWorkspacePath = (view: TransactionWorkspaceView = 'add') => transactionWorkspaceViewPathMap[view];

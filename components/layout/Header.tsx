@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { FaBars, FaBell, FaEllipsisV, FaSearch, FaUser } from 'react-icons/fa';
+import { FaBars, FaBell, FaEllipsisV, FaExchangeAlt, FaSearch, FaUser } from 'react-icons/fa';
 import { getCustomerWorkspaceViewUi, getModuleLabel } from '../../lib/module-ui';
 import { getModuleDisplayById, getRoleLabel, type UserRole } from '../../lib/platform-structure';
 import type { CustomerWorkspaceView } from '../../lib/workspace-routes';
-import CounterDropdown from '../ui/CounterDropdown';
 
 interface Counter {
   id: string;
@@ -30,6 +29,7 @@ interface HeaderProps {
     businessId?: string;
   };
   onCounterChange: (counterId: string) => void;
+  onDepartmentPickerOpen: () => void;
   onSearch: (query: string) => void;
   onProfileOpen: () => void;
   onNotificationsClick: () => void;
@@ -45,7 +45,7 @@ const Header: React.FC<HeaderProps> = ({
   notificationCount,
   searchValue,
   currentUser,
-  onCounterChange,
+  onDepartmentPickerOpen,
   onSearch,
   onProfileOpen,
   onNotificationsClick,
@@ -62,6 +62,7 @@ const Header: React.FC<HeaderProps> = ({
     : getModuleLabel(activeTab) || currentModule?.label || 'Dashboard';
   const roleLabel = getRoleLabel(currentUser.role);
   const showDepartmentSelector = (currentUser.role === 'Customer' || currentUser.role === 'Employee') && counters.length > 0;
+  const selectedCounter = counters.find((counter) => counter.id === selectedCounterId) || null;
   const headerRef = useRef<HTMLElement | null>(null);
   const compactSearchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -117,13 +118,13 @@ const Header: React.FC<HeaderProps> = ({
       return (
         <div className={['header-counter', className].filter(Boolean).join(' ')}>
           <p className="header-counter__label">Department</p>
-          <div className="header-counter__dropdown">
-            <CounterDropdown
-              counters={counters}
-              selectedCounterId={selectedCounterId}
-              onChange={onCounterChange}
-            />
-          </div>
+          <button type="button" className="header-counter__button" onClick={onDepartmentPickerOpen}>
+            <span className="header-counter__name">{selectedCounter?.name || 'Select department'}</span>
+            <span className="header-counter__change">
+              <FaExchangeAlt size={10} />
+              Change
+            </span>
+          </button>
         </div>
       );
     }

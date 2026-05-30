@@ -368,6 +368,12 @@ export const getStoredUser = (): SessionUser | null => {
 };
 
 export const logoutUser = () => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('selected_department');
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('enest:selected-counter:'))
+      .forEach((key) => localStorage.removeItem(key));
+  }
   updateStoredUser(null);
   void clearServerAuthSession();
 };

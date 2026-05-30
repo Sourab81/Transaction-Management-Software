@@ -51,6 +51,7 @@ export type BusinessOnboardingStep = 'welcome' | 'departments' | 'accounts' | 's
 
 export interface BusinessCustomer {
   id: string;
+  customerCode?: string;
   name: string;
   phone: string;
   email?: string;

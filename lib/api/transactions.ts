@@ -79,6 +79,16 @@ export interface UpdateTransactionPayload {
   status?: number;
 }
 
+export interface PayTransactionPayload {
+  transactionId: number | string;
+  customerId: number | string;
+  counterId?: number | string | null;
+  onlineAmount: number;
+  cashAmount: number;
+  accountId?: number | string | null;
+  remark?: string | null;
+}
+
 export interface TransactionMutationResult {
   success: boolean;
   message: string;
@@ -162,4 +172,13 @@ export const deleteTransaction = (transactionId: number | string) =>
       transactionId,
     }),
     'Transaction deleted successfully.',
+  );
+
+export const payTransaction = (payload: PayTransactionPayload) =>
+  handleTransactionMutation(
+    () => requestAppApiMutation('/api/transactions', {
+      action: 'pay',
+      ...payload,
+    }),
+    'Transaction payment saved successfully.',
   );

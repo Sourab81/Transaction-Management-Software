@@ -139,7 +139,8 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
 
   const customerId = readStringValue(record, ['customerId', 'customer_id']) || '';
   const customerCode = readStringValue(record, ['customer_code', 'customerCode']) || undefined;
-  const customerDisplay = customerCode || (customerId ? `Customer #${customerId}` : 'Customer');
+  const customerName = readStringValue(record, ['customer_name', 'customerName', 'name']) || undefined;
+  const customerDisplay = customerName || customerCode || (customerId ? `Customer #${customerId}` : 'Customer');
   const paymentMode = normalizePaymentMode(readStringValue(record, ['payment_mode', 'paymentMode', 'mode']));
   const amount = readNumberValue(record, ['transactionAmount', 'transaction_amount', 'amount', 'base_amount', 'baseAmount']) || 0;
   const serviceCharge = readNumberValue(record, ['service_charge', 'serviceCharge']) || 0;

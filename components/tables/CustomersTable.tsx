@@ -75,6 +75,9 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
     'customerName' in customer && customer.customerName ? customer.customerName : customer.name;
   const getCustomerMobile = (customer: CustomerDirectoryRecord) =>
     'mobileNo' in customer && customer.mobileNo ? customer.mobileNo : customer.phone;
+  const getCustomerCode = (customer: CustomerDirectoryRecord) =>
+    'customerCode' in customer && customer.customerCode ? customer.customerCode : '-';
+  const isCustomerDirectory = entityLabel === 'Customer';
 
   const columns: Array<DataTableColumn<CustomerDirectoryRecord>> = [
     {
@@ -83,6 +86,13 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       render: (_customer, index) =>
         (pagination ? ((pagination.currentPage - 1) * pagination.limit) : 0) + index + 1,
     },
+    ...(isCustomerDirectory
+      ? [{
+          key: 'customerCode',
+          header: 'Customer Code',
+          render: getCustomerCode,
+        }]
+      : []),
     {
       key: 'name',
       header: entityLabel === 'Customer' ? 'Customer Name' : entityLabel,
@@ -97,7 +107,7 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       : []),
     {
       key: 'phone',
-      header: 'Mobile No.',
+      header: 'Mobile',
       render: getCustomerMobile,
     },
     {
@@ -109,11 +119,6 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       key: 'address',
       header: 'Address',
       render: (customer) => 'address' in customer ? customer.address || 'Not added' : 'Not added',
-    },
-    {
-      key: 'remark',
-      header: 'Remark',
-      render: (customer) => 'remark' in customer ? customer.remark || 'No remark' : 'No remark',
     },
     {
       key: 'status',
@@ -128,11 +133,13 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
         );
       },
     },
-    {
-      key: 'joined',
-      header: 'Added Date',
-      render: (customer) => 'addedDate' in customer ? customer.addedDate || customer.joinedDate || 'Not added' : customer.joinedDate || 'Not added',
-    },
+    ...(isCustomerDirectory
+      ? []
+      : [{
+          key: 'joined',
+          header: 'Added Date',
+          render: (customer: CustomerDirectoryRecord) => 'addedDate' in customer ? customer.addedDate || customer.joinedDate || 'Not added' : customer.joinedDate || 'Not added',
+        }]),
   ];
 
   return (

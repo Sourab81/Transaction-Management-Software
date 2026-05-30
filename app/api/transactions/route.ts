@@ -234,6 +234,33 @@ const buildDeletePayload = (payload: Record<string, unknown>) => {
   return { transaction_id: transactionId };
 };
 
+const buildPayPayload = (payload: Record<string, unknown>) => {
+  const transactionId = readRequiredId(payload, ['transactionId', 'transaction_id', 'id'], 'Transaction');
+  if (transactionId instanceof Response) return transactionId;
+
+  const customerId = readRequiredId(payload, ['customerId', 'customer_id'], 'Customer');
+  if (customerId instanceof Response) return customerId;
+
+  const onlineAmount = readRequiredNumber(payload, ['onlineAmount', 'online_amount'], 'Online amount');
+  if (onlineAmount instanceof Response) return onlineAmount;
+
+  const cashAmount = readRequiredNumber(payload, ['cashAmount', 'cash_amount'], 'Cash amount');
+  if (cashAmount instanceof Response) return cashAmount;
+
+  const backendPayload: Record<string, unknown> = {
+    transaction_id: transactionId,
+    customer_id: customerId,
+    online_amount: onlineAmount,
+    cash_amount: cashAmount,
+  };
+
+  addOptionalField(backendPayload, 'counter_id', payload, ['counterId', 'counter_id']);
+  addOptionalField(backendPayload, 'account_id', payload, ['accountId', 'account_id']);
+  addOptionalField(backendPayload, 'remark', payload, ['remark']);
+
+  return backendPayload;
+};
+
 export async function GET(request: Request) {
   try {
     // Transaction list can be loaded by older frontend callers with GET.
@@ -258,6 +285,7 @@ export async function POST(request: Request) {
     create: 'createTransaction',
     update: 'updateTransaction',
     delete: 'deleteTransaction',
+    pay: 'payTransaction',
   };
   const endpoint = endpointByAction[action];
 
@@ -268,10 +296,12 @@ export async function POST(request: Request) {
   const backendPayload = action === 'list'
     ? buildListPayload(payload)
     : action === 'create'
-      ? buildCreatePayload(payload)
-      : action === 'update'
-        ? buildUpdatePayload(payload)
-        : buildDeletePayload(payload);
+        ? buildCreatePayload(payload)
+        : action === 'update'
+          ? buildUpdatePayload(payload)
+          : action === 'pay'
+            ? buildPayPayload(payload)
+            : buildDeletePayload(payload);
 
   if (backendPayload instanceof Response) return backendPayload;
 

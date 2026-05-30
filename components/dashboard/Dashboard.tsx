@@ -2,7 +2,7 @@
 
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { FaBell, FaBuilding, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar, FaFilter } from 'react-icons/fa';
+import { FaBell, FaBuilding, FaCheckCircle, FaDollarSign, FaExclamationTriangle, FaHourglassHalf, FaUsers, FaChartLine, FaCog, FaReceipt, FaHistory, FaTools, FaFolderOpen, FaFileAlt, FaPlusCircle, FaUsersCog, FaArchive, FaUniversity, FaStar, FaFilter } from 'react-icons/fa';
 import { getAvailableUsers, type SessionUser } from '../../lib/auth-session';
 import {
   checkUserIdentityAvailability,
@@ -133,7 +133,7 @@ import {
   getBusinessSubscriptionPlan,
   type BusinessSubscription,
 } from '../../lib/subscription';
-import { getCustomerWorkspacePath, type CustomerWorkspaceView } from '../../lib/workspace-routes';
+import { getCustomerWorkspacePath, type CustomerWorkspaceView, type TransactionWorkspaceView } from '../../lib/workspace-routes';
 import { normalizePhoneNumber } from '../../lib/validators/phone-validator';
 
 const getSubscriptionStatusLabel = (status?: BusinessSubscription['status']) => {
@@ -349,6 +349,7 @@ interface DashboardProps {
   onSessionUserChange: (user: SessionUser) => void;
   activeTab: string;
   customerPageView: CustomerWorkspaceView;
+  transactionPageView: TransactionWorkspaceView;
   onNavigate: (moduleId: string) => void;
   children: React.ReactNode;
 }
@@ -401,7 +402,54 @@ const initialDashboardFilterState: DashboardFilterState = {
 };
 
 const emptyTransactionRecords: Transaction[] = [];
-const SELECTED_COUNTER_STORAGE_PREFIX = 'enest:selected-counter';
+const SELECTED_DEPARTMENT_STORAGE_KEY = 'selected_department';
+const LEGACY_SELECTED_COUNTER_STORAGE_PREFIX = 'enest:selected-counter';
+
+const readStoredSelectedDepartmentId = (legacyStorageKey: string) => {
+  if (typeof window === 'undefined') return '';
+
+  const storedDepartment = window.localStorage.getItem(SELECTED_DEPARTMENT_STORAGE_KEY);
+  if (storedDepartment?.trim()) {
+    try {
+      const parsed = JSON.parse(storedDepartment) as Partial<{ id: unknown; counterId: unknown }>;
+      const storedId = typeof parsed.counterId === 'string' && parsed.counterId.trim()
+        ? parsed.counterId.trim()
+        : typeof parsed.id === 'string' && parsed.id.trim()
+          ? parsed.id.trim()
+          : '';
+
+      if (storedId) return storedId;
+    } catch {
+      window.localStorage.removeItem(SELECTED_DEPARTMENT_STORAGE_KEY);
+    }
+  }
+
+  return window.localStorage.getItem(legacyStorageKey)?.trim() || '';
+};
+
+const writeStoredSelectedDepartment = (
+  department: Pick<Counter, 'id' | 'name'>,
+  legacyStorageKey: string,
+) => {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.setItem(
+    SELECTED_DEPARTMENT_STORAGE_KEY,
+    JSON.stringify({
+      id: department.id,
+      name: department.name,
+      counterId: department.id,
+    }),
+  );
+  window.localStorage.setItem(legacyStorageKey, department.id);
+};
+
+const clearStoredSelectedDepartment = (legacyStorageKey: string) => {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.removeItem(SELECTED_DEPARTMENT_STORAGE_KEY);
+  window.localStorage.removeItem(legacyStorageKey);
+};
 
 const Dashboard: React.FC<DashboardProps> = ({
   currentUser,
@@ -410,6 +458,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSessionUserChange,
   activeTab,
   customerPageView,
+  transactionPageView,
   onNavigate,
   children,
 }) => {
@@ -519,7 +568,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   } = uiState;
   const [selectedCounterId, setSelectedCounterId] = useState('');
   const [hasLoadedStoredCounter, setHasLoadedStoredCounter] = useState(false);
-  const [departmentPromptCounterId, setDepartmentPromptCounterId] = useState('');
+  const [isDepartmentPickerOpen, setIsDepartmentPickerOpen] = useState(false);
   const [isTransactionDraftDirty, setIsTransactionDraftDirty] = useState(false);
   const [payingTransaction, setPayingTransaction] = useState<Transaction | null>(null);
   const [transactionPaymentAmount, setTransactionPaymentAmount] = useState('');
@@ -530,22 +579,24 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isPayingTransaction, setIsPayingTransaction] = useState(false);
   const requestedApiCounterId = selectedCounterId;
   const inventoryCounterId = selectedCounterId || editingTransaction?.departmentId || '';
+  const isAddTransactionPage = activeTab === 'transactions' && transactionPageView === 'add';
+  const isTransactionsListPage = activeTab === 'transactions' && transactionPageView === 'list';
   const shouldLoadWorkspaceApi = currentRole !== 'Admin' && Boolean(currentUser.businessId);
   const isAccountsTab = activeTab === 'accounts';
   const isTransactionEditModalOpen = activeModal === 'edit-transaction';
   // Accounts/services stay page-scoped and load on transactions only because the form needs dropdowns.
-  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'transactions' || isTransactionEditModalOpen || (activeTab === 'customers' && customerPageView === 'payments'));
+  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && customerPageView === 'payments'));
   // Departments are shared shell data because the header selector scopes
   // transactions, services, and search on every workspace page.
   const shouldLoadDepartmentsApi = shouldLoadWorkspaceApi;
   const shouldLoadCustomersApi = shouldLoadWorkspaceApi
-    && (activeTab === 'customers' || activeTab === 'transactions');
+    && (activeTab === 'customers' || isAddTransactionPage);
   const shouldLoadEmployeesApi = shouldLoadWorkspaceApi && activeTab === 'employee';
   // Inventory page owns inventory API loading and does not preload other modules.
   const shouldLoadServicesApi = shouldLoadWorkspaceApi
     && Boolean(inventoryCounterId)
-    && (activeTab === 'services' || activeTab === 'transactions' || isTransactionEditModalOpen);
-  const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && activeTab === 'transactions' && Boolean(requestedApiCounterId);
+    && (activeTab === 'services' || isAddTransactionPage || isTransactionEditModalOpen);
+  const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && (activeTab === 'dashboard' || isTransactionsListPage) && Boolean(requestedApiCounterId);
   const shouldLoadCustomerBalanceApi = shouldLoadWorkspaceApi && activeTab === 'customers' && customerPageView === 'payments';
   const shouldLoadReportsApi = shouldLoadWorkspaceApi && activeTab === 'reports';
   const shouldLoadDashboardSummaryApi = shouldLoadWorkspaceApi && activeTab === 'dashboard';
@@ -612,6 +663,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const {
     summary: apiDashboardSummary,
     isLoading: isDashboardSummaryLoading,
+    reload: reloadDashboardSummary,
   } = useDashboardSummary(shouldLoadDashboardSummaryApi, initialWorkspaceApiData?.dashboardSummary);
   const adminWorkspace = useAdminWorkspaceData();
   const businessWorkspacesById = useBusinessWorkspacesById();
@@ -763,7 +815,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleCounterChange = (nextCounterId: string) => {
     if (
-      activeTab === 'transactions'
+      isAddTransactionPage
       && isTransactionDraftDirty
       && nextCounterId !== safeSelectedCounterId
       && !window.confirm('Changing department will clear selected transaction rows. Continue?')
@@ -772,9 +824,20 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
 
     setSelectedCounterId(nextCounterId);
-    if (activeTab === 'transactions') {
+    const nextDepartment = availableCounters.find((counter) => counter.id === nextCounterId);
+    if (nextDepartment) {
+      writeStoredSelectedDepartment(nextDepartment, selectedCounterStorageKey);
+    }
+    setIsDepartmentPickerOpen(false);
+    if (isAddTransactionPage) {
       setIsTransactionDraftDirty(false);
     }
+    reloadServices();
+    reloadTransactions();
+    reloadCustomerBalance();
+    reloadAccounts();
+    reloadDepartments();
+    reloadDashboardSummary();
   };
 
   const setHistoryStatusFilter: React.Dispatch<React.SetStateAction<HistoryStatusFilter>> = (value) => {
@@ -880,7 +943,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     : '';
   const selectedCounter = availableCounters.find((counter) => counter.id === safeSelectedCounterId) || null;
   const selectedDepartmentName = selectedCounter?.name || '';
-  const selectedCounterStorageKey = `${SELECTED_COUNTER_STORAGE_PREFIX}:${currentUser.businessId || currentUser.id}`;
+  const selectedCounterStorageKey = `${LEGACY_SELECTED_COUNTER_STORAGE_PREFIX}:${currentUser.businessId || currentUser.id}`;
 
   useEffect(() => {
     if (currentRole === 'Admin') {
@@ -888,33 +951,38 @@ const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
-    if (hasLoadedStoredCounter || availableCounters.length === 0) {
-      if (availableCounters.length === 0) {
-        setHasLoadedStoredCounter(true);
-      }
+    if (hasLoadedStoredCounter) {
       return;
     }
 
-    const storedCounterId = window.localStorage.getItem(selectedCounterStorageKey)?.trim() || '';
-    const nextCounterId = availableCounters.some((counter) => counter.id === storedCounterId)
-      ? storedCounterId
-      : '';
-
-    if (nextCounterId) {
-      setSelectedCounterId(nextCounterId);
+    const storedDepartmentId = readStoredSelectedDepartmentId(selectedCounterStorageKey);
+    if (storedDepartmentId) {
+      setSelectedCounterId(storedDepartmentId);
     }
     setHasLoadedStoredCounter(true);
-  }, [availableCounters, currentRole, hasLoadedStoredCounter, selectedCounterStorageKey]);
+  }, [currentRole, hasLoadedStoredCounter, selectedCounterStorageKey]);
 
   useEffect(() => {
     if (currentRole === 'Admin' || !hasLoadedStoredCounter) {
       return;
     }
 
-    if (safeSelectedCounterId) {
-      window.localStorage.setItem(selectedCounterStorageKey, safeSelectedCounterId);
+    if (!selectedCounterId || availableCounters.length === 0) {
+      return;
     }
-  }, [currentRole, hasLoadedStoredCounter, safeSelectedCounterId, selectedCounterStorageKey]);
+
+    const matchedDepartment = availableCounters.find((counter) => counter.id === selectedCounterId);
+    if (!matchedDepartment) {
+      clearStoredSelectedDepartment(selectedCounterStorageKey);
+      setSelectedCounterId('');
+      setIsDepartmentPickerOpen(true);
+      return;
+    }
+
+    if (safeSelectedCounterId) {
+      writeStoredSelectedDepartment(matchedDepartment, selectedCounterStorageKey);
+    }
+  }, [availableCounters, currentRole, hasLoadedStoredCounter, safeSelectedCounterId, selectedCounterId, selectedCounterStorageKey]);
 
   const shouldShowDepartmentSelectionModal = currentRole !== 'Admin'
     && !shouldShowBusinessOnboarding
@@ -922,6 +990,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     && hasLoadedStoredCounter
     && availableCounters.length > 0
     && !safeSelectedCounterId;
+  const shouldRenderDepartmentPicker = shouldShowDepartmentSelectionModal || isDepartmentPickerOpen;
   const departmentScopedServices = safeSelectedCounterId
     ? getServicesForDepartment(services, safeSelectedCounterId)
     : [];
@@ -1529,12 +1598,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   const workflowDraftToken = workflowDraft?.token;
 
   useEffect(() => {
-    if (activeTab === 'transactions' && workflowDraftToken) {
+    if (isAddTransactionPage && workflowDraftToken) {
       window.setTimeout(() => {
         document.getElementById('service-workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 0);
     }
-  }, [activeTab, workflowDraftToken]);
+  }, [isAddTransactionPage, workflowDraftToken]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -4729,6 +4798,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     isCustomerBalanceLoading,
     customerBalanceError,
     customerPageView,
+    transactionPageView,
     customerPageOptions,
     customerSectionTitle,
     customerSectionDescription,
@@ -4787,6 +4857,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     reloadTransactions,
     reloadServices,
     reloadCustomerBalance,
+    reloadAccounts,
+    reloadDepartments,
     reloadRoleTemplates,
     handleCustomerBalancePayment,
     handleLogout: onLogout,
@@ -4890,7 +4962,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     }
 
-    if (activeTab === 'transactions') {
+    if (isTransactionsListPage) {
       if (!isTransactionsLoading && transactionsError && transactionHistory.length === 0) {
         return (
           <ErrorState
@@ -5020,6 +5092,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           searchValue={searchQuery}
           currentUser={{ ...currentUser, name: displayUserName }}
           onCounterChange={handleCounterChange}
+          onDepartmentPickerOpen={() => setIsDepartmentPickerOpen(true)}
           onSearch={handleSearch}
           onProfileOpen={() => onNavigate('profile')}
           onNotificationsClick={() => updateUiState('activeModal', 'notifications')}
@@ -5035,41 +5108,73 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
       {renderModal()}
       {renderIdentityConflictModal()}
-      {shouldShowDepartmentSelectionModal ? (
+      {shouldRenderDepartmentPicker ? (
         <ActionModal
           title="Select Department"
-          eyebrow="Department Required"
-          description="Please select department first. Transactions and inventory are loaded from the selected department."
-          onClose={() => addNotification('warning', 'Please select department first.')}
+          eyebrow={shouldShowDepartmentSelectionModal ? 'Department Required' : 'Workspace Scope'}
+          description="Choose a department to load its inventory, transactions, balances, and workspace summaries."
+          onClose={() => {
+            if (shouldShowDepartmentSelectionModal) {
+              addNotification('warning', 'Please select department first.');
+              return;
+            }
+
+            setIsDepartmentPickerOpen(false);
+          }}
         >
-          <div className="row g-3">
-            <div className="col-12">
-              <label className="form-label" htmlFor="login-department-select">Department</label>
-              <select
-                id="login-department-select"
-                className="form-select"
-                value={departmentPromptCounterId}
-                onChange={(event) => setDepartmentPromptCounterId(event.target.value)}
-              >
-                <option value="">Select Department</option>
-                {availableCounters.map((counter) => (
-                  <option key={counter.id} value={counter.id}>
-                    {counter.code ? `${counter.code} / ${counter.name}` : counter.name}
-                  </option>
-                ))}
-              </select>
+          {isDepartmentsLoading && availableCounters.length === 0 ? (
+            <div className="department-card-grid">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="department-select-card department-select-card--loading" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn-app btn-app-primary"
-              disabled={!departmentPromptCounterId}
-              onClick={() => handleCounterChange(departmentPromptCounterId)}
-            >
-              Continue
-            </button>
-          </div>
+          ) : availableCounters.length === 0 ? (
+            <EmptyState
+              eyebrow="Departments"
+              title="No departments available."
+              description="Create a department before starting transaction or inventory work."
+            />
+          ) : (
+            <div className="department-card-grid">
+              {availableCounters.map((counter) => {
+                const isSelected = counter.id === safeSelectedCounterId;
+
+                return (
+                  <button
+                    key={counter.id}
+                    type="button"
+                    className={`department-select-card ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => handleCounterChange(counter.id)}
+                    aria-pressed={isSelected}
+                  >
+                    <span className="department-select-card__topline">
+                      <span className="department-select-card__code">{counter.code || counter.id}</span>
+                      <span className={`status-chip ${counter.status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
+                        {counter.status}
+                      </span>
+                    </span>
+                    <span className="department-select-card__name">{counter.name}</span>
+                    <span className="department-select-card__balance">
+                      Current Balance: Rs. {counter.currentBalance.toLocaleString('en-IN')}
+                    </span>
+                    {counter.remark ? (
+                      <span className="department-select-card__remark">{counter.remark}</span>
+                    ) : null}
+                    {isSelected ? (
+                      <span className="department-select-card__selected">
+                        <FaCheckCircle size={14} />
+                        Selected
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </ActionModal>
       ) : null}
     </div>

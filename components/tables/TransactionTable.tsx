@@ -13,6 +13,7 @@ interface TransactionTableProps {
   isFilterOpen?: boolean;
   headerAction?: React.ReactNode;
   isLoading?: boolean;
+  compact?: boolean;
 }
 
 const formatCurrency = (value: number | undefined) => (
@@ -28,6 +29,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   isFilterOpen = false,
   headerAction,
   isLoading = false,
+  compact = false,
 }) => {
   const hasActions = Boolean(onPay || onView || onPrint);
   const [expandedChargeRows, setExpandedChargeRows] = useState<Record<string, boolean>>({});
@@ -38,37 +40,55 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     }));
   };
 
-  return (
-    <DataTable
-      rows={transactions}
-      getRowKey={(transaction) => transaction.id}
-      eyebrow="Transactions"
-      title="Recent Transactions"
-      copy="Transaction that are registered waiting for the setelment "
-      emptyLabel="No transaction records found."
-      isLoading={isLoading}
-      headerAction={headerAction || (onToggleFilters ? (
-        <button
-          type="button"
-          className="btn-app btn-app-secondary"
-          onClick={onToggleFilters}
-          aria-expanded={isFilterOpen}
-          aria-controls="transaction-filter-panel"
-        >
-          <FaFilter />
-          {isFilterOpen ? 'Hide Filters' : 'Filter'}
-        </button>
-      ) : null)}
-      columns={[
+  const columns = compact
+    ? [
+        {
+          key: 'date',
+          header: 'Date',
+          render: (transaction: Transaction) => transaction.date,
+        },
+        {
+          key: 'customer',
+          header: 'Customer',
+          render: (transaction: Transaction) => (
+            <span className="data-table__primary">
+              {transaction.customerCode || transaction.customerId || '-'}
+            </span>
+          ),
+        },
+        {
+          key: 'totalAmount',
+          header: 'Total',
+          render: (transaction: Transaction) => (
+            <span className="data-table__primary">{formatCurrency(transaction.totalAmount)}</span>
+          ),
+        },
+        {
+          key: 'currentBalance',
+          header: 'Balance',
+          render: (transaction: Transaction) => {
+            const balance = typeof transaction.currentBalance !== 'undefined'
+              ? transaction.currentBalance
+              : transaction.dueAmount;
+
+            return (
+              <span className={getCustomerBalanceClassName(balance)}>
+                {formatCustomerBalance(balance)}
+              </span>
+            );
+          },
+        },
+      ]
+    : [
         {
           key: 'date',
           header: 'Transaction Date',
-          render: (transaction) => transaction.date,
+          render: (transaction: Transaction) => transaction.date,
         },
         {
           key: 'customer',
           header: 'ID/Customer',
-          render: (transaction) => (
+          render: (transaction: Transaction) => (
             <span className="data-table__primary">
               {transaction.customerCode || transaction.customerId || '-'}
             </span>
@@ -77,17 +97,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         {
           key: 'numberOfTransactions',
           header: 'No. of Transactions',
-          render: (transaction) => transaction.numberOfTransactions ?? transaction.noOfTransaction ?? transaction.rows?.length ?? 1,
+          render: (transaction: Transaction) => transaction.numberOfTransactions ?? transaction.noOfTransaction ?? transaction.rows?.length ?? 1,
         },
         {
           key: 'transactionAmount',
           header: 'Transaction Amount',
-          render: (transaction) => formatCurrency(transaction.transactionAmount ?? transaction.amount ?? transaction.totalAmount),
+          render: (transaction: Transaction) => formatCurrency(transaction.transactionAmount ?? transaction.amount ?? transaction.totalAmount),
         },
         {
           key: 'totalAmount',
           header: 'Total Amount',
-          render: (transaction) => {
+          render: (transaction: Transaction) => {
             const isExpanded = Boolean(expandedChargeRows[transaction.id]);
 
             return (
@@ -120,7 +140,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         {
           key: 'currentBalance',
           header: 'Current Balance',
-          render: (transaction) => {
+          render: (transaction: Transaction) => {
             const balance = typeof transaction.currentBalance !== 'undefined'
               ? transaction.currentBalance
               : transaction.dueAmount;
@@ -135,9 +155,32 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         {
           key: 'added',
           header: 'Added By',
-          render: (transaction) => transaction.addedByName || '-',
+          render: (transaction: Transaction) => transaction.addedByName || '-',
         },
-      ]}
+      ];
+
+  return (
+    <DataTable
+      rows={transactions}
+      getRowKey={(transaction) => transaction.id}
+      eyebrow="Transactions"
+      title="Recent Transactions"
+      copy="Transactions registered and waiting for settlement."
+      emptyLabel="No transaction records found."
+      isLoading={isLoading}
+      headerAction={headerAction || (onToggleFilters ? (
+        <button
+          type="button"
+          className="btn-app btn-app-secondary"
+          onClick={onToggleFilters}
+          aria-expanded={isFilterOpen}
+          aria-controls="transaction-filter-panel"
+        >
+          <FaFilter />
+          {isFilterOpen ? 'Hide Filters' : 'Filter'}
+        </button>
+      ) : null)}
+      columns={columns}
       renderActions={(transaction) => (
         <div className="table-actions">
           {onPay && (

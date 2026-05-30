@@ -3,10 +3,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
 import { createCustomer } from '../../lib/api/customers';
-import { createInventory } from '../../lib/api/inventory';
 import { createTransaction } from '../../lib/api/transactions';
 import { mapCustomerRecord } from '../../lib/mappers/customer-mapper';
-import { isRecord, readNumberValue, readStringValue } from '../../lib/mappers/legacy-record';
+import { isRecord } from '../../lib/mappers/legacy-record';
 import {
   createRecordId,
   type Account,
@@ -42,7 +41,7 @@ interface TransactionFormPayload {
   inventoryItemType?: 'service' | 'product';
   transactionAccount: string;
   transactionAccountId: string | null;
-  transactionAccountType: 'cash' | 'bank';
+  transactionAccountType: 'other' | 'bank';
   unitAmount: number;
   amount: number;
   serviceCharge: number;
@@ -83,7 +82,6 @@ interface ServiceFormProps {
   onCustomersChanged?: () => void;
   onTransactionsChanged?: () => void | Promise<void>;
   onDirtyChange?: (isDirty: boolean) => void;
-  onInventoryChanged?: () => void;
 }
 
 const toSafeAmount = (value: string) => parseNonNegativeNumber(value) ?? 0;
@@ -107,17 +105,21 @@ const getCustomerDisplayName = (customer: BusinessCustomer) =>
 const getCustomerPhone = (customer: BusinessCustomer) =>
   customer.mobileNo || customer.phone;
 
+const getCustomerCode = (customer: BusinessCustomer) =>
+  customer.customerCode || '';
+
 const getCustomerSearchLabel = (customer: BusinessCustomer) => {
   const name = getCustomerDisplayName(customer);
   const phone = getCustomerPhone(customer);
-  return phone ? `${phone} - ${name}` : name;
+  const code = getCustomerCode(customer);
+  return [name, phone, code].filter(Boolean).join(' / ');
 };
 
 const isCurrentRowEmpty = (row: TransactionDraftRow) => (
   !row.formName.trim()
   && !row.serviceProduct.trim()
   && !row.inventoryItemId
-  && !row.amount.trim()
+  && toSafeAmount(row.amount) === 0
   && !row.remark.trim()
   && toSafeAmount(row.serviceCharge) === 0
   && toSafeAmount(row.bankCharge) === 0
@@ -165,7 +167,6 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   onCustomersChanged,
   onTransactionsChanged,
   onDirtyChange,
-  onInventoryChanged,
 }) => {
   const dispatch = useAppDispatch();
   const customerPanelRef = useRef<HTMLDivElement | null>(null);
@@ -173,10 +174,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const initialService = draft?.serviceId
     ? services.find((service) => service.id === draft.serviceId)
     : null;
-  const initialAmount = typeof draft?.totalAmount === 'number'
-    ? draft.totalAmount
-    : initialService?.price ?? 0;
-  const defaultTransactionAccountId = 'cash';
+  const defaultTransactionAccountId = 'other';
   const initialCustomerId = draft?.customerId && customers.some((customer) => customer.id === draft.customerId)
     ? draft.customerId
     : '';
@@ -191,7 +189,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     serviceProduct: initialService?.name || '',
     inventoryItemId: initialService?.id || '',
     transactionAccountId: defaultTransactionAccountId,
-    amount: initialAmount ? String(initialAmount) : '',
+    amount: '0',
     serviceCharge: '0',
     bankCharge: '0',
     otherCharge: '0',
@@ -204,34 +202,33 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<BusinessCustomer | null>(
     initialCustomer,
   );
-  const [customerSearch, setCustomerSearch] = useState(initialCustomer ? getCustomerSearchLabel(initialCustomer) : '');
+  const [customerOptions, setCustomerOptions] = useState<BusinessCustomer[]>(customers);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState(initialCustomer ? getCustomerSearchLabel(initialCustomer) : '');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [isInventoryDropdownOpen, setIsInventoryDropdownOpen] = useState(false);
+  const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState(draft?.customerName && !initialCustomerId ? draft.customerName : '');
   const [newCustomerPhone, setNewCustomerPhone] = useState(draft?.customerPhone && !initialCustomerId ? draft.customerPhone : '');
   const [newCustomerEmail, setNewCustomerEmail] = useState(draft?.customerEmail && !initialCustomerId ? draft.customerEmail : '');
+  const [newCustomerAddress, setNewCustomerAddress] = useState('');
+  const [newCustomerRemark, setNewCustomerRemark] = useState('');
+  const [customerModalError, setCustomerModalError] = useState('');
   const [validationError, setValidationError] = useState('');
   const [isCustomerPanelHighlighted, setIsCustomerPanelHighlighted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
-  const [localInventoryItems, setLocalInventoryItems] = useState<Service[]>([]);
-  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
-  const [newInventoryName, setNewInventoryName] = useState('');
-  const [newInventoryType, setNewInventoryType] = useState<'service' | 'product'>('service');
-  const [newInventoryQuantity, setNewInventoryQuantity] = useState('0');
-  const [newInventoryRemark, setNewInventoryRemark] = useState('');
-  const [inventoryError, setInventoryError] = useState('');
-  const [isCreatingInventory, setIsCreatingInventory] = useState(false);
   const selectedCounterId = selectedDepartment?.id || '';
 
   const inventoryItems = useMemo(() => {
     const byId = new Map<string, Service>();
-    [...services, ...localInventoryItems].forEach((service) => {
+    services.forEach((service) => {
       if (isServiceActiveForCounter(service, selectedCounterId)) {
         byId.set(service.id, service);
       }
     });
 
     return Array.from(byId.values());
-  }, [localInventoryItems, selectedCounterId, services]);
+  }, [selectedCounterId, services]);
 
   const isInventoryValidForSelectedDepartment = (inventoryId: string | number | null | undefined) => (
     inventoryItems.some((service) =>
@@ -275,8 +272,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   }, [currentAmounts, currentRow, currentTotal, savedRows]);
 
   const accountOptions = [
-    // Cash option is available even when no bank account exists.
-    { value: 'cash', label: 'Cash' },
+    { value: 'other', label: 'Other' },
     ...accounts.map((account) => ({
       value: account.id,
       label: `${account.accountHolder} | ${account.bankName}`,
@@ -300,13 +296,41 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     onDirtyChange?.(!isCurrentRowEmpty(currentRow) || savedRows.length > 0);
   }, [currentRow, onDirtyChange, savedRows.length]);
 
-  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) || selectedCustomerSnapshot;
+  useEffect(() => {
+    setCustomerOptions((previousOptions) => {
+      const merged = new Map<string, BusinessCustomer>();
+      [...customers, ...previousOptions].forEach((customer) => {
+        merged.set(customer.id, customer);
+      });
+      return Array.from(merged.values());
+    });
+  }, [customers]);
+
+  const selectedCustomer = customerOptions.find((customer) => customer.id === selectedCustomerId) || selectedCustomerSnapshot;
   const isTransactionEntryLocked = !selectedCustomerId || !selectedDepartment?.id;
   const isTransactionEntryReadOnly = isTransactionEntryLocked || isSubmitting;
-  const customerSearchOptions = customers.map((customer) => ({
+  const normalizedCustomerSearchQuery = customerSearchQuery.trim().toLowerCase();
+  const customerSearchOptions = customerOptions.map((customer) => ({
     customer,
     label: getCustomerSearchLabel(customer),
   }));
+  const filteredCustomerSearchOptions = normalizedCustomerSearchQuery.length >= 3
+    ? customerSearchOptions.filter(({ customer, label }) => {
+        const code = getCustomerCode(customer).toLowerCase();
+        return label.toLowerCase().includes(normalizedCustomerSearchQuery)
+          || getCustomerDisplayName(customer).toLowerCase().includes(normalizedCustomerSearchQuery)
+          || getCustomerPhone(customer).toLowerCase().includes(normalizedCustomerSearchQuery)
+          || code.includes(normalizedCustomerSearchQuery);
+      })
+    : [];
+  const normalizedInventorySearchQuery = currentRow.serviceProduct.trim().toLowerCase();
+  const filteredInventoryItems = inventoryItems.filter((service) => {
+    if (!normalizedInventorySearchQuery) return true;
+
+    return service.name.toLowerCase().includes(normalizedInventorySearchQuery)
+      || getInventoryLabel(service).toLowerCase().includes(normalizedInventorySearchQuery)
+      || (service.type || '').toLowerCase().includes(normalizedInventorySearchQuery);
+  });
 
   const showCustomerRequiredMessage = () => {
     setValidationError('Please select or add a customer first.');
@@ -353,23 +377,30 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     setSelectedCustomerId(customer.id);
     setSelectedCustomerSnapshot(customer);
     setIsCustomerPanelHighlighted(false);
-    setCustomerSearch(getCustomerSearchLabel(customer));
+    setCustomerSearchQuery(getCustomerSearchLabel(customer));
+    setIsCustomerDropdownOpen(false);
     setNewCustomerPhone(getCustomerPhone(customer));
     setNewCustomerName(getCustomerDisplayName(customer));
     setNewCustomerEmail(customer.email || '');
+    setNewCustomerAddress(customer.address || '');
+    setNewCustomerRemark(customer.remark || '');
     setValidationError('');
   };
 
   const handleCustomerSearchChange = (value: string) => {
-    setCustomerSearch(value);
+    setCustomerSearchQuery(value);
     const normalizedValue = value.trim().toLowerCase();
     const matchedOption = customerSearchOptions.find(({ customer, label }) => {
       const name = getCustomerDisplayName(customer).toLowerCase();
       const phone = getCustomerPhone(customer).toLowerCase();
+      const email = (customer.email || '').toLowerCase();
+      const code = getCustomerCode(customer).toLowerCase();
       return label.toLowerCase() === normalizedValue
-        || customer.id.toLowerCase() === normalizedValue
+        || String(customer.id).toLowerCase() === normalizedValue
         || name === normalizedValue
-        || phone === normalizedValue;
+        || phone === normalizedValue
+        || email === normalizedValue
+        || code === normalizedValue;
     });
 
     if (matchedOption) {
@@ -379,43 +410,59 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
     setSelectedCustomerId('');
     setSelectedCustomerSnapshot(null);
+    setIsCustomerDropdownOpen(value.trim().length >= 3);
     setValidationError('');
   };
 
-  const beginManualCustomerEntry = () => {
-    setValidationError('');
-    if (!selectedCustomerId && !selectedCustomerSnapshot) return;
-
+  const clearSelectedCustomer = () => {
     setSelectedCustomerId('');
     setSelectedCustomerSnapshot(null);
-    setCustomerSearch('');
+    setCustomerSearchQuery('');
+    setIsCustomerDropdownOpen(false);
+    setValidationError('');
+  };
+
+  const openAddCustomerModal = () => {
+    setCustomerModalError('');
+    setNewCustomerName('');
+    setNewCustomerPhone('');
+    setNewCustomerEmail('');
+    setNewCustomerAddress('');
+    setNewCustomerRemark('');
+    setIsAddCustomerModalOpen(true);
   };
 
   const handleCreateCustomer = async () => {
     const trimmedName = newCustomerName.trim();
     const trimmedPhone = newCustomerPhone.trim();
+    const trimmedEmail = newCustomerEmail.trim();
+    const trimmedAddress = newCustomerAddress.trim();
+    const trimmedRemark = newCustomerRemark.trim();
     if (!trimmedName || !trimmedPhone) {
-      setValidationError('Customer name and phone are required to add a customer.');
+      setCustomerModalError('Customer name and mobile number are required.');
       return;
     }
 
-    const existingCustomer = customers.find((customer) => customer.phone === trimmedPhone);
+    const existingCustomer = customerOptions.find((customer) => getCustomerPhone(customer) === trimmedPhone);
     if (existingCustomer) {
       selectCustomer(existingCustomer);
+      setIsAddCustomerModalOpen(false);
       return;
     }
 
     setIsCreatingCustomer(true);
+    setCustomerModalError('');
     try {
       const result = await createCustomer({
         customerName: trimmedName,
         mobileNo: trimmedPhone,
-        email: newCustomerEmail.trim() || null,
-        remark: null,
+        email: trimmedEmail || null,
+        address: trimmedAddress || null,
+        remark: trimmedRemark || null,
       });
 
       if (!result.success) {
-        setValidationError(result.message || 'Unable to add customer right now.');
+        setCustomerModalError(result.message || 'Unable to add customer right now.');
         return;
       }
 
@@ -424,11 +471,12 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
         id: createRecordId(),
         name: trimmedName,
         customerName: trimmedName,
+        customerCode: undefined,
         phone: trimmedPhone,
         mobileNo: trimmedPhone,
-        email: newCustomerEmail.trim(),
-        address: null,
-        remark: null,
+        email: trimmedEmail,
+        address: trimmedAddress || null,
+        remark: trimmedRemark || null,
         status: 'Active',
         joinedDate,
         addedDate: joinedDate,
@@ -442,13 +490,17 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
         businessId,
         payload: createdCustomer,
       });
+      setCustomerOptions((options) => [createdCustomer, ...options.filter((customer) => customer.id !== createdCustomer.id)]);
       setSelectedCustomerId(createdCustomer.id);
       setSelectedCustomerSnapshot(createdCustomer);
       setIsCustomerPanelHighlighted(false);
-      setCustomerSearch(getCustomerSearchLabel(createdCustomer));
+      setCustomerSearchQuery(getCustomerSearchLabel(createdCustomer));
       setNewCustomerName(getCustomerDisplayName(createdCustomer));
       setNewCustomerPhone(getCustomerPhone(createdCustomer));
       setNewCustomerEmail(createdCustomer.email || '');
+      setNewCustomerAddress(createdCustomer.address || '');
+      setNewCustomerRemark(createdCustomer.remark || '');
+      setIsAddCustomerModalOpen(false);
       setValidationError('');
       onCustomersChanged?.();
     } finally {
@@ -458,6 +510,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
   const handleInventorySearchChange = (value: string) => {
     if (!ensureDepartmentSelected()) return;
+    setIsInventoryDropdownOpen(true);
 
     const matchedService = inventoryItems.find((service) =>
       service.name.toLowerCase() === value.trim().toLowerCase()
@@ -467,86 +520,21 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     updateCurrentRow({
       serviceProduct: value,
       inventoryItemId: matchedService?.id || '',
-      ...(matchedService && matchedService.price > 0 ? { amount: String(matchedService.price) } : {}),
+      ...(matchedService && matchedService.price > 0 && currentRow.transactionAccountId !== 'other'
+        ? { amount: String(matchedService.price) }
+      : {}),
     });
   };
 
-  const handleCreateInventory = async () => {
-    if (!ensureCustomerSelected()) {
-      setInventoryError('Please select or add a customer first.');
-      return;
-    }
-    if (!selectedDepartment?.id) {
-      setInventoryError('Please select department first.');
-      return;
-    }
-
-    const trimmedName = newInventoryName.trim();
-    if (!trimmedName) {
-      setInventoryError('Inventory name is required.');
-      return;
-    }
-
-    const parsedQuantity = newInventoryType === 'service' ? 0 : parseNonNegativeNumber(newInventoryQuantity);
-    if (parsedQuantity === null) {
-      setInventoryError('Quantity must be a valid zero or positive number.');
-      return;
-    }
-
-    setIsCreatingInventory(true);
-    setInventoryError('');
-    try {
-      const result = await createInventory({
-        name: trimmedName,
-        type: newInventoryType,
-        quantity: parsedQuantity,
-        remark: newInventoryRemark.trim() || null,
-        counterId: selectedDepartment.id,
-      });
-
-      if (!result.success) {
-        setInventoryError(result.message || 'Unable to add inventory item.');
-        return;
-      }
-
-      const createdRecord = isRecord(result.item) ? result.item : null;
-      const createdId = readStringValue(createdRecord, ['id', 'inventory_id', 'inventoryId']);
-      const createdName = readStringValue(createdRecord, ['name', 'inventory_name', 'inventoryName']) || trimmedName;
-      const createdType = readStringValue(createdRecord, ['type', 'inventory_type', 'inventoryType']) === 'product' ? 'product' : newInventoryType;
-      const createdQuantity = readNumberValue(createdRecord, ['quantity', 'qty']) ?? parsedQuantity;
-
-      if (createdId) {
-        const createdInventory: Service = {
-          id: createdId,
-          name: createdName,
-          category: createdType === 'product' ? 'Product' : 'Service',
-          price: 0,
-          status: 'Active',
-          description: newInventoryRemark.trim(),
-          type: createdType,
-          quantity: createdQuantity,
-          remark: newInventoryRemark.trim() || null,
-          counterId: selectedDepartment.id,
-          departmentId: selectedDepartment.id,
-          departmentName: selectedDepartment.name,
-        };
-
-        setLocalInventoryItems((items) => [createdInventory, ...items.filter((item) => item.id !== createdInventory.id)]);
-        updateCurrentRow({
-          inventoryItemId: createdInventory.id,
-          serviceProduct: createdInventory.name,
-        });
-      }
-
-      onInventoryChanged?.();
-      setNewInventoryName('');
-      setNewInventoryType('service');
-      setNewInventoryQuantity('0');
-      setNewInventoryRemark('');
-      setIsInventoryModalOpen(false);
-    } finally {
-      setIsCreatingInventory(false);
-    }
+  const selectInventoryItem = (service: Service) => {
+    updateCurrentRow({
+      serviceProduct: getInventoryLabel(service),
+      inventoryItemId: service.id,
+      ...(service.price > 0 && currentRow.transactionAccountId !== 'other'
+        ? { amount: String(service.price) }
+        : {}),
+    });
+    setIsInventoryDropdownOpen(false);
   };
 
   const buildRowPayload = (
@@ -565,12 +553,18 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       return null;
     }
 
-    if (!row.formName.trim() || !row.transactionNo.trim() || !row.transactionAccountId || !row.amount.trim()) {
-      setValidationError('Form Name, No. of Txn, Service/Product, Transaction Account, and Amount are required.');
+    if (!row.remark.trim()) {
+      setValidationError('Remark is required.');
       return null;
     }
 
-    const transactionAccountType = row.transactionAccountId === 'cash' ? 'cash' : 'bank';
+    const isOtherAccount = row.transactionAccountId === 'other';
+    if (!row.formName.trim() || !row.transactionNo.trim() || !row.transactionAccountId || (!isOtherAccount && !row.amount.trim())) {
+      setValidationError('Form, Qty, Item, Account, and Amount are required.');
+      return null;
+    }
+
+    const transactionAccountType = isOtherAccount ? 'other' : 'bank';
     const selectedAccount = transactionAccountType === 'bank'
       ? accounts.find((account) => account.id === row.transactionAccountId)
       : null;
@@ -604,8 +598,8 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       inventoryId: row.inventoryItemId,
       inventoryItemId: row.inventoryItemId || undefined,
       inventoryItemType: selectedService?.type || undefined,
-      transactionAccount: transactionAccountType === 'cash' ? 'cash' : row.transactionAccountId,
-      transactionAccountId: transactionAccountType === 'cash' ? null : row.transactionAccountId,
+      transactionAccount: transactionAccountType === 'other' ? 'other' : row.transactionAccountId,
+      transactionAccountId: transactionAccountType === 'other' ? null : row.transactionAccountId,
       transactionAccountType,
       unitAmount: amount,
       amount: transactionAmount,
@@ -664,12 +658,16 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const handleSavedInventoryChange = (rowId: string, inventoryId: string) => {
     const selectedService = inventoryItems.find((service) => service.id === inventoryId);
     if (!selectedService) return;
+    const currentSavedRow = savedRows.find((row) => row.id === rowId);
 
     updateSavedRow(rowId, {
       inventoryId,
       inventoryItemId: inventoryId,
       serviceProduct: selectedService.name,
       inventoryItemType: selectedService.type,
+      ...(currentSavedRow?.transactionAccountType === 'bank' && selectedService.price > 0
+        ? { unitAmount: selectedService.price }
+        : {}),
     });
   };
 
@@ -696,6 +694,11 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       ...(currentPayload ? [currentPayload] : []),
       ...savedRows,
     ];
+    const missingRemarkRowIndex = rowsToSubmit.findIndex((row) => !row.remark.trim());
+    if (missingRemarkRowIndex >= 0) {
+      setValidationError('Remark is required.');
+      return;
+    }
     const invalidInventoryRowIndex = rowsToSubmit.findIndex((row) =>
       !isInventoryValidForSelectedDepartment(row.inventoryId)
     );
@@ -767,87 +770,88 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="service-workflow-form" noValidate>
-      {isInventoryModalOpen ? (
-        <ActionModal
-          title="Add Inventory"
-          eyebrow="Inventory"
-          description={selectedDepartment ? `Create an item for ${selectedDepartment.name}.` : 'Please select department first.'}
-          onClose={() => setIsInventoryModalOpen(false)}
-        >
-          {inventoryError ? (
-            <div className="form-alert" role="alert">{inventoryError}</div>
-          ) : null}
-          <div className="row g-3">
-            <div className="col-12">
-              <label className="form-label" htmlFor="transaction-new-inventory-name">Inventory Name</label>
-              <input
-                className="form-control"
-                id="transaction-new-inventory-name"
-                value={newInventoryName}
-                onChange={(event) => {
-                  setNewInventoryName(event.target.value);
-                  setInventoryError('');
-                }}
-              />
-            </div>
-            <div className="col-12 col-md-6">
-              <label className="form-label" htmlFor="transaction-new-inventory-type">Type</label>
-              <select
-                className="form-select"
-                id="transaction-new-inventory-type"
-                value={newInventoryType}
-                onChange={(event) => {
-                  const nextType = event.target.value as 'service' | 'product';
-                  setNewInventoryType(nextType);
-                  if (nextType === 'service') setNewInventoryQuantity('0');
-                  setInventoryError('');
-                }}
-              >
-                <option value="service">Service</option>
-                <option value="product">Product</option>
-              </select>
-            </div>
-            <div className="col-12 col-md-6">
-              <label className="form-label" htmlFor="transaction-new-inventory-quantity">Quantity</label>
-              <input
-                className="form-control"
-                id="transaction-new-inventory-quantity"
-                min="0"
-                type="number"
-                value={newInventoryType === 'service' ? '0' : newInventoryQuantity}
-                onChange={(event) => {
-                  setNewInventoryQuantity(event.target.value);
-                  setInventoryError('');
-                }}
-                disabled={newInventoryType === 'service'}
-              />
-            </div>
-            <div className="col-12">
-              <label className="form-label" htmlFor="transaction-new-inventory-remark">Remark Optional</label>
-              <input
-                className="form-control"
-                id="transaction-new-inventory-remark"
-                value={newInventoryRemark}
-                onChange={(event) => setNewInventoryRemark(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsInventoryModalOpen(false)} disabled={isCreatingInventory}>
-              Cancel
-            </button>
-            <button type="button" className="btn-app btn-app-primary" onClick={handleCreateInventory} disabled={isCreatingInventory || !selectedDepartment?.id}>
-              {isCreatingInventory ? 'Saving...' : 'Save Inventory'}
-            </button>
-          </div>
-        </ActionModal>
-      ) : null}
-
       <div className="form-section-card mb-4">
         {validationError ? (
           <div className="form-alert" role="alert">
             {validationError}
           </div>
+        ) : null}
+
+        {isAddCustomerModalOpen ? (
+          <ActionModal
+            title="Add Customer"
+            eyebrow="Customer"
+            description="Create a customer and continue the transaction with the new selection."
+            onClose={() => setIsAddCustomerModalOpen(false)}
+          >
+            {customerModalError ? (
+              <div className="form-alert" role="alert">{customerModalError}</div>
+            ) : null}
+            <div className="row g-3">
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="transaction-new-customer-name">Customer Name</label>
+                <input
+                  className="form-control"
+                  id="transaction-new-customer-name"
+                  value={newCustomerName}
+                  onChange={(event) => {
+                    setNewCustomerName(event.target.value);
+                    setCustomerModalError('');
+                  }}
+                  required
+                />
+              </div>
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="transaction-new-customer-mobile">Mobile Number</label>
+                <input
+                  className="form-control"
+                  id="transaction-new-customer-mobile"
+                  value={newCustomerPhone}
+                  onChange={(event) => {
+                    setNewCustomerPhone(event.target.value);
+                    setCustomerModalError('');
+                  }}
+                  required
+                />
+              </div>
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="transaction-new-customer-email">Email Optional</label>
+                <input
+                  className="form-control"
+                  id="transaction-new-customer-email"
+                  type="email"
+                  value={newCustomerEmail}
+                  onChange={(event) => setNewCustomerEmail(event.target.value)}
+                />
+              </div>
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="transaction-new-customer-address">Address Optional</label>
+                <input
+                  className="form-control"
+                  id="transaction-new-customer-address"
+                  value={newCustomerAddress}
+                  onChange={(event) => setNewCustomerAddress(event.target.value)}
+                />
+              </div>
+              <div className="col-12">
+                <label className="form-label" htmlFor="transaction-new-customer-remark">Remark Optional</label>
+                <input
+                  className="form-control"
+                  id="transaction-new-customer-remark"
+                  value={newCustomerRemark}
+                  onChange={(event) => setNewCustomerRemark(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsAddCustomerModalOpen(false)} disabled={isCreatingCustomer}>
+                Cancel
+              </button>
+              <button type="button" className="btn-app btn-app-primary" onClick={handleCreateCustomer} disabled={isCreatingCustomer}>
+                {isCreatingCustomer ? 'Adding...' : 'Add Customer'}
+              </button>
+            </div>
+          </ActionModal>
         ) : null}
 
         <div
@@ -862,83 +866,96 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
           </div>
 
           <div className="transaction-customer-panel__grid">
-            <div className="app-field">
-              <label className="form-label" htmlFor="transaction-customer-search">Search Customer</label>
-              <input
-                ref={customerSearchInputRef}
-                className="form-control"
-                id="transaction-customer-search"
-                list="transaction-customer-options"
-                placeholder="Search by phone or name"
-                value={customerSearch}
-                onChange={(event) => handleCustomerSearchChange(event.target.value)}
-              />
-              <datalist id="transaction-customer-options">
-                {customerSearchOptions.map(({ customer, label }) => (
-                  <option key={customer.id} value={label} />
-                ))}
-              </datalist>
-              {selectedCustomer ? (
-                <p className="form-hint">Selected: {getCustomerDisplayName(selectedCustomer)} {getCustomerPhone(selectedCustomer) ? `(${getCustomerPhone(selectedCustomer)})` : ''}</p>
-              ) : (
-                <p className="form-hint">Please select an existing customer or add the customer details below.</p>
-              )}
-            </div>
-
-            <div className="transaction-customer-panel__two-column">
+            <div className="transaction-customer-panel__selector-row">
               <div className="app-field">
-                <label className="form-label" htmlFor="transaction-customer-name">Customer Name</label>
-                <input
-                  className="form-control"
-                  id="transaction-customer-name"
-                  placeholder="Customer name"
-                  value={newCustomerName}
-                  onChange={(event) => {
-                    beginManualCustomerEntry();
-                    setNewCustomerName(event.target.value);
-                  }}
-                />
+                <label className="form-label" htmlFor="transaction-customer-search">Select Customer</label>
+                <div className="transaction-search-combobox">
+                  <input
+                    ref={customerSearchInputRef}
+                    className="form-control"
+                    id="transaction-customer-search"
+                    placeholder="Enter at least 3 character for results"
+                    value={customerSearchQuery}
+                    onBlur={() => window.setTimeout(() => setIsCustomerDropdownOpen(false), 120)}
+                    onChange={(event) => handleCustomerSearchChange(event.target.value)}
+                    onFocus={() => {
+                      if (customerSearchQuery.trim().length >= 3) setIsCustomerDropdownOpen(true);
+                    }}
+                  />
+                  {isCustomerDropdownOpen && filteredCustomerSearchOptions.length > 0 ? (
+                    <div className="transaction-search-dropdown transaction-search-dropdown--customer" role="listbox">
+                      {filteredCustomerSearchOptions.map(({ customer, label }) => (
+                        <button
+                          key={customer.id}
+                          type="button"
+                          className="transaction-search-dropdown__option"
+                          aria-selected={customer.id === selectedCustomerId}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            selectCustomer(customer);
+                          }}
+                          role="option"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <p className="form-hint">
+                  {normalizedCustomerSearchQuery.length > 0 && normalizedCustomerSearchQuery.length < 3
+                    ? 'Enter at least 3 character for results.'
+                    : 'Search by customer name, phone, or customer code.'}
+                </p>
               </div>
-              <div className="app-field">
-                <label className="form-label" htmlFor="transaction-customer-phone">Customer Phone</label>
-                <input
-                  className="form-control"
-                  id="transaction-customer-phone"
-                  placeholder="Customer phone"
-                  value={newCustomerPhone}
-                  onChange={(event) => {
-                    beginManualCustomerEntry();
-                    setNewCustomerPhone(event.target.value);
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="app-field">
-              <label className="form-label" htmlFor="transaction-customer-email">Email Optional</label>
-              <input
-                className="form-control"
-                id="transaction-customer-email"
-                placeholder="Email address"
-                type="email"
-                value={newCustomerEmail}
-                onChange={(event) => {
-                  beginManualCustomerEntry();
-                  setNewCustomerEmail(event.target.value);
-                }}
-              />
-            </div>
-
-            <div className="transaction-customer-panel__footer">
               <button
                 type="button"
-                className="btn-app btn-app-secondary"
-                onClick={handleCreateCustomer}
+                className="btn-app btn-app-primary transaction-customer-panel__add-button"
+                onClick={openAddCustomerModal}
                 disabled={isCreatingCustomer}
               >
-                {isCreatingCustomer ? 'Adding Customer...' : 'Add Customer'}
+                Add Customer
               </button>
             </div>
+
+            {selectedCustomer ? (
+              <div className="transaction-customer-card">
+                <div className="transaction-customer-card__header">
+                  <span>Selected Customer</span>
+                  <button type="button" className="transaction-customer-card__remove" onClick={clearSelectedCustomer}>
+                    Remove Customer
+                  </button>
+                </div>
+                <div className="transaction-customer-card__row">
+                  <span>Name</span>
+                  <strong>{getCustomerDisplayName(selectedCustomer)}</strong>
+                </div>
+                {getCustomerCode(selectedCustomer) ? (
+                  <div className="transaction-customer-card__row">
+                    <span>Code</span>
+                    <strong>{getCustomerCode(selectedCustomer)}</strong>
+                  </div>
+                ) : null}
+                <div className="transaction-customer-card__row">
+                  <span>Phone</span>
+                  <strong>{getCustomerPhone(selectedCustomer) || '-'}</strong>
+                </div>
+                {selectedCustomer.email ? (
+                  <div className="transaction-customer-card__row">
+                    <span>Email</span>
+                    <strong>{selectedCustomer.email}</strong>
+                  </div>
+                ) : null}
+                {selectedCustomer.address ? (
+                  <div className="transaction-customer-card__row">
+                    <span>Address</span>
+                    <strong>{selectedCustomer.address}</strong>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="form-hint mb-0">Please select an existing customer or add a new customer.</p>
+            )}
           </div>
         </div>
 
@@ -961,29 +978,29 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
         </div>
 
         <div className="transaction-entry-table transaction-entry-table--editor data-table-wrapper overflow-x-auto w-full">
-          <table className="table data-table transaction-entry-table__grid transaction-entry-table__grid--transaction-form transaction-entry-table__grid--edit-form whitespace-nowrap">
+          <table className="table data-table transaction-entry-table__grid transaction-entry-table__grid--transaction-form transaction-entry-table__grid--edit-form transaction-entry-table__grid--compact whitespace-nowrap">
             <thead>
               <tr>
-                <th>Form Name</th>
-                <th>No. of Txn</th>
-                <th>Service/Product</th>
-                <th>Transaction Account</th>
+                <th>Form</th>
+                <th>Qty</th>
+                <th>Item</th>
+                <th>Account</th>
                 <th>Amount</th>
-                <th>Service Charge</th>
-                <th>Bank Charge</th>
-                <th>Other Charge</th>
-                <th>Total Amount</th>
+                <th>Service Chg.</th>
+                <th>Bank Chg.</th>
+                <th>Other Chg.</th>
+                <th>Total</th>
                 <th>Remark</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td data-label="Form Name">
+                <td data-label="Form">
                   <div className="app-field">
                     <input
-                      aria-label="Form Name"
+                      aria-label="Form"
                       className="form-control"
-                      placeholder="Enter Name"
+                      placeholder="Form"
                       value={currentRow.formName}
                       onFocus={guardTransactionFieldInteraction}
                       onChange={(event) => updateCurrentRow({ formName: event.target.value })}
@@ -993,10 +1010,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     />
                   </div>
                 </td>
-                <td data-label="No. of Txn">
+                <td data-label="Qty">
                   <div className="app-field">
                     <input
-                      aria-label="No. of Txn"
+                      aria-label="Qty"
                       className="form-control"
                       min="1"
                       placeholder="1"
@@ -1010,43 +1027,48 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     />
                   </div>
                 </td>
-                <td data-label="Service/Product">
+                <td data-label="Item">
                   <div className="app-field">
                     {inventoryItems.length > 0 ? (
-                      <div className="d-flex gap-2">
+                      <div className="transaction-search-combobox">
                         <input
-                          aria-label="Service/Product"
+                          aria-label="Item"
                           className="form-control"
-                          list="transaction-inventory-options"
-                          placeholder={selectedDepartment?.id ? 'Search service/product' : 'Please select department first'}
+                          placeholder={selectedDepartment?.id ? 'Search item' : 'Please select department first'}
                           value={currentRow.serviceProduct}
-                          onFocus={guardTransactionFieldInteraction}
+                          onBlur={() => window.setTimeout(() => setIsInventoryDropdownOpen(false), 120)}
+                          onFocus={(event) => {
+                            if (guardTransactionFieldInteraction(event)) setIsInventoryDropdownOpen(true);
+                          }}
                           onMouseDown={guardTransactionFieldInteraction}
                           onChange={(event) => handleInventorySearchChange(event.target.value)}
                           readOnly={isTransactionEntryReadOnly}
                           disabled={isSubmitting}
                           required
                         />
-                        <datalist id="transaction-inventory-options">
-                          {inventoryItems.map((service) => (
-                            <option key={service.id} value={getInventoryLabel(service)} />
-                          ))}
-                        </datalist>
-                        <button
-                          type="button"
-                          className="btn-icon-sm btn-icon-sm--primary"
-                          onClick={() => {
-                            if (ensureDepartmentSelected()) setIsInventoryModalOpen(true);
-                          }}
-                          disabled={isSubmitting}
-                          aria-label="Add Inventory"
-                        >
-                          +
-                        </button>
+                        {isInventoryDropdownOpen && !isTransactionEntryReadOnly && filteredInventoryItems.length > 0 ? (
+                          <div className="transaction-search-dropdown transaction-search-dropdown--item" role="listbox">
+                            {filteredInventoryItems.map((service) => (
+                              <button
+                                key={service.id}
+                                type="button"
+                                className="transaction-search-dropdown__option"
+                                aria-selected={service.id === currentRow.inventoryItemId}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  selectInventoryItem(service);
+                                }}
+                                role="option"
+                              >
+                                {getInventoryLabel(service)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ) : (
                       <input
-                        aria-label="Service/Product"
+                        aria-label="Item"
                         className="form-control"
                         placeholder={selectedDepartment?.id ? 'No inventory available' : 'Please select department first'}
                         value={currentRow.serviceProduct}
@@ -1058,31 +1080,28 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         required
                       />
                     )}
-                    {inventoryItems.length === 0 ? (
-                      <button
-                        type="button"
-                        className="btn-app btn-app-secondary mt-2"
-                        onClick={() => {
-                          if (ensureDepartmentSelected()) setIsInventoryModalOpen(true);
-                        }}
-                        disabled={isSubmitting}
-                      >
-                        + Add Inventory
-                      </button>
-                    ) : null}
                   </div>
                 </td>
-                <td data-label="Transaction Account">
+                <td data-label="Account">
                   <div className="app-field">
                     <select
-                      aria-label="Transaction Account"
+                      aria-label="Account"
                       className="form-select"
                       value={currentRow.transactionAccountId}
                       onFocus={guardTransactionFieldInteraction}
                       onMouseDown={guardTransactionFieldInteraction}
                       onChange={(event) => {
                         if (!ensureDepartmentSelected()) return;
-                        updateCurrentRow({ transactionAccountId: event.target.value });
+                        const nextAccountId = event.target.value;
+                        const selectedInventory = inventoryItems.find((service) => service.id === currentRow.inventoryItemId);
+                        updateCurrentRow({
+                          transactionAccountId: nextAccountId,
+                          amount: nextAccountId === 'other'
+                            ? '0'
+                            : selectedInventory?.price
+                              ? String(selectedInventory.price)
+                              : currentRow.amount,
+                        });
                       }}
                       disabled={isSubmitting}
                       required
@@ -1099,7 +1118,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                   <div className="app-field">
                     <input
                       aria-label="Amount"
-                      className="form-control"
+                      className={`form-control${currentRow.transactionAccountId === 'other' ? ' transaction-entry-table__disabled-input' : ''}`}
                       min="0"
                       placeholder="Rs. 0"
                       type="number"
@@ -1107,15 +1126,15 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                       onFocus={guardTransactionFieldInteraction}
                       onChange={(event) => updateCurrentRow({ amount: event.target.value })}
                       readOnly={isTransactionEntryReadOnly}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || currentRow.transactionAccountId === 'other'}
                       required
                     />
                   </div>
                 </td>
-                <td data-label="Service Charge">
+                <td data-label="Service Chg.">
                   <div className="app-field">
                     <input
-                      aria-label="Service Charge"
+                      aria-label="Service Chg."
                       className="form-control"
                       min="0"
                       placeholder="Rs. 0"
@@ -1128,10 +1147,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     />
                   </div>
                 </td>
-                <td data-label="Bank Charge">
+                <td data-label="Bank Chg.">
                   <div className="app-field">
                     <input
-                      aria-label="Bank Charge"
+                      aria-label="Bank Chg."
                       className="form-control"
                       min="0"
                       placeholder="Rs. 0"
@@ -1144,10 +1163,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     />
                   </div>
                 </td>
-                <td data-label="Other Charge">
+                <td data-label="Other Chg.">
                   <div className="app-field">
                     <input
-                      aria-label="Other Charge"
+                      aria-label="Other Chg."
                       className="form-control"
                       min="0"
                       placeholder="Rs. 0"
@@ -1160,10 +1179,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     />
                   </div>
                 </td>
-                <td data-label="Total Amount">
+                <td data-label="Total">
                   <div className="app-field">
                     <input
-                      aria-label="Total Amount"
+                      aria-label="Total"
                       className="form-control"
                       min="0"
                       readOnly
@@ -1174,33 +1193,33 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                 </td>
                 <td data-label="Remark">
                   <div className="app-field">
-                    {/* Remark is optional and does not block Add Row or Save Transaction. */}
                     <input
                       aria-label="Remark"
                       className="form-control"
-                      placeholder="Remark"
+                      placeholder="Required"
                       value={currentRow.remark}
                       onFocus={guardTransactionFieldInteraction}
                       onChange={(event) => updateCurrentRow({ remark: event.target.value })}
                       readOnly={isTransactionEntryReadOnly}
                       disabled={isSubmitting}
+                      required
                     />
                   </div>
                 </td>
               </tr>
               {savedRows.map((row) => (
                   <tr key={row.id}>
-                    <td data-label="Form Name">
+                    <td data-label="Form">
                       <input
-                        aria-label="Saved Form Name"
+                        aria-label="Saved Form"
                         className="form-control"
                         value={row.formName}
                         onChange={(event) => updateSavedRow(row.id, { formName: event.target.value })}
                       />
                     </td>
-                    <td data-label="No. of Txn">
+                    <td data-label="Qty">
                       <input
-                        aria-label="Saved No. of Txn"
+                        aria-label="Saved Qty"
                         className="form-control"
                         min="1"
                         step="1"
@@ -1209,9 +1228,9 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         onChange={(event) => updateSavedRow(row.id, { noOfTransaction: toSafeAmount(event.target.value) || 1 })}
                       />
                     </td>
-                    <td data-label="Service/Product">
+                    <td data-label="Item">
                       <select
-                        aria-label="Saved Service/Product"
+                        aria-label="Saved Item"
                         className="form-select"
                         value={row.inventoryId}
                         onChange={(event) => handleSavedInventoryChange(row.id, event.target.value)}
@@ -1223,17 +1242,23 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         ))}
                       </select>
                     </td>
-                    <td data-label="Transaction Account">
+                    <td data-label="Account">
                       <select
-                        aria-label="Saved Transaction Account"
+                        aria-label="Saved Account"
                         className="form-select"
-                        value={row.transactionAccountType === 'cash' ? 'cash' : row.transactionAccountId || ''}
+                        value={row.transactionAccountType === 'other' ? 'other' : row.transactionAccountId || ''}
                         onChange={(event) => {
                           const nextValue = event.target.value;
+                          const selectedInventory = inventoryItems.find((service) => service.id === row.inventoryId);
                           updateSavedRow(row.id, {
                             transactionAccount: nextValue,
-                            transactionAccountId: nextValue === 'cash' ? null : nextValue,
-                            transactionAccountType: nextValue === 'cash' ? 'cash' : 'bank',
+                            transactionAccountId: nextValue === 'other' ? null : nextValue,
+                            transactionAccountType: nextValue === 'other' ? 'other' : 'bank',
+                            unitAmount: nextValue === 'other'
+                              ? 0
+                              : selectedInventory?.price
+                                ? selectedInventory.price
+                                : row.unitAmount,
                           });
                         }}
                       >
@@ -1247,16 +1272,17 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     <td data-label="Amount">
                       <input
                         aria-label="Saved Amount"
-                        className="form-control"
+                        className={`form-control${row.transactionAccountType === 'other' ? ' transaction-entry-table__disabled-input' : ''}`}
                         min="0"
                         type="number"
                         value={row.unitAmount}
                         onChange={(event) => updateSavedRow(row.id, { unitAmount: toSafeAmount(event.target.value) })}
+                        disabled={row.transactionAccountType === 'other'}
                       />
                     </td>
-                    <td data-label="Service Charge">
+                    <td data-label="Service Chg.">
                       <input
-                        aria-label="Saved Service Charge"
+                        aria-label="Saved Service Chg."
                         className="form-control"
                         min="0"
                         type="number"
@@ -1264,9 +1290,9 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         onChange={(event) => updateSavedRow(row.id, { serviceCharge: toSafeAmount(event.target.value) })}
                       />
                     </td>
-                    <td data-label="Bank Charge">
+                    <td data-label="Bank Chg.">
                       <input
-                        aria-label="Saved Bank Charge"
+                        aria-label="Saved Bank Chg."
                         className="form-control"
                         min="0"
                         type="number"
@@ -1274,9 +1300,9 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         onChange={(event) => updateSavedRow(row.id, { bankCharge: toSafeAmount(event.target.value) })}
                       />
                     </td>
-                    <td data-label="Other Charge">
+                    <td data-label="Other Chg.">
                       <input
-                        aria-label="Saved Other Charge"
+                        aria-label="Saved Other Chg."
                         className="form-control"
                         min="0"
                         type="number"
@@ -1284,7 +1310,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         onChange={(event) => updateSavedRow(row.id, { otherCharge: toSafeAmount(event.target.value) })}
                       />
                     </td>
-                    <td data-label="Total Amount">{row.totalAmount}</td>
+                    <td data-label="Total">{row.totalAmount}</td>
                     <td data-label="Remark">
                       <div className="transaction-entry-table__saved-remark">
                         <input
@@ -1307,10 +1333,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
               <tr className="transaction-entry-table__total-row">
                 <td colSpan={4}>Total</td>
                 <td data-label="Amount">{totals.amount}</td>
-                <td data-label="Service Charge">{totals.serviceCharge}</td>
-                <td data-label="Bank Charge">{totals.bankCharge}</td>
-                <td data-label="Other Charge">{totals.otherCharge}</td>
-                <td data-label="Total Amount">{totals.totalAmount}</td>
+                <td data-label="Service Chg.">{totals.serviceCharge}</td>
+                <td data-label="Bank Chg.">{totals.bankCharge}</td>
+                <td data-label="Other Chg.">{totals.otherCharge}</td>
+                <td data-label="Total">{totals.totalAmount}</td>
                 <td />
               </tr>
             </tbody>
@@ -1319,7 +1345,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
         <div className="modal-actions transaction-entry-table__actions transaction-entry-table__save-actions mt-4">
           <button type="submit" className="btn-app btn-app-primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving...' : 'Save Transaction'}
+            {isSubmitting ? 'Submitting...' : 'Submit'}
           </button>
         </div>
       </div>
