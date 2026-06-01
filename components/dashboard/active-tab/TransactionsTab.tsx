@@ -23,8 +23,18 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
     getRoleLabel,
     reloadCustomers,
     reloadTransactions,
+    reloadAccounts,
+    reloadCustomerBalance,
+    reloadDepartments,
     setTransactionDraftDirty,
   } = ctx;
+
+  const reloadAfterTransactionCreate = () => {
+    reloadTransactions();
+    reloadCustomerBalance();
+    reloadAccounts();
+    reloadDepartments();
+  };
 
   return (
     <div className="row g-4">
@@ -58,7 +68,7 @@ export default function TransactionsTab({ ctx }: TransactionsTabProps) {
             }}
             draft={workflowDraft}
             onCustomersChanged={reloadCustomers}
-            onTransactionsChanged={reloadTransactions}
+            onTransactionsChanged={reloadAfterTransactionCreate}
             onDirtyChange={setTransactionDraftDirty}
           />
         ) : (

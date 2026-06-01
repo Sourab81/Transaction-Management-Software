@@ -20,10 +20,10 @@ import type {
 } from '../../../lib/store';
 import type { CustomerWorkspaceView, TransactionWorkspaceView } from '../../../lib/workspace-routes';
 import type { CustomerBalance, PayCustomerBalancePayload } from '../../../lib/api/customerBalance';
+import type { CustomerPayment } from '../../../lib/api/customerPayments';
 import type { ServiceWorkflowDraft } from '../../forms/ServiceForm';
 import type { DataTablePagination } from '../../tables/DataTable';
 import type { DataTableFiltersValue } from '../../common/DataTableFilters';
-import type { CustomerOutstandingRow } from '../../tables/CustomerOutstandingTable';
 import type { SummaryCardProps } from '../SummaryCard';
 
 export interface CustomerPageOption {
@@ -89,11 +89,13 @@ export interface DashboardTabContext {
   filteredDepartments: DepartmentTableRow[];
   filteredBusinesses: Business[];
   customerDirectoryRecords: Array<Business | BusinessCustomer>;
-  customerOutstandingRows: CustomerOutstandingRow[];
-  customerPaymentTransactions: Transaction[];
+  customerOutstandingRows: CustomerBalance[];
+  customerPaymentRows: CustomerPayment[];
   customerBalanceRows: CustomerBalance[];
   isCustomerBalanceLoading: boolean;
   customerBalanceError: string;
+  isCustomerPaymentsLoading: boolean;
+  customerPaymentsError: string;
   customerPageView: CustomerWorkspaceView;
   transactionPageView: TransactionWorkspaceView;
   customerPageOptions: CustomerPageOption[];

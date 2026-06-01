@@ -4,6 +4,7 @@ import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 export interface CustomerBalance {
   id: number | string;
   customerId: number | string;
+  customerCode?: string;
   customerName?: string;
   phoneNo: string;
   lastTransaction: string;

@@ -16,6 +16,7 @@ interface TransactionsListTabProps {
 const pageSize = 10;
 
 const formatCurrency = (value: number | undefined) => `Rs. ${(value ?? 0).toLocaleString('en-IN')}`;
+const readTransactionBalance = (transaction: Transaction) => Number(transaction.currentBalance ?? transaction.dueAmount ?? 0);
 const formatCustomerId = (transaction: Transaction) => {
   if (transaction.customerCode) return transaction.customerCode;
 
@@ -27,6 +28,7 @@ const formatCustomerId = (transaction: Transaction) => {
   return transaction.customerId ? String(transaction.customerId) : '-';
 };
 const getCustomerName = (transaction: Transaction) => transaction.customerName || '-';
+
 interface PaymentDraft {
   onlineAmount: string;
   cashAmount: string;
@@ -37,8 +39,8 @@ interface PaymentDraft {
 }
 
 const createPaymentDraft = (): PaymentDraft => ({
-  onlineAmount: '0',
-  cashAmount: '0',
+  onlineAmount: '',
+  cashAmount: '',
   accountId: '',
   error: '',
   touched: false,
@@ -70,17 +72,23 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, PaymentDraft>>({});
+  const [settledTransactionIds, setSettledTransactionIds] = useState<string[]>([]);
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  const pendingTransactionRecords = useMemo(() => (
+    filteredTransactionRecords.filter((transaction) =>
+      !settledTransactionIds.includes(transaction.id) && readTransactionBalance(transaction) !== 0
+    )
+  ), [filteredTransactionRecords, settledTransactionIds]);
   const searchedTransactions = useMemo(() => (
     normalizedSearch
-      ? filteredTransactionRecords.filter((transaction) => [
+      ? pendingTransactionRecords.filter((transaction) => [
           transaction.customerName,
           transaction.customerCode,
           transaction.customerId,
           transaction.invoiceId,
         ].filter(Boolean).some((value) => String(value).toLowerCase().includes(normalizedSearch)))
-      : filteredTransactionRecords
-  ), [filteredTransactionRecords, normalizedSearch]);
+      : pendingTransactionRecords
+  ), [pendingTransactionRecords, normalizedSearch]);
   const totalPages = Math.max(1, Math.ceil(searchedTransactions.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedTransactions = searchedTransactions.slice(
@@ -93,7 +101,6 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
     const cashAmount = toPaymentAmount(draft.cashAmount);
 
     if (onlineAmount < 0 || cashAmount < 0) return 'Amount cannot be negative.';
-    if (onlineAmount + cashAmount <= 0) return 'Enter payment amount.';
     if (onlineAmount > 0 && !draft.accountId) return 'Select bank account for online payment.';
 
     return '';
@@ -144,7 +151,10 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
       return;
     }
 
-    showNotification('success', result.message || 'Transaction payment saved successfully.');
+    showNotification('success', 'Transaction moved to Customers Outstanding.');
+    setSettledTransactionIds((current) => (
+      current.includes(transaction.id) ? current : [...current, transaction.id]
+    ));
     setPaymentDrafts((current) => {
       const next = { ...current };
       delete next[transaction.id];
@@ -152,8 +162,8 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
     });
     reloadTransactions();
     reloadCustomerBalance();
+    reloadAccounts();
     reloadDepartments();
-    if (onlineAmount > 0) reloadAccounts();
   };
 
   const columns: Array<DataTableColumn<Transaction>> = [
@@ -186,7 +196,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
       key: 'currentBalance',
       header: 'Current Balance',
       render: (transaction) => {
-        const balance = transaction.currentBalance ?? transaction.dueAmount;
+        const balance = readTransactionBalance(transaction);
 
         return (
           <span className={getCustomerBalanceClassName(balance)}>

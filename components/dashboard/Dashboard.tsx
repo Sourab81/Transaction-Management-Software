@@ -35,7 +35,6 @@ import {
   useRecentServices,
   useRoleScopedWorkspace,
   useSearchResults,
-  useSortedTransactionRecords,
   useTransactionFilterOptions,
   useTransactionStats,
   useVisibleCustomerRecords,
@@ -52,7 +51,8 @@ import { useReports } from '../../lib/hooks/useReports';
 import { useRoleTemplates } from '../../lib/hooks/useRoleTemplates';
 import { useInventory } from '../../lib/hooks/useInventory';
 import { useTransactions } from '../../lib/hooks/useTransactions';
-import { useCustomerBalance } from '../../lib/hooks/useCustomerBalance';
+import { useCustomerOutstanding } from '../../lib/hooks/useCustomerOutstanding';
+import { useCustomerPayments } from '../../lib/hooks/useCustomerPayments';
 import type { WorkspaceInitialData } from '../../lib/api/workspace-initial-data';
 import { createDepartmentResponse } from '../../lib/api/departments';
 import {
@@ -106,7 +106,6 @@ import TransactionEditForm, { type TransactionEditorValues } from '../forms/Tran
 import { type SummaryCardProps } from './SummaryCard';
 import SummaryGrid from './SummaryGrid';
 import ReusableListTable from '../common/ReusableListTable';
-import type { CustomerOutstandingRow } from '../tables/CustomerOutstandingTable';
 import {
   readDataTableDateRangeFilter,
   readDataTableMultiSelectFilter,
@@ -585,19 +584,20 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isAccountsTab = activeTab === 'accounts';
   const isTransactionEditModalOpen = activeModal === 'edit-transaction';
   // Accounts/services stay page-scoped and load on transactions only because the form needs dropdowns.
-  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && customerPageView === 'payments'));
+  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && customerPageView === 'outstanding'));
   // Departments are shared shell data because the header selector scopes
   // transactions, services, and search on every workspace page.
   const shouldLoadDepartmentsApi = shouldLoadWorkspaceApi;
   const shouldLoadCustomersApi = shouldLoadWorkspaceApi
-    && (activeTab === 'customers' || isAddTransactionPage);
+    && activeTab === 'customers';
   const shouldLoadEmployeesApi = shouldLoadWorkspaceApi && activeTab === 'employee';
   // Inventory page owns inventory API loading and does not preload other modules.
   const shouldLoadServicesApi = shouldLoadWorkspaceApi
     && Boolean(inventoryCounterId)
     && (activeTab === 'services' || isAddTransactionPage || isTransactionEditModalOpen);
   const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && (activeTab === 'dashboard' || isTransactionsListPage) && Boolean(requestedApiCounterId);
-  const shouldLoadCustomerBalanceApi = shouldLoadWorkspaceApi && activeTab === 'customers' && customerPageView === 'payments';
+  const shouldLoadCustomerOutstandingApi = shouldLoadWorkspaceApi && activeTab === 'customers' && customerPageView === 'outstanding';
+  const shouldLoadCustomerPaymentsApi = shouldLoadWorkspaceApi && activeTab === 'customers' && customerPageView === 'payments';
   const shouldLoadReportsApi = shouldLoadWorkspaceApi && activeTab === 'reports';
   const shouldLoadDashboardSummaryApi = shouldLoadWorkspaceApi && activeTab === 'dashboard';
   const initialWorkspaceApiData = currentRole === 'Admin' ? undefined : initialWorkspaceData;
@@ -632,11 +632,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     counterId: requestedApiCounterId,
   });
   const {
-    balances: customerBalanceRows,
-    isLoading: isCustomerBalanceLoading,
-    error: customerBalanceError,
+    rows: customerOutstandingRows,
+    isLoading: isCustomerOutstandingApiLoading,
+    error: customerOutstandingError,
     reload: reloadCustomerBalance,
-  } = useCustomerBalance(shouldLoadCustomerBalanceApi);
+  } = useCustomerOutstanding(shouldLoadCustomerOutstandingApi);
+  const {
+    payments: customerPaymentRows,
+    isLoading: isCustomerPaymentsApiLoading,
+    error: customerPaymentsError,
+    reload: reloadCustomerPayments,
+  } = useCustomerPayments(shouldLoadCustomerPaymentsApi, selectedCounterId);
   const {
     reports: apiReports,
     isLoading: isReportsLoading,
@@ -1092,11 +1098,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         isPermissionEnabled(accessContext.permissions, 'customers_list')
           ? { id: 'list' as const, label: customerListPageUi.label, description: customerListPageUi.emptyDescription }
           : null,
-        isPermissionEnabled(accessContext.permissions, 'customers_payment_list')
-          ? { id: 'payments' as const, label: customerPaymentsPageUi.label, description: customerPaymentsPageUi.emptyDescription }
-          : null,
         isPermissionEnabled(accessContext.permissions, 'customers_outstanding')
           ? { id: 'outstanding' as const, label: customerOutstandingPageUi.label, description: customerOutstandingPageUi.emptyDescription }
+          : null,
+        isPermissionEnabled(accessContext.permissions, 'customers_payment_list')
+          ? { id: 'payments' as const, label: customerPaymentsPageUi.label, description: customerPaymentsPageUi.emptyDescription }
           : null,
       ].filter((option): option is { id: CustomerWorkspaceView; label: string; description: string } => Boolean(option)));
   const requestedCustomerPageCopy = getCustomerWorkspaceViewUi(customerPageView);
@@ -1104,9 +1110,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const hasRequestedCustomerPageAccess = currentRole === 'Admin'
     ? customerPageView === 'list'
     : Boolean(requestedCustomerPageOption);
-  const customerPaymentTransactions = useSortedTransactionRecords(
-    currentRole === 'Admin' ? emptyTransactionRecords : transactionHistory,
-  );
   const customerDirectoryRecords = currentRole === 'Admin' ? filteredBusinesses : visibleCustomers;
   const adminBusinessTotalRecords = currentRole === 'Admin'
     ? Math.max(filteredBusinesses.length, backendBusinessPagination.totalRecords - 1)
@@ -1124,45 +1127,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         onPageChange: setBackendBusinessPage,
       }
     : undefined;
-  const customerOutstandingRows: CustomerOutstandingRow[] = currentRole === 'Admin'
-    ? []
-    : (() => {
-        const customerById = new Map(workspace.customers.map((customer) => [customer.id, customer]));
-        const outstandingByCustomer = new Map<string, CustomerOutstandingRow>();
-
-        transactionHistory
-          .filter((transaction) => transaction.status === 'pending')
-          .forEach((transaction) => {
-            const customer = customerById.get(transaction.customerId);
-            const currentRow = outstandingByCustomer.get(transaction.customerId);
-
-            if (currentRow) {
-              currentRow.pendingPayments += 1;
-              currentRow.outstandingAmount += transaction.dueAmount;
-              if (transaction.date > currentRow.lastPendingDate) {
-                currentRow.lastPendingDate = transaction.date;
-              }
-              return;
-            }
-
-            outstandingByCustomer.set(transaction.customerId, {
-              customerId: transaction.customerId,
-              customerName: customer?.name || transaction.customerName,
-              phone: customer?.phone || 'Not added',
-              pendingPayments: 1,
-              outstandingAmount: transaction.dueAmount,
-              lastPendingDate: transaction.date,
-            });
-          });
-
-        return Array.from(outstandingByCustomer.values()).sort((left, right) => {
-          if (right.outstandingAmount !== left.outstandingAmount) {
-            return right.outstandingAmount - left.outstandingAmount;
-          }
-
-          return right.lastPendingDate.localeCompare(left.lastPendingDate);
-        });
-      })();
   const selectedCustomerTransactions = useMemo(
     () => selectedCustomerHistory
       ? transactionHistory
@@ -3756,6 +3720,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     addNotification('success', result.message || 'Customer balance payment completed.');
     reloadTransactions();
     reloadCustomerBalance();
+    reloadCustomerPayments();
     reloadDepartments();
     if (payload.paymentMode === 'account') {
       reloadAccounts();
@@ -4793,10 +4758,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     filteredBusinesses,
     customerDirectoryRecords,
     customerOutstandingRows,
-    customerPaymentTransactions,
-    customerBalanceRows,
-    isCustomerBalanceLoading,
-    customerBalanceError,
+    customerPaymentRows,
+    customerBalanceRows: customerOutstandingRows,
+    isCustomerBalanceLoading: isCustomerOutstandingApiLoading,
+    customerBalanceError: customerOutstandingError,
+    isCustomerPaymentsLoading: isCustomerPaymentsApiLoading,
+    customerPaymentsError,
     customerPageView,
     transactionPageView,
     customerPageOptions,

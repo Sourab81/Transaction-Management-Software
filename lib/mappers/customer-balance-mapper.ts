@@ -20,6 +20,7 @@ export const mapCustomerBalanceRecord = (record: UnknownRecord): CustomerBalance
   return {
     id,
     customerId,
+    customerCode: readStringValue(record, ['customer_code', 'customerCode']) || undefined,
     customerName: readStringValue(record, ['customer_name', 'customerName', 'name']) || undefined,
     phoneNo: readStringValue(record, ['phone_no', 'phoneNo', 'mobile_no', 'mobileNo', 'customer_mobile_no']) || '',
     lastTransaction: readStringValue(record, ['last_transaction', 'lastTransaction', 'last_transaction_date']) || '',

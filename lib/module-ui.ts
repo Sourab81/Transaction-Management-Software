@@ -155,7 +155,7 @@ export const customerWorkspaceViewUi: Record<CustomerWorkspaceView, CustomerWork
     permissionDescription: 'This customer payment route is not available with your current permissions.',
   },
   outstanding: {
-    label: 'Customer Outstanding',
+    label: 'Customers Outstanding',
     emptyTitle: 'No outstanding balances right now',
     emptyDescription: 'Customers with pending amounts will appear here when balances remain unpaid.',
     permissionTitle: 'Customer outstanding view is unavailable',

@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FaChevronDown } from 'react-icons/fa';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
-import { createCustomer } from '../../lib/api/customers';
+import { createCustomer, getCustomers } from '../../lib/api/customers';
 import { createTransaction } from '../../lib/api/transactions';
-import { mapCustomerRecord } from '../../lib/mappers/customer-mapper';
+import { mapCustomerRecord, mapCustomersResponse } from '../../lib/mappers/customer-mapper';
 import { isRecord } from '../../lib/mappers/legacy-record';
 import {
   createRecordId,
@@ -202,10 +203,11 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<BusinessCustomer | null>(
     initialCustomer,
   );
-  const [customerOptions, setCustomerOptions] = useState<BusinessCustomer[]>(customers);
+  const [customerOptions, setCustomerOptions] = useState<BusinessCustomer[]>(initialCustomer ? [initialCustomer] : []);
   const [customerSearchQuery, setCustomerSearchQuery] = useState(initialCustomer ? getCustomerSearchLabel(initialCustomer) : '');
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
-  const [isInventoryDropdownOpen, setIsInventoryDropdownOpen] = useState(false);
+  const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false);
+  const [hasCustomerSearchCompleted, setHasCustomerSearchCompleted] = useState(false);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState(draft?.customerName && !initialCustomerId ? draft.customerName : '');
   const [newCustomerPhone, setNewCustomerPhone] = useState(draft?.customerPhone && !initialCustomerId ? draft.customerPhone : '');
@@ -297,14 +299,16 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   }, [currentRow, onDirtyChange, savedRows.length]);
 
   useEffect(() => {
+    if (!initialCustomer) return;
+
     setCustomerOptions((previousOptions) => {
       const merged = new Map<string, BusinessCustomer>();
-      [...customers, ...previousOptions].forEach((customer) => {
+      [initialCustomer, ...previousOptions].forEach((customer) => {
         merged.set(customer.id, customer);
       });
       return Array.from(merged.values());
     });
-  }, [customers]);
+  }, [initialCustomer]);
 
   const selectedCustomer = customerOptions.find((customer) => customer.id === selectedCustomerId) || selectedCustomerSnapshot;
   const isTransactionEntryLocked = !selectedCustomerId || !selectedDepartment?.id;
@@ -323,15 +327,43 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
           || code.includes(normalizedCustomerSearchQuery);
       })
     : [];
-  const normalizedInventorySearchQuery = currentRow.serviceProduct.trim().toLowerCase();
-  const filteredInventoryItems = inventoryItems.filter((service) => {
-    if (!normalizedInventorySearchQuery) return true;
 
-    return service.name.toLowerCase().includes(normalizedInventorySearchQuery)
-      || getInventoryLabel(service).toLowerCase().includes(normalizedInventorySearchQuery)
-      || (service.type || '').toLowerCase().includes(normalizedInventorySearchQuery);
-  });
+  useEffect(() => {
+    const searchTerm = customerSearchQuery.trim();
+    if (selectedCustomerId || searchTerm.length < 3) {
+      setIsCustomerDropdownOpen(false);
+      setIsCustomerSearchLoading(false);
+      setHasCustomerSearchCompleted(false);
+      return;
+    }
 
+    let isActive = true;
+    setIsCustomerSearchLoading(true);
+    setHasCustomerSearchCompleted(false);
+    const searchTimer = window.setTimeout(async () => {
+      try {
+        const response = await getCustomers({ search: searchTerm, status: 1 });
+        if (!isActive) return;
+
+        setCustomerOptions(mapCustomersResponse(response));
+        setHasCustomerSearchCompleted(true);
+        setIsCustomerDropdownOpen(true);
+      } catch {
+        if (!isActive) return;
+
+        setCustomerOptions([]);
+        setHasCustomerSearchCompleted(true);
+        setIsCustomerDropdownOpen(true);
+      } finally {
+        if (isActive) setIsCustomerSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(searchTimer);
+    };
+  }, [customerSearchQuery, selectedCustomerId]);
   const showCustomerRequiredMessage = () => {
     setValidationError('Please select or add a customer first.');
     setIsCustomerPanelHighlighted(true);
@@ -377,7 +409,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     setSelectedCustomerId(customer.id);
     setSelectedCustomerSnapshot(customer);
     setIsCustomerPanelHighlighted(false);
-    setCustomerSearchQuery(getCustomerSearchLabel(customer));
+    setCustomerSearchQuery(getCustomerDisplayName(customer));
     setIsCustomerDropdownOpen(false);
     setNewCustomerPhone(getCustomerPhone(customer));
     setNewCustomerName(getCustomerDisplayName(customer));
@@ -410,7 +442,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
     setSelectedCustomerId('');
     setSelectedCustomerSnapshot(null);
-    setIsCustomerDropdownOpen(value.trim().length >= 3);
+    setIsCustomerDropdownOpen(false);
     setValidationError('');
   };
 
@@ -494,7 +526,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       setSelectedCustomerId(createdCustomer.id);
       setSelectedCustomerSnapshot(createdCustomer);
       setIsCustomerPanelHighlighted(false);
-      setCustomerSearchQuery(getCustomerSearchLabel(createdCustomer));
+      setCustomerSearchQuery(getCustomerDisplayName(createdCustomer));
       setNewCustomerName(getCustomerDisplayName(createdCustomer));
       setNewCustomerPhone(getCustomerPhone(createdCustomer));
       setNewCustomerEmail(createdCustomer.email || '');
@@ -508,33 +540,26 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     }
   };
 
-  const handleInventorySearchChange = (value: string) => {
+  const handleCurrentInventorySelect = (inventoryId: string) => {
     if (!ensureDepartmentSelected()) return;
-    setIsInventoryDropdownOpen(true);
 
-    const matchedService = inventoryItems.find((service) =>
-      service.name.toLowerCase() === value.trim().toLowerCase()
-      || getInventoryLabel(service).toLowerCase() === value.trim().toLowerCase()
-    );
+    const selectedService = inventoryItems.find((service) => service.id === inventoryId);
+
+    if (!selectedService) {
+      updateCurrentRow({
+        serviceProduct: '',
+        inventoryItemId: '',
+      });
+      return;
+    }
 
     updateCurrentRow({
-      serviceProduct: value,
-      inventoryItemId: matchedService?.id || '',
-      ...(matchedService && matchedService.price > 0 && currentRow.transactionAccountId !== 'other'
-        ? { amount: String(matchedService.price) }
-      : {}),
-    });
-  };
-
-  const selectInventoryItem = (service: Service) => {
-    updateCurrentRow({
-      serviceProduct: getInventoryLabel(service),
-      inventoryItemId: service.id,
-      ...(service.price > 0 && currentRow.transactionAccountId !== 'other'
-        ? { amount: String(service.price) }
+      serviceProduct: selectedService.name,
+      inventoryItemId: selectedService.id,
+      ...(selectedService.price > 0 && currentRow.transactionAccountId !== 'other'
+        ? { amount: String(selectedService.price) }
         : {}),
     });
-    setIsInventoryDropdownOpen(false);
   };
 
   const buildRowPayload = (
@@ -863,67 +888,80 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
               <div className="form-section-title mb-1">Customer Search</div>
               <p className="page-muted small mb-0">Search by mobile number or name. Existing customer details will fill automatically.</p>
             </div>
+            <button
+              type="button"
+              className="btn-app btn-app-primary transaction-customer-panel__add-button"
+              onClick={openAddCustomerModal}
+              disabled={isCreatingCustomer}
+            >
+              Add Customer
+            </button>
           </div>
 
           <div className="transaction-customer-panel__grid">
             <div className="transaction-customer-panel__selector-row">
               <div className="app-field">
                 <label className="form-label" htmlFor="transaction-customer-search">Select Customer</label>
-                <div className="transaction-search-combobox">
+                <div className="transaction-search-combobox transaction-modern-select">
                   <input
                     ref={customerSearchInputRef}
-                    className="form-control"
+                    className="form-control transaction-modern-select__control"
                     id="transaction-customer-search"
-                    placeholder="Enter at least 3 character for results"
+                    placeholder="Select Customer"
                     value={customerSearchQuery}
+                    autoComplete="off"
                     onBlur={() => window.setTimeout(() => setIsCustomerDropdownOpen(false), 120)}
                     onChange={(event) => handleCustomerSearchChange(event.target.value)}
-                    onFocus={() => {
-                      if (customerSearchQuery.trim().length >= 3) setIsCustomerDropdownOpen(true);
-                    }}
                   />
-                  {isCustomerDropdownOpen && filteredCustomerSearchOptions.length > 0 ? (
+                  <span className="transaction-modern-select__chevron" aria-hidden="true">
+                    <FaChevronDown />
+                  </span>
+                  {isCustomerDropdownOpen && normalizedCustomerSearchQuery.length >= 3 && (isCustomerSearchLoading || hasCustomerSearchCompleted) ? (
                     <div className="transaction-search-dropdown transaction-search-dropdown--customer" role="listbox">
-                      {filteredCustomerSearchOptions.map(({ customer, label }) => (
-                        <button
-                          key={customer.id}
-                          type="button"
-                          className="transaction-search-dropdown__option"
-                          aria-selected={customer.id === selectedCustomerId}
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            selectCustomer(customer);
-                          }}
-                          role="option"
-                        >
-                          {label}
-                        </button>
-                      ))}
+                      {isCustomerSearchLoading ? (
+                        <div className="transaction-search-dropdown__empty">Searching customers...</div>
+                      ) : filteredCustomerSearchOptions.length > 0 ? (
+                        filteredCustomerSearchOptions.map(({ customer }) => (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            className="transaction-search-dropdown__option"
+                            aria-selected={customer.id === selectedCustomerId}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              selectCustomer(customer);
+                            }}
+                            role="option"
+                          >
+                            <span className="transaction-search-dropdown__primary">{getCustomerSearchLabel(customer)}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="transaction-search-dropdown__empty">No customers found.</div>
+                      )}
                     </div>
                   ) : null}
                 </div>
                 <p className="form-hint">
-                  {normalizedCustomerSearchQuery.length > 0 && normalizedCustomerSearchQuery.length < 3
-                    ? 'Enter at least 3 character for results.'
+                  {normalizedCustomerSearchQuery.length < 3
+                    ? 'Enter at least 3 characters to search customers'
                     : 'Search by customer name, phone, or customer code.'}
                 </p>
               </div>
-              <button
-                type="button"
-                className="btn-app btn-app-primary transaction-customer-panel__add-button"
-                onClick={openAddCustomerModal}
-                disabled={isCreatingCustomer}
-              >
-                Add Customer
-              </button>
             </div>
 
             {selectedCustomer ? (
               <div className="transaction-customer-card">
                 <div className="transaction-customer-card__header">
                   <span>Selected Customer</span>
-                  <button type="button" className="transaction-customer-card__remove" onClick={clearSelectedCustomer}>
-                    Remove Customer
+                  <button
+                    type="button"
+                    className="transaction-customer-card__remove"
+                    onClick={clearSelectedCustomer}
+                    aria-label="Clear customer"
+                    title="Clear customer"
+                  >
+                    x
                   </button>
                 </div>
                 <div className="transaction-customer-card__row">
@@ -1029,57 +1067,27 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                 </td>
                 <td data-label="Item">
                   <div className="app-field">
-                    {inventoryItems.length > 0 ? (
-                      <div className="transaction-search-combobox">
-                        <input
-                          aria-label="Item"
-                          className="form-control"
-                          placeholder={selectedDepartment?.id ? 'Search item' : 'Please select department first'}
-                          value={currentRow.serviceProduct}
-                          onBlur={() => window.setTimeout(() => setIsInventoryDropdownOpen(false), 120)}
-                          onFocus={(event) => {
-                            if (guardTransactionFieldInteraction(event)) setIsInventoryDropdownOpen(true);
-                          }}
-                          onMouseDown={guardTransactionFieldInteraction}
-                          onChange={(event) => handleInventorySearchChange(event.target.value)}
-                          readOnly={isTransactionEntryReadOnly}
-                          disabled={isSubmitting}
-                          required
-                        />
-                        {isInventoryDropdownOpen && !isTransactionEntryReadOnly && filteredInventoryItems.length > 0 ? (
-                          <div className="transaction-search-dropdown transaction-search-dropdown--item" role="listbox">
-                            {filteredInventoryItems.map((service) => (
-                              <button
-                                key={service.id}
-                                type="button"
-                                className="transaction-search-dropdown__option"
-                                aria-selected={service.id === currentRow.inventoryItemId}
-                                onMouseDown={(event) => {
-                                  event.preventDefault();
-                                  selectInventoryItem(service);
-                                }}
-                                role="option"
-                              >
-                                {getInventoryLabel(service)}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <input
-                        aria-label="Item"
-                        className="form-control"
-                        placeholder={selectedDepartment?.id ? 'No inventory available' : 'Please select department first'}
-                        value={currentRow.serviceProduct}
-                        onFocus={guardTransactionFieldInteraction}
-                        onMouseDown={guardTransactionFieldInteraction}
-                        onChange={(event) => updateCurrentRow({ serviceProduct: event.target.value })}
-                        readOnly
-                        disabled={isSubmitting}
-                        required
-                      />
-                    )}
+                    <select
+                      aria-label="Item"
+                      className="form-select"
+                      value={currentRow.inventoryItemId}
+                      onFocus={guardTransactionFieldInteraction}
+                      onMouseDown={guardTransactionFieldInteraction}
+                      onChange={(event) => handleCurrentInventorySelect(event.target.value)}
+                      disabled={isSubmitting || isTransactionEntryReadOnly || inventoryItems.length === 0}
+                      required
+                    >
+                      {selectedDepartment?.id ? (
+                        <option value="">{inventoryItems.length > 0 ? 'Select Item' : 'No inventory available'}</option>
+                      ) : (
+                        <option value="">Please select department first</option>
+                      )}
+                      {inventoryItems.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {getInventoryLabel(service)}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </td>
                 <td data-label="Account">
@@ -1112,6 +1120,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         </option>
                       ))}
                     </select>
+                    {/* <p className="form-hint transaction-entry-table__hint">Select the account from which payment was made.</p> */}
                   </div>
                 </td>
                 <td data-label="Amount">
@@ -1241,6 +1250,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                           </option>
                         ))}
                       </select>
+                      {/* <p className="form-hint transaction-entry-table__hint">Select the account from which payment was made.</p> */}
                     </td>
                     <td data-label="Account">
                       <select
@@ -1354,3 +1364,5 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 };
 
 export default ServiceForm;
+
+

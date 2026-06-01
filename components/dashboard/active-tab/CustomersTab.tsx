@@ -39,11 +39,12 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     canViewCustomerRecords,
     customerDirectoryRecords,
     customerOutstandingRows,
-    customerBalanceRows,
+    customerPaymentRows,
     isCustomersLoading,
-    isTransactionsLoading,
     isCustomerBalanceLoading,
     customerBalanceError,
+    isCustomerPaymentsLoading,
+    customerPaymentsError,
     handleViewCustomerHistory,
     handleEditCustomer,
     handleCustomerBalancePayment,
@@ -122,8 +123,8 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   const isCustomerDirectoryLoading = currentRole === 'Admin'
     ? isBusinessDirectoryLoading
     : isCustomersLoading;
-  const isCustomerPaymentsLoading = currentRole !== 'Admin' && isCustomerBalanceLoading;
-  const isCustomerOutstandingLoading = currentRole !== 'Admin' && (isCustomersLoading || isTransactionsLoading);
+  const isCustomerPaymentHistoryLoading = currentRole !== 'Admin' && isCustomerPaymentsLoading;
+  const isCustomerOutstandingLoading = currentRole !== 'Admin' && isCustomerBalanceLoading;
   const openBusinessFilter = () => {
     setDraftBusinessFilters(businessDirectoryFilters);
     setIsBusinessFilterOpen(true);
@@ -375,13 +376,13 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               />
             )
           ) : customerPageView === 'payments' ? (
-            customerBalanceError && customerBalanceRows.length === 0 && !isCustomerPaymentsLoading ? (
+            customerPaymentsError && customerPaymentRows.length === 0 && !isCustomerPaymentHistoryLoading ? (
               <ErrorState
                 eyebrow={customerModuleUi?.label}
                 title="Unable to load customer payment list"
-                description={customerBalanceError}
+                description={customerPaymentsError}
               />
-            ) : customerBalanceRows.length === 0 && !isCustomerPaymentsLoading ? (
+            ) : customerPaymentRows.length === 0 && !isCustomerPaymentHistoryLoading ? (
               <EmptyState
                 eyebrow={customerModuleUi?.label}
                 title={getCustomerWorkspaceViewUi('payments').emptyTitle}
@@ -389,13 +390,18 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               />
             ) : (
               <CustomerPaymentsTable
-                balances={customerBalanceRows}
-                isLoading={isCustomerPaymentsLoading}
-                onPay={openPayModal}
+                payments={customerPaymentRows}
+                isLoading={isCustomerPaymentHistoryLoading}
               />
             )
           ) : (
-            customerOutstandingRows.length === 0 && !isCustomerOutstandingLoading ? (
+            customerBalanceError && customerOutstandingRows.length === 0 && !isCustomerOutstandingLoading ? (
+              <ErrorState
+                eyebrow={customerModuleUi?.label}
+                title="Unable to load customer outstanding"
+                description={customerBalanceError}
+              />
+            ) : customerOutstandingRows.length === 0 && !isCustomerOutstandingLoading ? (
               <EmptyState
                 eyebrow={customerModuleUi?.label}
                 title={getCustomerWorkspaceViewUi('outstanding').emptyTitle}
@@ -405,7 +411,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               <CustomerOutstandingTable
                 rows={customerOutstandingRows}
                 isLoading={isCustomerOutstandingLoading}
-                onView={handleViewCustomerHistory}
+                onPay={openPayModal}
               />
             )
           )
