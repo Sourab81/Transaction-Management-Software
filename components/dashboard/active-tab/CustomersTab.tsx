@@ -1,12 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaFilter, FaPlusCircle } from 'react-icons/fa';
+import { getCustomers } from '../../../lib/api/customers';
 import { getCustomerWorkspaceViewUi, getModuleUi } from '../../../lib/module-ui';
 import { customerPermissionOptions } from '../../../lib/platform-structure';
 import { getCustomerWorkspacePath } from '../../../lib/workspace-routes';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../../lib/customer-balance-format';
+import { mapCustomersResponse } from '../../../lib/mappers/customer-mapper';
+import type { BusinessCustomer } from '../../../lib/store';
+import { useCustomerOutstanding } from '../../../lib/hooks/useCustomerOutstanding';
 import ActionModal from '../../ui/ActionModal';
 import EmptyState from '../../ui/state/EmptyState';
 import ErrorState from '../../ui/state/ErrorState';
@@ -39,20 +43,14 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     canViewCustomerRecords,
     customerDirectoryRecords,
     customerOutstandingRows,
-    customerPaymentRows,
     isCustomersLoading,
     isCustomerBalanceLoading,
     customerBalanceError,
-    isCustomerPaymentsLoading,
-    customerPaymentsError,
-    handleViewCustomerHistory,
     handleEditCustomer,
     handleCustomerBalancePayment,
     selectedCounter,
     accounts,
     canEditCustomerRecords,
-    handleDeleteRecord,
-    canDeleteCustomerRecords,
     renderCustomerRoutePermissionState,
     handleQuickAction,
     businessDirectoryFilters,
@@ -62,6 +60,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     isBusinessDirectoryLoading,
     businessDirectoryError,
     customerDirectoryPagination,
+    customerOutstandingPagination,
     roleTemplates,
   } = ctx;
   const [isBusinessFilterOpen, setIsBusinessFilterOpen] = useState(false);
@@ -73,6 +72,39 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   const [paymentRemark, setPaymentRemark] = useState('');
   const [paymentError, setPaymentError] = useState('');
   const [isPayingBalance, setIsPayingBalance] = useState(false);
+  const [outstandingCustomerSearch, setOutstandingCustomerSearch] = useState('');
+  const [outstandingCustomerOptions, setOutstandingCustomerOptions] = useState<BusinessCustomer[]>([]);
+  const [selectedOutstandingCustomer, setSelectedOutstandingCustomer] = useState<BusinessCustomer | null>(null);
+  const [isOutstandingCustomerSearchLoading, setIsOutstandingCustomerSearchLoading] = useState(false);
+  const [hasOutstandingCustomerSearchCompleted, setHasOutstandingCustomerSearchCompleted] = useState(false);
+  const [isOutstandingCustomerDropdownOpen, setIsOutstandingCustomerDropdownOpen] = useState(false);
+  const {
+    rows: selectedCustomerOutstandingRows,
+    isLoading: isSelectedCustomerOutstandingLoading,
+    error: selectedCustomerOutstandingError,
+    reload: reloadSelectedCustomerOutstanding,
+  } = useCustomerOutstanding(
+    currentRole !== 'Admin' && customerPageView === 'payments' && Boolean(selectedOutstandingCustomer?.id),
+    selectedOutstandingCustomer?.id,
+  );
+  const getCustomerName = (customer: BusinessCustomer) => customer.customerName || customer.name;
+  const getCustomerPhone = (customer: BusinessCustomer) => customer.mobileNo || customer.phone;
+  const getCustomerCode = (customer: BusinessCustomer) => customer.customerCode || '';
+  const getCustomerSearchLabel = (customer: BusinessCustomer) => [
+    getCustomerName(customer),
+    getCustomerCode(customer),
+    getCustomerPhone(customer),
+  ].filter(Boolean).join(' / ');
+  const normalizedOutstandingCustomerSearch = outstandingCustomerSearch.trim().toLowerCase();
+  const filteredOutstandingCustomerOptions = normalizedOutstandingCustomerSearch.length >= 3
+    ? outstandingCustomerOptions.filter((customer) => getCustomerSearchLabel(customer).toLowerCase().includes(normalizedOutstandingCustomerSearch))
+    : [];
+  const selectedOutstandingCustomerBalance = useMemo(() => {
+    if (selectedCustomerOutstandingRows.length === 0) return '-';
+
+    const lastRow = selectedCustomerOutstandingRows[selectedCustomerOutstandingRows.length - 1];
+    return lastRow.balance ?? lastRow.currentBalanceStatus;
+  }, [selectedCustomerOutstandingRows]);
   const businessDirectoryFiltersConfig: DataTableFiltersConfig = {
     search: {
       enabled: true,
@@ -98,11 +130,6 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
           { label: 'Inactive', value: 'Inactive' },
         ],
       },
-      {
-        field: 'joinedDate',
-        label: 'Joined date',
-        type: 'date-range',
-      },
     ],
   };
   const customerModuleUi = getModuleUi('customers');
@@ -123,8 +150,12 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
   const isCustomerDirectoryLoading = currentRole === 'Admin'
     ? isBusinessDirectoryLoading
     : isCustomersLoading;
-  const isCustomerPaymentHistoryLoading = currentRole !== 'Admin' && isCustomerPaymentsLoading;
   const isCustomerOutstandingLoading = currentRole !== 'Admin' && isCustomerBalanceLoading;
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production' && customerPageView === 'outstanding') {
+      console.log('[Customers Outstanding][Page] Rows passed to table:', customerOutstandingRows);
+    }
+  }, [customerOutstandingRows, customerPageView]);
   const openBusinessFilter = () => {
     setDraftBusinessFilters(businessDirectoryFilters);
     setIsBusinessFilterOpen(true);
@@ -144,6 +175,66 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
       ) : null}
     </div>
   ) : undefined;
+  useEffect(() => {
+    if (customerPageView !== 'payments' || selectedOutstandingCustomer) {
+      setIsOutstandingCustomerDropdownOpen(false);
+      setIsOutstandingCustomerSearchLoading(false);
+      setHasOutstandingCustomerSearchCompleted(false);
+      return;
+    }
+
+    const searchTerm = outstandingCustomerSearch.trim();
+    if (searchTerm.length < 3) {
+      setOutstandingCustomerOptions([]);
+      setIsOutstandingCustomerDropdownOpen(false);
+      setIsOutstandingCustomerSearchLoading(false);
+      setHasOutstandingCustomerSearchCompleted(false);
+      return;
+    }
+
+    let isActive = true;
+    setIsOutstandingCustomerSearchLoading(true);
+    setHasOutstandingCustomerSearchCompleted(false);
+
+    const searchTimer = window.setTimeout(async () => {
+      try {
+        const response = await getCustomers({ search: searchTerm, status: 1 });
+        if (!isActive) return;
+
+        setOutstandingCustomerOptions(mapCustomersResponse(response));
+        setHasOutstandingCustomerSearchCompleted(true);
+        setIsOutstandingCustomerDropdownOpen(true);
+      } catch {
+        if (!isActive) return;
+
+        setOutstandingCustomerOptions([]);
+        setHasOutstandingCustomerSearchCompleted(true);
+        setIsOutstandingCustomerDropdownOpen(true);
+      } finally {
+        if (isActive) setIsOutstandingCustomerSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(searchTimer);
+    };
+  }, [customerPageView, outstandingCustomerSearch, selectedOutstandingCustomer]);
+
+  const selectOutstandingCustomer = (customer: BusinessCustomer) => {
+    setSelectedOutstandingCustomer(customer);
+    setOutstandingCustomerSearch(getCustomerSearchLabel(customer));
+    setOutstandingCustomerOptions([]);
+    setIsOutstandingCustomerDropdownOpen(false);
+    setHasOutstandingCustomerSearchCompleted(false);
+  };
+  const clearOutstandingCustomer = () => {
+    setSelectedOutstandingCustomer(null);
+    setOutstandingCustomerSearch('');
+    setOutstandingCustomerOptions([]);
+    setIsOutstandingCustomerDropdownOpen(false);
+    setHasOutstandingCustomerSearchCompleted(false);
+  };
   const openPayModal = (balance: CustomerBalance) => {
     setPayingBalance(balance);
     setPaymentAmount('');
@@ -183,6 +274,7 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
     setIsPayingBalance(false);
 
     if (success) {
+      reloadSelectedCustomerOutstanding();
       closePayModal();
     }
   };
@@ -297,42 +389,54 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
         </ActionModal>
       ) : null}
 
-      <div className="col-12">
-        <SectionHero
-          eyebrow={currentRole === 'Admin' ? 'User Hub' : 'Customer Hub'}
-          title={customerSectionTitle}
-          description={customerSectionDescription}
-          action={canAddCustomerRecords ? {
-            label: `Add ${customerEntityLabel}`,
-            icon: <FaPlusCircle />,
-            onClick: () => handleQuickAction('add-customer'),
-          } : undefined}
-        />
-      </div>
-
-      {renderSummaryCards(customerSummary)}
-
-      {currentRole !== 'Admin' && customerPageOptions.length > 0 ? (
+      {currentRole === 'Admin' ? (
         <div className="col-12">
-          <section className="panel p-4">
-            <div className="panel-header">
+          <SectionHero
+            eyebrow="User Hub"
+            title={customerSectionTitle}
+            description={customerSectionDescription}
+            action={canAddCustomerRecords ? {
+              label: `Add ${customerEntityLabel}`,
+              icon: <FaPlusCircle />,
+              onClick: () => handleQuickAction('add-customer'),
+            } : undefined}
+          />
+        </div>
+      ) : null}
+
+      {currentRole !== 'Admin' && (customerPageOptions.length > 0 || canAddCustomerRecords) ? (
+        <div className="col-12">
+          <section className="panel p-4 customer-options-panel">
+            <div className="panel-header customer-options-panel__header">
               <div>
                 <p className="eyebrow">Customer Options</p>
                 <h2 className="panel-title">Choose what you want to review</h2>
-                <p className="panel-copy">Switch between the customer directory, payment list, and outstanding balances based on your assigned permissions.</p>
+                <p className="panel-copy">Switch between the customer directory, payment list, and outstanding.</p>
               </div>
-            </div>
-            <div className="d-flex flex-wrap gap-2">
-              {customerPageOptions.map((option) => (
-                <Link
-                  key={option.id}
-                  href={getCustomerWorkspacePath(option.id)}
-                  className={customerPageView === option.id ? 'btn-app btn-app-primary' : 'btn-app btn-app-secondary'}
+              {canAddCustomerRecords ? (
+                <button
+                  type="button"
+                  className="btn-app btn-app-primary customer-options-panel__add"
+                  onClick={() => handleQuickAction('add-customer')}
                 >
-                  {option.label}
-                </Link>
-              ))}
+                  <FaPlusCircle />
+                  Add {customerEntityLabel}
+                </button>
+              ) : null}
             </div>
+            {customerPageOptions.length > 0 ? (
+              <div className="d-flex flex-wrap gap-2">
+                {customerPageOptions.map((option) => (
+                  <Link
+                    key={option.id}
+                    href={getCustomerWorkspacePath(option.id)}
+                    className={customerPageView === option.id ? 'btn-app btn-app-primary' : 'btn-app btn-app-secondary'}
+                  >
+                    {option.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </section>
         </div>
       ) : null}
@@ -364,36 +468,133 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
                   ? `User records, login status, and permission access. Current filter: ${businessPermissionFilterLabel}.`
                   : 'Contact details and profile status used across service workflows.'}
                 entityLabel={customerEntityLabel}
-                emptyLabel={`No ${customerEntityLabel.toLowerCase()} records found.`}
+                emptyLabel={currentRole === 'Admin' ? 'No users found' : 'No customers found'}
                 isLoading={isCustomerDirectoryLoading}
-                pagination={currentRole === 'Admin' ? customerDirectoryPagination : undefined}
+                pagination={customerDirectoryPagination}
                 headerAction={businessFilterAction}
                 showRoleColumn={currentRole === 'Admin'}
                 roleTemplates={roleTemplates}
-                onView={currentRole === 'Admin' ? undefined : handleViewCustomerHistory}
                 onEdit={canEditCustomerRecords ? handleEditCustomer : undefined}
-                onDelete={currentRole !== 'Admin' && canDeleteCustomerRecords ? (id: string) => handleDeleteRecord('DELETE_CUSTOMER', id) : undefined}
               />
             )
           ) : customerPageView === 'payments' ? (
-            customerPaymentsError && customerPaymentRows.length === 0 && !isCustomerPaymentHistoryLoading ? (
-              <ErrorState
-                eyebrow={customerModuleUi?.label}
-                title="Unable to load customer payment list"
-                description={customerPaymentsError}
-              />
-            ) : customerPaymentRows.length === 0 && !isCustomerPaymentHistoryLoading ? (
-              <EmptyState
-                eyebrow={customerModuleUi?.label}
-                title={getCustomerWorkspaceViewUi('payments').emptyTitle}
-                description={getCustomerWorkspaceViewUi('payments').emptyDescription}
-              />
-            ) : (
-              <CustomerPaymentsTable
-                payments={customerPaymentRows}
-                isLoading={isCustomerPaymentHistoryLoading}
-              />
-            )
+            <>
+              <section className="panel p-4 customer-outstanding-search-panel mb-4">
+                <div className="customer-outstanding-search-panel__header">
+                  <div>
+                    <p className="eyebrow">Customer Search</p>
+                    <h2 className="panel-title">Search customer payment ledger</h2>
+                    <p className="panel-copy">Search by customer name, phone number, or customer code.</p>
+                  </div>
+                  {selectedOutstandingCustomer ? (
+                    <div className="customer-outstanding-search-panel__actions">
+                      {selectedCustomerOutstandingRows.length > 0 ? (
+                        <button
+                          type="button"
+                          className="btn-app btn-app-primary"
+                          onClick={() => openPayModal(selectedCustomerOutstandingRows[selectedCustomerOutstandingRows.length - 1])}
+                        >
+                          Pay Customer
+                        </button>
+                      ) : null}
+                      <button type="button" className="btn-app btn-app-secondary" onClick={clearOutstandingCustomer}>
+                        Clear Customer
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="customer-outstanding-search">
+                  <input
+                    className="form-control customer-outstanding-search__input"
+                    placeholder="Search customer by name, phone, or code"
+                    value={outstandingCustomerSearch}
+                    readOnly={Boolean(selectedOutstandingCustomer)}
+                    onChange={(event) => {
+                      setOutstandingCustomerSearch(event.target.value);
+                      setSelectedOutstandingCustomer(null);
+                    }}
+                    onFocus={() => {
+                      if (filteredOutstandingCustomerOptions.length > 0) {
+                        setIsOutstandingCustomerDropdownOpen(true);
+                      }
+                    }}
+                  />
+                  {isOutstandingCustomerDropdownOpen && normalizedOutstandingCustomerSearch.length >= 3 ? (
+                    <div className="customer-outstanding-search__dropdown">
+                      {isOutstandingCustomerSearchLoading ? (
+                        <div className="customer-outstanding-search__empty">Searching customers...</div>
+                      ) : filteredOutstandingCustomerOptions.length > 0 ? (
+                        filteredOutstandingCustomerOptions.map((customer) => (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            className="customer-outstanding-search__option"
+                            onClick={() => selectOutstandingCustomer(customer)}
+                          >
+                            {getCustomerSearchLabel(customer)}
+                          </button>
+                        ))
+                      ) : hasOutstandingCustomerSearchCompleted ? (
+                        <div className="customer-outstanding-search__empty">No customers found</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <p className="form-hint mb-0">
+                    {normalizedOutstandingCustomerSearch.length < 3 && !selectedOutstandingCustomer
+                      ? 'Enter at least 3 characters to search customers'
+                      : 'Select a customer to load only their payment ledger.'}
+                  </p>
+                </div>
+                {selectedOutstandingCustomer ? (
+                  <div className="customer-outstanding-card">
+                    <div>
+                      <span>Customer Name</span>
+                      <strong>{getCustomerName(selectedOutstandingCustomer)}</strong>
+                    </div>
+                    <div>
+                      <span>Phone</span>
+                      <strong>{getCustomerPhone(selectedOutstandingCustomer) || '-'}</strong>
+                    </div>
+                    <div>
+                      <span>Customer Code</span>
+                      <strong>{getCustomerCode(selectedOutstandingCustomer) || '-'}</strong>
+                    </div>
+                    <div>
+                      <span>Current Balance</span>
+                      <strong className={getCustomerBalanceClassName(selectedOutstandingCustomerBalance)}>
+                        {selectedOutstandingCustomerBalance === '-'
+                          ? '-'
+                          : formatCustomerBalance(selectedOutstandingCustomerBalance)}
+                      </strong>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+              {!selectedOutstandingCustomer ? (
+                <EmptyState
+                  eyebrow={customerModuleUi?.label}
+                  title="Search and select a customer to view payment ledger"
+                  description="Payment ledger records are hidden until a customer is selected."
+                />
+              ) : selectedCustomerOutstandingError && selectedCustomerOutstandingRows.length === 0 && !isSelectedCustomerOutstandingLoading ? (
+                <ErrorState
+                  eyebrow={customerModuleUi?.label}
+                  title="Unable to load customer payment ledger"
+                  description={selectedCustomerOutstandingError}
+                />
+              ) : selectedCustomerOutstandingRows.length === 0 && !isSelectedCustomerOutstandingLoading ? (
+                <EmptyState
+                  eyebrow={customerModuleUi?.label}
+                  title="No payment ledger found"
+                  description="This customer does not have ledger records yet."
+                />
+              ) : (
+                <CustomerPaymentsTable
+                  rows={selectedCustomerOutstandingRows}
+                  isLoading={isSelectedCustomerOutstandingLoading}
+                />
+              )}
+            </>
           ) : (
             customerBalanceError && customerOutstandingRows.length === 0 && !isCustomerOutstandingLoading ? (
               <ErrorState
@@ -411,6 +612,9 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
               <CustomerOutstandingTable
                 rows={customerOutstandingRows}
                 isLoading={isCustomerOutstandingLoading}
+                pagination={customerOutstandingPagination}
+                onPageChange={customerOutstandingPagination?.onPageChange}
+                onLimitChange={customerOutstandingPagination?.onLimitChange}
                 onPay={openPayModal}
               />
             )
@@ -424,6 +628,8 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
           />
         )}
       </div>
+
+      {renderSummaryCards(customerSummary)}
     </div>
   );
 }

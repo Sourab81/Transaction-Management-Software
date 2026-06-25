@@ -37,19 +37,6 @@ const errorResponse = (error: unknown, fallbackMessage = 'Unable to process cust
   return Response.json({ success: false, message: fallbackMessage }, { status: 502 });
 };
 
-const appendFilters = (request: Request) => {
-  const requestUrl = new URL(request.url);
-  const params = new URLSearchParams();
-
-  ['search', 'status'].forEach((key) => {
-    const value = requestUrl.searchParams.get(key);
-    if (value) params.set(key, value);
-  });
-
-  const query = params.toString();
-  return query ? `getCustomers?${query}` : 'getCustomers';
-};
-
 const readRequiredString = (payload: Record<string, unknown>, keys: string[], label: string) => {
   for (const key of keys) {
     const value = payload[key];
@@ -84,6 +71,32 @@ const addOptionalField = (
   }
 };
 
+const buildListPayload = (payload: Record<string, unknown>) => {
+  const backendPayload: Record<string, unknown> = {
+    page_no: 1,
+    limit: 10,
+    status: 1,
+  };
+
+  addOptionalField(backendPayload, 'page_no', payload, ['pageNo', 'page', 'page_no']);
+  addOptionalField(backendPayload, 'limit', payload, ['limit']);
+  addOptionalField(backendPayload, 'search', payload, ['search']);
+  addOptionalField(backendPayload, 'status', payload, ['status']);
+
+  return backendPayload;
+};
+
+const buildListPayloadFromUrl = (request: Request) => {
+  const { searchParams } = new URL(request.url);
+  const payload: Record<string, unknown> = {};
+
+  searchParams.forEach((value, key) => {
+    payload[key] = value;
+  });
+
+  return buildListPayload(payload);
+};
+
 const buildCustomerMutationPayload = (
   action: 'create' | 'update',
   payload: Record<string, unknown>,
@@ -115,6 +128,7 @@ const buildCustomerMutationPayload = (
 
   addOptionalField(backendPayload, 'email', payload, ['email']);
   addOptionalField(backendPayload, 'address', payload, ['address']);
+  addOptionalField(backendPayload, 'dob', payload, ['dob', 'dateOfBirth', 'date_of_birth']);
   addOptionalField(backendPayload, 'remark', payload, ['remark']);
 
   return backendPayload;
@@ -123,7 +137,10 @@ const buildCustomerMutationPayload = (
 export async function GET(request: Request) {
   try {
     // Token is httpOnly, so this local route calls the backend server-side.
-    return Response.json(await backendFetch(appendFilters(request), { method: 'POST' }));
+    return Response.json(await backendFetch('getCustomers', {
+      method: 'POST',
+      body: buildListPayloadFromUrl(request),
+    }));
   } catch (error) {
     return errorResponse(error, 'Unable to load customers.');
   }
@@ -139,7 +156,10 @@ export async function POST(request: Request) {
 
   if (action === 'list') {
     try {
-      return Response.json(await backendFetch('getCustomers', { method: 'POST' }));
+      return Response.json(await backendFetch('getCustomers', {
+        method: 'POST',
+        body: buildListPayload(payload),
+      }));
     } catch (error) {
       return errorResponse(error, 'Unable to load customers.');
     }

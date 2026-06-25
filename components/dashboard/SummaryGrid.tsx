@@ -16,7 +16,7 @@ const SummaryGrid: React.FC<SummaryGridProps> = ({
   const visibleSkeletonCount = skeletonCount ?? (cards.length > 0 ? cards.length : 4);
 
   return (
-    <div className="row g-4 mb-4 summary-grid">
+    <div className="row g-4 mb-0 summary-grid">
       {loading
         ? Array.from({ length: visibleSkeletonCount }).map((_, index) => (
           <div key={`summary-skeleton-${index}`} className="col-12 col-md-6 col-xl-3">

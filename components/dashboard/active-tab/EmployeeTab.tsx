@@ -22,6 +22,7 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
     employees,
     canEditEmployeeRecords,
     canDeleteEmployeeRecords,
+    employeePagination,
     handleQuickAction,
     handleEditEmployee,
     handleDeleteRecord,
@@ -49,8 +50,6 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
         />
       </div>
 
-      {renderSummaryCards(employeeSummary)}
-
       <div className="col-12">
         {canViewEmployeeRecords ? (
           employees.length === 0 && !isEmployeesLoading ? (
@@ -64,6 +63,7 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
             <EmployeesTable
               employees={employees}
               isLoading={isEmployeesLoading}
+              pagination={employeePagination}
               onEdit={canEditEmployeeRecords ? handleEditEmployee : undefined}
               onDelete={canDeleteEmployeeRecords ? (id: string) => handleDeleteRecord('DELETE_EMPLOYEE', id) : undefined}
             />
@@ -77,6 +77,8 @@ export default function EmployeeTab({ ctx }: EmployeeTabProps) {
           />
         )}
       </div>
+
+      {renderSummaryCards(employeeSummary)}
     </div>
   );
 }

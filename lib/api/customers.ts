@@ -6,6 +6,7 @@ export interface Customer {
   customerCode?: string;
   customerName: string;
   mobileNo: string;
+  dob?: string | null;
   email?: string | null;
   address?: string | null;
   remark?: string | null;
@@ -15,6 +16,9 @@ export interface Customer {
 }
 
 export interface CustomerFilters {
+  pageNo?: number;
+  page?: number;
+  limit?: number;
   search?: string;
   status?: number;
 }
@@ -22,6 +26,7 @@ export interface CustomerFilters {
 export interface CreateCustomerPayload {
   customerName: string;
   mobileNo: string;
+  dob?: string | null;
   email?: string | null;
   address?: string | null;
   remark?: string | null;
@@ -40,6 +45,9 @@ export interface CustomerMutationResult {
 const appendCustomerFilters = (filters: CustomerFilters = {}) => {
   const params = new URLSearchParams();
 
+  if (typeof filters.pageNo !== 'undefined') params.set('pageNo', String(filters.pageNo));
+  if (typeof filters.page !== 'undefined') params.set('page', String(filters.page));
+  if (typeof filters.limit !== 'undefined') params.set('limit', String(filters.limit));
   if (filters.search?.trim()) params.set('search', filters.search.trim());
   if (typeof filters.status !== 'undefined') params.set('status', String(filters.status));
 
@@ -60,13 +68,15 @@ const normalizeCustomerMutationResult = (
 
   const message = readJoinedMessage(payload.message) || readJoinedMessage(payload.error) || fallbackMessage;
   const success = payload.success === true || payload.status === true || payload.status === 1 || payload.status === '1';
+  const customer = payload.customer
+    ?? payload.item
+    ?? payload.data
+    ?? (payload.customer_id || payload.customerId || payload.id ? payload : undefined);
 
   return {
     success,
     message,
-    ...(payload.customer ? { customer: payload.customer } : {}),
-    ...(payload.item ? { customer: payload.item } : {}),
-    ...(payload.data ? { customer: payload.data } : {}),
+    ...(customer ? { customer } : {}),
   };
 };
 

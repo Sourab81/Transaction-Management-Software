@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { Counter } from '../../lib/store';
+import { formatDateTime } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface DepartmentsTableProps {
@@ -50,7 +51,7 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
             </span>
           ),
         },
-        { key: 'date', header: 'Added Date', render: (counter) => counter.date || '-' },
+        { key: 'date', header: 'Added Date', render: (counter) => formatDateTime(counter.date) },
       ]}
       renderActions={(counter) => (
         <div className="table-actions">

@@ -150,6 +150,24 @@ const readOptionalId = (value: unknown, label: string) => {
   );
 };
 
+const addOptionalNumberField = (
+  backendPayload: Record<string, unknown>,
+  backendKey: string,
+  payload: Record<string, unknown>,
+  keys: string[],
+) => {
+  for (const key of keys) {
+    if (typeof payload[key] === 'undefined' || payload[key] === null || payload[key] === '') continue;
+
+    const value = readNonNegativeNumber(payload[key], backendKey, false);
+    if (value instanceof Response) return value;
+    if (typeof value !== 'undefined') backendPayload[backendKey] = value;
+    return undefined;
+  }
+
+  return undefined;
+};
+
 const buildInventoryQuery = (request: Request) => {
   const source = new URL(request.url).searchParams;
   const params = new URLSearchParams();
@@ -241,6 +259,15 @@ export async function POST(request: Request) {
     const quantity = readNonNegativeNumber(payload.quantity, 'Quantity', action === 'create');
     if (quantity instanceof Response) return quantity;
     if (typeof quantity !== 'undefined') backendPayload.quantity = quantity;
+
+    const openingStock = addOptionalNumberField(backendPayload, 'opening_stock', payload, ['openingStock', 'opening_stock']);
+    if (openingStock instanceof Response) return openingStock;
+
+    const currentStock = addOptionalNumberField(backendPayload, 'current_stock', payload, ['currentStock', 'current_stock']);
+    if (currentStock instanceof Response) return currentStock;
+
+    const lowStockThreshold = addOptionalNumberField(backendPayload, 'low_stock_threshold', payload, ['lowStockThreshold', 'low_stock_threshold']);
+    if (lowStockThreshold instanceof Response) return lowStockThreshold;
 
     const counterId = action === 'create'
       ? readOptionalId(payload.counterId ?? payload.counter_id, 'Counter')

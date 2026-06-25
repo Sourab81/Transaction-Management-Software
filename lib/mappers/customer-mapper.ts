@@ -36,6 +36,7 @@ export const mapCustomerRecord = (record: UnknownRecord): BusinessCustomer | nul
     phone,
     mobileNo: phone,
     email: readStringValue(record, ['email', 'customer_email', 'user_email']) || undefined,
+    dob: readStringValue(record, ['dob', 'date_of_birth', 'dateOfBirth']) || undefined,
     address: readStringValue(record, ['address']) || null,
     remark: readStringValue(record, ['remark', 'remarks']) || null,
     status: readStatusNumber(record),

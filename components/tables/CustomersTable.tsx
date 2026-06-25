@@ -1,7 +1,8 @@
 import React from 'react';
-import { FaEdit, FaEye, FaTrashAlt } from 'react-icons/fa';
+import { FaEdit } from 'react-icons/fa';
 import type { Business, BusinessCustomer } from '../../lib/store';
 import type { RoleTemplate } from '../../lib/types/role-template';
+import { formatDateTime } from '../../src/utils/dateFormatter';
 import DataTable, {
   type DataTableColumn,
   type DataTablePagination,
@@ -15,9 +16,7 @@ type UserRoleDisplayRecord = Partial<Pick<
 
 interface CustomersTableProps {
   customers: CustomerDirectoryRecord[];
-  onView?: (recordId: string) => void;
   onEdit?: (recordId: string) => void;
-  onDelete?: (recordId: string) => void;
   eyebrow?: string;
   title?: string;
   copy?: string;
@@ -32,9 +31,7 @@ interface CustomersTableProps {
 
 const CustomersTable: React.FC<CustomersTableProps> = ({
   customers,
-  onView,
   onEdit,
-  onDelete,
   eyebrow = 'Customers',
   title = 'Customer directory',
   copy = 'Contact details and profile status used across service workflows.',
@@ -46,7 +43,7 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
   showRoleColumn = false,
   roleTemplates = [],
 }) => {
-  const hasActions = Boolean(onView || onEdit || onDelete);
+  const hasActions = Boolean(onEdit);
   const getUserRoleTemplateId = (customer: CustomerDirectoryRecord) => {
     const user = customer as UserRoleDisplayRecord;
 
@@ -138,7 +135,10 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       : [{
           key: 'joined',
           header: 'Added Date',
-          render: (customer: CustomerDirectoryRecord) => 'addedDate' in customer ? customer.addedDate || customer.joinedDate || 'Not added' : customer.joinedDate || 'Not added',
+          render: (customer: CustomerDirectoryRecord) => formatDateTime(
+            'addedDate' in customer ? customer.addedDate || customer.joinedDate : customer.joinedDate,
+            'Not added',
+          ),
         }]),
   ];
 
@@ -156,22 +156,10 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       columns={columns}
       renderActions={(customer) => (
         <div className="table-actions">
-          {onView && (
-            <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onView(customer.id)}>
-              <FaEye size={12} />
-              View
-            </button>
-          )}
           {onEdit && (
             <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => onEdit(customer.id)}>
               <FaEdit size={12} />
               Edit
-            </button>
-          )}
-          {onDelete && (
-            <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => onDelete(customer.id)}>
-              <FaTrashAlt size={12} />
-              Delete
             </button>
           )}
           {!hasActions && <span className="page-muted small">View only</span>}

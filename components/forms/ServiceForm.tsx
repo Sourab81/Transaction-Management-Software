@@ -1,22 +1,23 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FaChevronDown } from 'react-icons/fa';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { FaChevronDown, FaPlus } from 'react-icons/fa';
+import ConfirmActionModal from '../ui/state/ConfirmActionModal';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
 import { createCustomer, getCustomers } from '../../lib/api/customers';
-import { createTransaction } from '../../lib/api/transactions';
+import { createTransaction, updateTransaction } from '../../lib/api/transactions';
 import { mapCustomerRecord, mapCustomersResponse } from '../../lib/mappers/customer-mapper';
-import { isRecord } from '../../lib/mappers/legacy-record';
+import { extractFirstRecordWithKeys, readStringValue } from '../../lib/mappers/legacy-record';
 import {
-  createRecordId,
   type Account,
   type BusinessCustomer,
   type Counter,
   type Service,
   type Transaction,
+  type TransactionChildRow,
   useAppDispatch,
 } from '../../lib/store';
-import ActionModal from '../ui/ActionModal';
 
 export interface ServiceWorkflowDraft {
   token: string;
@@ -33,6 +34,7 @@ export interface ServiceWorkflowDraft {
 }
 
 interface TransactionFormPayload {
+  childId?: string;
   formName: string;
   transactionNo: string;
   noOfTransaction: number;
@@ -53,6 +55,7 @@ interface TransactionFormPayload {
 }
 
 interface TransactionDraftRow {
+  childId?: string;
   formName: string;
   transactionNo: string;
   serviceProduct: string;
@@ -65,7 +68,27 @@ interface TransactionDraftRow {
   remark: string;
 }
 
+interface NewCustomerDraft {
+  customerName: string;
+  mobileNo: string;
+  address: string;
+  dob: string;
+  email: string;
+}
+
 type SavedTransactionRow = TransactionFormPayload & { id: string };
+
+interface CustomerSearchPanelProps {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  isEditMode: boolean;
+  isHighlighted: boolean;
+  selectedCustomer: BusinessCustomer | null;
+  initialDraft: NewCustomerDraft;
+  onCustomerSelected: (customer: BusinessCustomer) => void;
+  onCustomerCleared: () => void;
+  onDraftChange: (draft: NewCustomerDraft) => void;
+  onValidationClear: () => void;
+}
 
 interface ServiceFormProps {
   accounts?: Account[];
@@ -80,6 +103,7 @@ interface ServiceFormProps {
     role: 'Customer' | 'Employee';
   };
   draft?: ServiceWorkflowDraft | null;
+  initialTransaction?: Transaction | null;
   onCustomersChanged?: () => void;
   onTransactionsChanged?: () => void | Promise<void>;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -88,6 +112,7 @@ interface ServiceFormProps {
 const toSafeAmount = (value: string) => parseNonNegativeNumber(value) ?? 0;
 
 const createEmptyRow = (transactionAccountId: string): TransactionDraftRow => ({
+  childId: undefined,
   formName: '',
   transactionNo: '1',
   serviceProduct: '',
@@ -98,6 +123,77 @@ const createEmptyRow = (transactionAccountId: string): TransactionDraftRow => ({
   bankCharge: '0',
   otherCharge: '0',
   remark: '',
+});
+
+const normalizeTransactionAccountId = (value: string | null | undefined, fallback: string) => {
+  const normalizedValue = value?.trim().toLowerCase();
+  return normalizedValue === 'cash' ? 'other' : value || fallback;
+};
+
+const transactionChildToDraftRow = (
+  row: TransactionChildRow,
+  fallbackAccountId: string,
+): TransactionDraftRow => ({
+  childId: row.id,
+  formName: row.formName || '',
+  transactionNo: String(row.noOfTransaction || 1),
+  serviceProduct: row.inventoryName || '',
+  inventoryItemId: row.inventoryId || '',
+  transactionAccountId: normalizeTransactionAccountId(row.transactionAccount, fallbackAccountId),
+  amount: String((row.amount ?? 0) / Math.max(row.noOfTransaction || 1, 1)),
+  serviceCharge: String(row.serviceCharge ?? 0),
+  bankCharge: String(row.bankCharge ?? 0),
+  otherCharge: String(row.otherCharge ?? 0),
+  remark: row.remark || '',
+});
+
+const getTransactionDraftRows = (
+  transaction: Transaction | null | undefined,
+  fallbackAccountId: string,
+) => {
+  if (!transaction) return [];
+  if (transaction.rows && transaction.rows.length > 0) {
+    return transaction.rows.map((row) => transactionChildToDraftRow(row, fallbackAccountId));
+  }
+
+  return [{
+    childId: undefined,
+    formName: transaction.formName || '',
+    transactionNo: String(transaction.noOfTransaction || 1),
+    serviceProduct: transaction.serviceProduct || transaction.service || '',
+    inventoryItemId: transaction.inventoryItemId || transaction.serviceId || '',
+    transactionAccountId: normalizeTransactionAccountId(
+      transaction.transactionAccountId || transaction.accountId,
+      fallbackAccountId,
+    ),
+    amount: String((transaction.transactionAmount ?? transaction.amount ?? 0) / Math.max(transaction.noOfTransaction || 1, 1)),
+    serviceCharge: String(transaction.serviceCharge ?? 0),
+    bankCharge: String(transaction.bankCharge ?? 0),
+    otherCharge: String(transaction.otherCharge ?? 0),
+    remark: transaction.remark || transaction.note || '',
+  } satisfies TransactionDraftRow];
+};
+
+const savedRowToDraftRow = (row: SavedTransactionRow): TransactionDraftRow => ({
+  childId: row.childId,
+  formName: row.formName,
+  transactionNo: String(row.noOfTransaction),
+  serviceProduct: row.serviceProduct,
+  inventoryItemId: row.inventoryId,
+  transactionAccountId: row.transactionAccountType === 'other' ? 'other' : row.transactionAccountId || '',
+  amount: String(row.unitAmount),
+  serviceCharge: String(row.serviceCharge),
+  bankCharge: String(row.bankCharge),
+  otherCharge: String(row.otherCharge),
+  remark: row.remark,
+});
+
+const createEmptyCustomerDraft = (customerName = ''): NewCustomerDraft => ({
+  customerName,
+  mobileNo: '',
+  address: '',
+  dob: '',
+  email: '',
 });
 
 const getCustomerDisplayName = (customer: BusinessCustomer) =>
@@ -113,7 +209,53 @@ const getCustomerSearchLabel = (customer: BusinessCustomer) => {
   const name = getCustomerDisplayName(customer);
   const phone = getCustomerPhone(customer);
   const code = getCustomerCode(customer);
-  return [name, phone, code].filter(Boolean).join(' / ');
+  return [name, code, phone].filter(Boolean).join(' / ');
+};
+
+const mapCreatedCustomerResponse = (
+  payload: unknown,
+  draft: NewCustomerDraft,
+): BusinessCustomer | null => {
+  const record = extractFirstRecordWithKeys(
+    payload,
+    ['id', 'customer_id', 'customerId', 'cust_id'],
+    ['data', 'customer', 'item', 'result'],
+  );
+  const scalarId = typeof payload === 'string' || typeof payload === 'number'
+    ? String(payload).trim()
+    : '';
+  const id = record
+    ? readStringValue(record, ['id', 'customer_id', 'customerId', 'cust_id']) || ''
+    : scalarId;
+
+  if (!id) return null;
+
+  if (record) {
+    const mappedCustomer = mapCustomerRecord({
+      ...record,
+      customer_name: readStringValue(record, ['customer_name', 'customerName', 'name']) || draft.customerName,
+      mobile_no: readStringValue(record, ['mobile_no', 'mobileNo', 'phone']) || draft.mobileNo,
+      email: readStringValue(record, ['email']) || draft.email,
+      address: readStringValue(record, ['address']) || draft.address,
+    });
+    if (mappedCustomer) return mappedCustomer;
+  }
+
+  const addedDate = new Date().toISOString().split('T')[0];
+  return {
+    id,
+    name: draft.customerName,
+    customerName: draft.customerName,
+    customerCode: undefined,
+    phone: draft.mobileNo,
+    mobileNo: draft.mobileNo,
+    email: draft.email || undefined,
+    address: draft.address || null,
+    remark: null,
+    status: 'Active',
+    joinedDate: addedDate,
+    addedDate,
+  };
 };
 
 const isCurrentRowEmpty = (row: TransactionDraftRow) => (
@@ -129,6 +271,16 @@ const isCurrentRowEmpty = (row: TransactionDraftRow) => (
 
 const getInventoryLabel = (service: Service) =>
   `${service.name} - ${service.type === 'product' ? 'Product' : 'Service'}`;
+
+const getAvailableStock = (service: Service | undefined) => (
+  service ? Number(service.currentStock ?? service.quantity ?? 0) : 0
+);
+
+const isStockManagedProduct = (service: Service | undefined) => service?.type === 'product';
+
+const getAvailableStockLabel = (service: Service | undefined) => (
+  service ? `Available Stock: ${isStockManagedProduct(service) ? getAvailableStock(service) : 'Unlimited'}` : ''
+);
 
 const idsMatch = (
   left: string | number | null | undefined,
@@ -157,6 +309,298 @@ const isServiceActiveForCounter = (service: Service, counterId: string | number 
   && idsMatch(getServiceCounterId(service), counterId)
 );
 
+const CustomerSearchPanel = memo(function CustomerSearchPanel({
+  inputRef,
+  isEditMode,
+  isHighlighted,
+  selectedCustomer,
+  initialDraft,
+  onCustomerSelected,
+  onCustomerCleared,
+  onDraftChange,
+  onValidationClear,
+}: CustomerSearchPanelProps) {
+  const [customerOptions, setCustomerOptions] = useState<BusinessCustomer[]>(
+    selectedCustomer ? [selectedCustomer] : [],
+  );
+  const [customerSearchQuery, setCustomerSearchQuery] = useState(
+    selectedCustomer ? getCustomerSearchLabel(selectedCustomer) : initialDraft.customerName,
+  );
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false);
+  const [hasCustomerSearchCompleted, setHasCustomerSearchCompleted] = useState(false);
+  const [newCustomerDraft, setNewCustomerDraft] = useState<NewCustomerDraft>(initialDraft);
+  const normalizedCustomerSearchQuery = customerSearchQuery.trim().toLowerCase();
+  const showNewCustomerDraft = !isEditMode && !selectedCustomer && customerSearchQuery.trim().length > 3;
+  const customerSearchOptions = useMemo(() => customerOptions.map((customer) => ({
+    customer,
+    label: getCustomerSearchLabel(customer),
+  })), [customerOptions]);
+  const filteredCustomerSearchOptions = normalizedCustomerSearchQuery.length >= 3
+    ? customerSearchOptions.filter(({ customer, label }) => {
+        const code = getCustomerCode(customer).toLowerCase();
+        return label.toLowerCase().includes(normalizedCustomerSearchQuery)
+          || getCustomerDisplayName(customer).toLowerCase().includes(normalizedCustomerSearchQuery)
+          || getCustomerPhone(customer).toLowerCase().includes(normalizedCustomerSearchQuery)
+          || code.includes(normalizedCustomerSearchQuery);
+      })
+    : [];
+
+  useEffect(() => {
+    if (!selectedCustomer) return;
+
+    setCustomerOptions((previousOptions) => {
+      const merged = new Map<string, BusinessCustomer>();
+      [selectedCustomer, ...previousOptions].forEach((customer) => {
+        merged.set(customer.id, customer);
+      });
+      return Array.from(merged.values());
+    });
+    setCustomerSearchQuery(getCustomerSearchLabel(selectedCustomer));
+    setIsCustomerDropdownOpen(false);
+    setNewCustomerDraft(createEmptyCustomerDraft());
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    onDraftChange(newCustomerDraft);
+  }, [newCustomerDraft, onDraftChange]);
+
+  useEffect(() => {
+    const searchTerm = customerSearchQuery.trim();
+    if (isEditMode || selectedCustomer || searchTerm.length < 3) {
+      setIsCustomerDropdownOpen(false);
+      setIsCustomerSearchLoading(false);
+      setHasCustomerSearchCompleted(false);
+      return;
+    }
+
+    let isActive = true;
+    setIsCustomerSearchLoading(true);
+    setHasCustomerSearchCompleted(false);
+    const searchTimer = window.setTimeout(async () => {
+      try {
+        const response = await getCustomers({ search: searchTerm, status: 1 });
+        if (!isActive) return;
+
+        setCustomerOptions(mapCustomersResponse(response));
+        setHasCustomerSearchCompleted(true);
+        setIsCustomerDropdownOpen(true);
+      } catch {
+        if (!isActive) return;
+
+        setCustomerOptions([]);
+        setHasCustomerSearchCompleted(true);
+        setIsCustomerDropdownOpen(true);
+      } finally {
+        if (isActive) setIsCustomerSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(searchTimer);
+    };
+  }, [customerSearchQuery, isEditMode, selectedCustomer]);
+
+  const selectCustomer = (customer: BusinessCustomer) => {
+    setCustomerSearchQuery(getCustomerSearchLabel(customer));
+    setIsCustomerDropdownOpen(false);
+    setNewCustomerDraft(createEmptyCustomerDraft());
+    onCustomerSelected(customer);
+  };
+
+  const handleCustomerSearchChange = (value: string) => {
+    setCustomerSearchQuery(value);
+    const normalizedValue = value.trim().toLowerCase();
+    const matchedOption = customerSearchOptions.find(({ customer, label }) => {
+      const name = getCustomerDisplayName(customer).toLowerCase();
+      const phone = getCustomerPhone(customer).toLowerCase();
+      const email = (customer.email || '').toLowerCase();
+      const code = getCustomerCode(customer).toLowerCase();
+      return label.toLowerCase() === normalizedValue
+        || String(customer.id).toLowerCase() === normalizedValue
+        || name === normalizedValue
+        || phone === normalizedValue
+        || email === normalizedValue
+        || code === normalizedValue;
+    });
+
+    if (matchedOption) {
+      selectCustomer(matchedOption.customer);
+      return;
+    }
+
+    if (selectedCustomer) {
+      onCustomerCleared();
+    }
+    setIsCustomerDropdownOpen(false);
+    setNewCustomerDraft((customer) => ({
+      ...customer,
+      customerName: value,
+    }));
+    onValidationClear();
+  };
+
+  const clearSelectedCustomer = () => {
+    setCustomerSearchQuery('');
+    setIsCustomerDropdownOpen(false);
+    setNewCustomerDraft(createEmptyCustomerDraft());
+    onCustomerCleared();
+  };
+
+  return (
+    <div className={`transaction-customer-panel mb-4${isHighlighted ? ' transaction-customer-panel--highlight' : ''}`}>
+      <div className="transaction-customer-panel__header">
+        <div>
+          <div className="form-section-title mb-1">Customer Search</div>
+          <p className="page-muted small mb-0">Select an existing customer, or complete the inline customer details before submitting.</p>
+        </div>
+      </div>
+
+      <div className="transaction-customer-panel__grid">
+        <div className="transaction-customer-panel__selector-row">
+          <div className="app-field transaction-customer-panel__search-field">
+            <label className="form-label" htmlFor="transaction-customer-search">Select Customer</label>
+            <div className="transaction-search-combobox transaction-modern-select">
+              <input
+                ref={inputRef}
+                className="form-control transaction-modern-select__control"
+                id="transaction-customer-search"
+                placeholder="Select Customer"
+                value={customerSearchQuery}
+                autoComplete="off"
+                disabled={isEditMode}
+                onBlur={() => window.setTimeout(() => setIsCustomerDropdownOpen(false), 120)}
+                onChange={(event) => handleCustomerSearchChange(event.target.value)}
+              />
+              <span className="transaction-modern-select__chevron" aria-hidden="true">
+                <FaChevronDown />
+              </span>
+              {isCustomerDropdownOpen && normalizedCustomerSearchQuery.length >= 3 && (isCustomerSearchLoading || hasCustomerSearchCompleted) ? (
+                <div className="transaction-search-dropdown transaction-search-dropdown--customer" role="listbox">
+                  {isCustomerSearchLoading ? (
+                    <div className="transaction-search-dropdown__empty">Searching customers...</div>
+                  ) : filteredCustomerSearchOptions.length > 0 ? (
+                    filteredCustomerSearchOptions.map(({ customer }) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        className="transaction-search-dropdown__option"
+                        aria-selected={customer.id === selectedCustomer?.id}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectCustomer(customer);
+                        }}
+                        role="option"
+                      >
+                        <span className="transaction-search-dropdown__primary">{getCustomerSearchLabel(customer)}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="transaction-search-dropdown__empty">No customers found.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <p className="form-hint">
+              {normalizedCustomerSearchQuery.length < 3
+                ? 'Enter at least 3 characters to search customers'
+                : 'Search by customer name, phone, or customer code.'}
+            </p>
+          </div>
+
+          {selectedCustomer ? (
+            <div className="transaction-customer-summary">
+              <span className="transaction-customer-summary__text">
+                {[
+                  getCustomerDisplayName(selectedCustomer),
+                  getCustomerPhone(selectedCustomer),
+                  getCustomerCode(selectedCustomer),
+                  selectedCustomer.email,
+                  selectedCustomer.address,
+                ].filter(Boolean).join(' | ')}
+              </span>
+              {!isEditMode ? (
+                <button
+                  type="button"
+                  className="transaction-customer-summary__clear"
+                  onClick={clearSelectedCustomer}
+                  aria-label="Clear customer"
+                  title="Clear customer"
+                >
+                  x
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <p className="form-hint transaction-customer-panel__inline-hint">
+              {showNewCustomerDraft
+                ? 'Complete Name and Mobile, then submit.'
+                : 'Search existing customer or type more than 3 characters.'}
+            </p>
+          )}
+        </div>
+
+        {showNewCustomerDraft ? (
+          <div className="transaction-customer-draft">
+            <input
+              className="form-control"
+              id="transaction-new-customer-name"
+              placeholder="Name *"
+              value={newCustomerDraft.customerName}
+              onChange={(event) => {
+                const customerName = event.target.value;
+                setNewCustomerDraft((customer) => ({ ...customer, customerName }));
+                onValidationClear();
+              }}
+              required
+              aria-label="Customer Name"
+            />
+            <input
+              className="form-control"
+              id="transaction-new-customer-mobile"
+              inputMode="tel"
+              placeholder="Mobile *"
+              value={newCustomerDraft.mobileNo}
+              onChange={(event) => {
+                setNewCustomerDraft((customer) => ({ ...customer, mobileNo: event.target.value }));
+                onValidationClear();
+              }}
+              required
+              aria-label="Mobile"
+            />
+            <input
+              className="form-control"
+              id="transaction-new-customer-address"
+              placeholder="Address"
+              value={newCustomerDraft.address}
+              onChange={(event) => setNewCustomerDraft((customer) => ({ ...customer, address: event.target.value }))}
+              aria-label="Address"
+            />
+            <input
+              className="form-control"
+              id="transaction-new-customer-dob"
+              type="date"
+              value={newCustomerDraft.dob}
+              onChange={(event) => setNewCustomerDraft((customer) => ({ ...customer, dob: event.target.value }))}
+              aria-label="DOB"
+            />
+            <input
+              className="form-control"
+              id="transaction-new-customer-email"
+              type="email"
+              placeholder="Email"
+              value={newCustomerDraft.email}
+              onChange={(event) => setNewCustomerDraft((customer) => ({ ...customer, email: event.target.value }))}
+              aria-label="Email"
+            />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
 const ServiceForm: React.FC<ServiceFormProps> = ({
   accounts = [],
   businessId,
@@ -165,10 +609,12 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   services = [],
   actor,
   draft,
+  initialTransaction,
   onCustomersChanged,
   onTransactionsChanged,
   onDirtyChange,
 }) => {
+  const router = useRouter();
   const dispatch = useAppDispatch();
   const customerPanelRef = useRef<HTMLDivElement | null>(null);
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -176,50 +622,98 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     ? services.find((service) => service.id === draft.serviceId)
     : null;
   const defaultTransactionAccountId = 'other';
-  const initialCustomerId = draft?.customerId && customers.some((customer) => customer.id === draft.customerId)
-    ? draft.customerId
-    : '';
-  const initialCustomer = initialCustomerId
-    ? customers.find((customer) => customer.id === initialCustomerId) || null
-    : null;
+  const isEditMode = Boolean(initialTransaction?.id);
+  const editDraftRows = getTransactionDraftRows(initialTransaction, defaultTransactionAccountId);
+  const initialCustomerId = initialTransaction?.customerId
+    || (draft?.customerId && customers.some((customer) => customer.id === draft.customerId) ? draft.customerId : '');
+  const initialCustomer = useMemo(() => (
+    initialCustomerId
+      ? customers.find((customer) => customer.id === initialCustomerId) || (initialTransaction ? {
+          id: initialTransaction.customerId,
+          name: initialTransaction.customerName,
+          customerName: initialTransaction.customerName,
+          customerCode: initialTransaction.customerCode,
+          phone: initialTransaction.customerPhone || 'Not added',
+          mobileNo: initialTransaction.customerPhone || 'Not added',
+          email: initialTransaction.customerEmail,
+          address: initialTransaction.customerAddress || null,
+          dob: initialTransaction.customerDob,
+          status: 'Active' as const,
+        } : null)
+      : null
+  ), [customers, initialCustomerId, initialTransaction]);
 
   // currentRow is the active entry row shown at the top of the table.
   const [currentRow, setCurrentRow] = useState<TransactionDraftRow>({
-    formName: '',
-    transactionNo: '1',
-    serviceProduct: initialService?.name || '',
-    inventoryItemId: initialService?.id || '',
-    transactionAccountId: defaultTransactionAccountId,
-    amount: '0',
-    serviceCharge: '0',
-    bankCharge: '0',
-    otherCharge: '0',
-    remark: draft?.note || '',
+    ...(editDraftRows[0] || {
+      formName: '',
+      transactionNo: '1',
+      serviceProduct: initialService?.name || '',
+      inventoryItemId: initialService?.id || '',
+      transactionAccountId: defaultTransactionAccountId,
+      amount: '0',
+      serviceCharge: '0',
+      bankCharge: '0',
+      otherCharge: '0',
+      remark: draft?.note || '',
+    }),
   });
   // savedRows are completed rows already moved out of the active entry row.
-  const [savedRows, setSavedRows] = useState<SavedTransactionRow[]>([]);
+  const [savedRows, setSavedRows] = useState<SavedTransactionRow[]>(() => editDraftRows.slice(1).map((row, index) => {
+    const noOfTransaction = toSafeAmount(row.transactionNo) || 1;
+    const unitAmount = toSafeAmount(row.amount);
+    const amount = noOfTransaction * unitAmount;
+
+    return {
+      childId: row.childId,
+      id: `existing-${row.childId || index}`,
+      formName: row.formName,
+      transactionNo: row.transactionNo,
+      noOfTransaction,
+      serviceProduct: row.serviceProduct,
+      inventoryId: row.inventoryItemId,
+      inventoryItemId: row.inventoryItemId,
+      transactionAccount: row.transactionAccountId,
+      transactionAccountId: row.transactionAccountId === 'other' ? null : row.transactionAccountId,
+      transactionAccountType: row.transactionAccountId === 'other' ? 'other' : 'bank',
+      unitAmount,
+      amount,
+      serviceCharge: toSafeAmount(row.serviceCharge),
+      bankCharge: toSafeAmount(row.bankCharge),
+      otherCharge: toSafeAmount(row.otherCharge),
+      totalAmount: amount + toSafeAmount(row.serviceCharge) + toSafeAmount(row.bankCharge) + toSafeAmount(row.otherCharge),
+      remark: row.remark,
+    };
+  }));
+  const [removedRowIds, setRemovedRowIds] = useState<string[]>([]);
   // customer is required before saving transaction rows.
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId);
   const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<BusinessCustomer | null>(
     initialCustomer,
   );
-  const [customerOptions, setCustomerOptions] = useState<BusinessCustomer[]>(initialCustomer ? [initialCustomer] : []);
-  const [customerSearchQuery, setCustomerSearchQuery] = useState(initialCustomer ? getCustomerSearchLabel(initialCustomer) : '');
-  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
-  const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false);
-  const [hasCustomerSearchCompleted, setHasCustomerSearchCompleted] = useState(false);
-  const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState(draft?.customerName && !initialCustomerId ? draft.customerName : '');
-  const [newCustomerPhone, setNewCustomerPhone] = useState(draft?.customerPhone && !initialCustomerId ? draft.customerPhone : '');
-  const [newCustomerEmail, setNewCustomerEmail] = useState(draft?.customerEmail && !initialCustomerId ? draft.customerEmail : '');
-  const [newCustomerAddress, setNewCustomerAddress] = useState('');
-  const [newCustomerRemark, setNewCustomerRemark] = useState('');
-  const [customerModalError, setCustomerModalError] = useState('');
+  const initialNewCustomerDraft = useMemo<NewCustomerDraft>(() => ({
+    customerName: draft?.customerName && !initialCustomerId ? draft.customerName : '',
+    mobileNo: draft?.customerPhone && !initialCustomerId ? draft.customerPhone : '',
+    address: '',
+    dob: '',
+    email: draft?.customerEmail && !initialCustomerId ? draft.customerEmail : '',
+  }), [draft?.customerEmail, draft?.customerName, draft?.customerPhone, initialCustomerId]);
+  const newCustomerDraftRef = useRef<NewCustomerDraft>(initialNewCustomerDraft);
+  const [hasCompleteNewCustomerDraft, setHasCompleteNewCustomerDraft] = useState(
+    Boolean(initialNewCustomerDraft.customerName.trim() && initialNewCustomerDraft.mobileNo.trim()),
+  );
   const [validationError, setValidationError] = useState('');
   const [isCustomerPanelHighlighted, setIsCustomerPanelHighlighted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [isSaveConfirmationOpen, setIsSaveConfirmationOpen] = useState(false);
+  const [hasUserChanges, setHasUserChanges] = useState(false);
   const selectedCounterId = selectedDepartment?.id || '';
+
+  useEffect(() => {
+    if (initialCustomer && selectedCustomerId === initialCustomer.id) {
+      setSelectedCustomerSnapshot(initialCustomer);
+    }
+  }, [initialCustomer, selectedCustomerId]);
 
   const inventoryItems = useMemo(() => {
     const byId = new Map<string, Service>();
@@ -273,6 +767,30 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     }), currentBase);
   }, [currentAmounts, currentRow, currentTotal, savedRows]);
 
+  const currentSelectedInventory = inventoryItems.find((service) => service.id === currentRow.inventoryItemId);
+  const stockValidationError = useMemo(() => {
+    const requestedQuantityByInventory: Record<string, number> = {};
+
+    if (!isCurrentRowEmpty(currentRow) && currentRow.inventoryItemId) {
+      requestedQuantityByInventory[currentRow.inventoryItemId] = (
+        requestedQuantityByInventory[currentRow.inventoryItemId] || 0
+      ) + currentAmounts.noOfTransaction;
+    }
+
+    savedRows.forEach((row) => {
+      requestedQuantityByInventory[row.inventoryId] = (
+        requestedQuantityByInventory[row.inventoryId] || 0
+      ) + row.noOfTransaction;
+    });
+
+    const hasInsufficientStock = Object.entries(requestedQuantityByInventory).some(([inventoryId, requestedQuantity]) => {
+      const selectedService = inventoryItems.find((service) => service.id === inventoryId);
+      return isStockManagedProduct(selectedService) && requestedQuantity > getAvailableStock(selectedService);
+    });
+
+    return hasInsufficientStock ? 'Insufficient stock available.' : '';
+  }, [currentAmounts.noOfTransaction, currentRow, inventoryItems, savedRows]);
+
   const accountOptions = [
     { value: 'other', label: 'Other' },
     ...accounts.map((account) => ({
@@ -291,79 +809,23 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
   const updateCurrentRow = (values: Partial<TransactionDraftRow>) => {
     setCurrentRow((row) => ({ ...row, ...values }));
+    setHasUserChanges(true);
     setValidationError('');
   };
 
   useEffect(() => {
-    onDirtyChange?.(!isCurrentRowEmpty(currentRow) || savedRows.length > 0);
-  }, [currentRow, onDirtyChange, savedRows.length]);
+    onDirtyChange?.(isEditMode
+      ? hasUserChanges
+      : !isCurrentRowEmpty(currentRow)
+        || savedRows.length > 0
+        || Boolean(selectedCustomerId)
+        || hasCompleteNewCustomerDraft);
+  }, [currentRow, hasCompleteNewCustomerDraft, hasUserChanges, isEditMode, onDirtyChange, savedRows.length, selectedCustomerId]);
 
-  useEffect(() => {
-    if (!initialCustomer) return;
-
-    setCustomerOptions((previousOptions) => {
-      const merged = new Map<string, BusinessCustomer>();
-      [initialCustomer, ...previousOptions].forEach((customer) => {
-        merged.set(customer.id, customer);
-      });
-      return Array.from(merged.values());
-    });
-  }, [initialCustomer]);
-
-  const selectedCustomer = customerOptions.find((customer) => customer.id === selectedCustomerId) || selectedCustomerSnapshot;
-  const isTransactionEntryLocked = !selectedCustomerId || !selectedDepartment?.id;
+  const selectedCustomer = selectedCustomerSnapshot;
+  const hasCustomerForTransaction = Boolean(selectedCustomerId || hasCompleteNewCustomerDraft);
+  const isTransactionEntryLocked = !hasCustomerForTransaction || !selectedDepartment?.id;
   const isTransactionEntryReadOnly = isTransactionEntryLocked || isSubmitting;
-  const normalizedCustomerSearchQuery = customerSearchQuery.trim().toLowerCase();
-  const customerSearchOptions = customerOptions.map((customer) => ({
-    customer,
-    label: getCustomerSearchLabel(customer),
-  }));
-  const filteredCustomerSearchOptions = normalizedCustomerSearchQuery.length >= 3
-    ? customerSearchOptions.filter(({ customer, label }) => {
-        const code = getCustomerCode(customer).toLowerCase();
-        return label.toLowerCase().includes(normalizedCustomerSearchQuery)
-          || getCustomerDisplayName(customer).toLowerCase().includes(normalizedCustomerSearchQuery)
-          || getCustomerPhone(customer).toLowerCase().includes(normalizedCustomerSearchQuery)
-          || code.includes(normalizedCustomerSearchQuery);
-      })
-    : [];
-
-  useEffect(() => {
-    const searchTerm = customerSearchQuery.trim();
-    if (selectedCustomerId || searchTerm.length < 3) {
-      setIsCustomerDropdownOpen(false);
-      setIsCustomerSearchLoading(false);
-      setHasCustomerSearchCompleted(false);
-      return;
-    }
-
-    let isActive = true;
-    setIsCustomerSearchLoading(true);
-    setHasCustomerSearchCompleted(false);
-    const searchTimer = window.setTimeout(async () => {
-      try {
-        const response = await getCustomers({ search: searchTerm, status: 1 });
-        if (!isActive) return;
-
-        setCustomerOptions(mapCustomersResponse(response));
-        setHasCustomerSearchCompleted(true);
-        setIsCustomerDropdownOpen(true);
-      } catch {
-        if (!isActive) return;
-
-        setCustomerOptions([]);
-        setHasCustomerSearchCompleted(true);
-        setIsCustomerDropdownOpen(true);
-      } finally {
-        if (isActive) setIsCustomerSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      isActive = false;
-      window.clearTimeout(searchTimer);
-    };
-  }, [customerSearchQuery, selectedCustomerId]);
   const showCustomerRequiredMessage = () => {
     setValidationError('Please select or add a customer first.');
     setIsCustomerPanelHighlighted(true);
@@ -375,7 +837,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   };
 
   const ensureCustomerSelected = () => (
-    selectedCustomerId ? true : showCustomerRequiredMessage()
+    hasCustomerForTransaction ? true : showCustomerRequiredMessage()
   );
 
   const ensureDepartmentSelected = () => {
@@ -405,140 +867,32 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     return false;
   };
 
-  const selectCustomer = (customer: BusinessCustomer) => {
+  const handleCustomerSelected = useCallback((customer: BusinessCustomer) => {
     setSelectedCustomerId(customer.id);
     setSelectedCustomerSnapshot(customer);
     setIsCustomerPanelHighlighted(false);
-    setCustomerSearchQuery(getCustomerDisplayName(customer));
-    setIsCustomerDropdownOpen(false);
-    setNewCustomerPhone(getCustomerPhone(customer));
-    setNewCustomerName(getCustomerDisplayName(customer));
-    setNewCustomerEmail(customer.email || '');
-    setNewCustomerAddress(customer.address || '');
-    setNewCustomerRemark(customer.remark || '');
+    newCustomerDraftRef.current = createEmptyCustomerDraft();
+    setHasCompleteNewCustomerDraft(false);
     setValidationError('');
-  };
+  }, []);
 
-  const handleCustomerSearchChange = (value: string) => {
-    setCustomerSearchQuery(value);
-    const normalizedValue = value.trim().toLowerCase();
-    const matchedOption = customerSearchOptions.find(({ customer, label }) => {
-      const name = getCustomerDisplayName(customer).toLowerCase();
-      const phone = getCustomerPhone(customer).toLowerCase();
-      const email = (customer.email || '').toLowerCase();
-      const code = getCustomerCode(customer).toLowerCase();
-      return label.toLowerCase() === normalizedValue
-        || String(customer.id).toLowerCase() === normalizedValue
-        || name === normalizedValue
-        || phone === normalizedValue
-        || email === normalizedValue
-        || code === normalizedValue;
-    });
-
-    if (matchedOption) {
-      selectCustomer(matchedOption.customer);
-      return;
-    }
-
+  const handleCustomerCleared = useCallback(() => {
     setSelectedCustomerId('');
     setSelectedCustomerSnapshot(null);
-    setIsCustomerDropdownOpen(false);
+    newCustomerDraftRef.current = createEmptyCustomerDraft();
+    setHasCompleteNewCustomerDraft(false);
     setValidationError('');
-  };
+  }, []);
 
-  const clearSelectedCustomer = () => {
-    setSelectedCustomerId('');
-    setSelectedCustomerSnapshot(null);
-    setCustomerSearchQuery('');
-    setIsCustomerDropdownOpen(false);
+  const handleCustomerDraftChange = useCallback((nextDraft: NewCustomerDraft) => {
+    newCustomerDraftRef.current = nextDraft;
+    const isComplete = Boolean(nextDraft.customerName.trim() && nextDraft.mobileNo.trim());
+    setHasCompleteNewCustomerDraft((current) => current === isComplete ? current : isComplete);
+  }, []);
+
+  const clearValidationError = useCallback(() => {
     setValidationError('');
-  };
-
-  const openAddCustomerModal = () => {
-    setCustomerModalError('');
-    setNewCustomerName('');
-    setNewCustomerPhone('');
-    setNewCustomerEmail('');
-    setNewCustomerAddress('');
-    setNewCustomerRemark('');
-    setIsAddCustomerModalOpen(true);
-  };
-
-  const handleCreateCustomer = async () => {
-    const trimmedName = newCustomerName.trim();
-    const trimmedPhone = newCustomerPhone.trim();
-    const trimmedEmail = newCustomerEmail.trim();
-    const trimmedAddress = newCustomerAddress.trim();
-    const trimmedRemark = newCustomerRemark.trim();
-    if (!trimmedName || !trimmedPhone) {
-      setCustomerModalError('Customer name and mobile number are required.');
-      return;
-    }
-
-    const existingCustomer = customerOptions.find((customer) => getCustomerPhone(customer) === trimmedPhone);
-    if (existingCustomer) {
-      selectCustomer(existingCustomer);
-      setIsAddCustomerModalOpen(false);
-      return;
-    }
-
-    setIsCreatingCustomer(true);
-    setCustomerModalError('');
-    try {
-      const result = await createCustomer({
-        customerName: trimmedName,
-        mobileNo: trimmedPhone,
-        email: trimmedEmail || null,
-        address: trimmedAddress || null,
-        remark: trimmedRemark || null,
-      });
-
-      if (!result.success) {
-        setCustomerModalError(result.message || 'Unable to add customer right now.');
-        return;
-      }
-
-      const joinedDate = new Date().toISOString().split('T')[0];
-      const fallbackCustomer: BusinessCustomer = {
-        id: createRecordId(),
-        name: trimmedName,
-        customerName: trimmedName,
-        customerCode: undefined,
-        phone: trimmedPhone,
-        mobileNo: trimmedPhone,
-        email: trimmedEmail,
-        address: trimmedAddress || null,
-        remark: trimmedRemark || null,
-        status: 'Active',
-        joinedDate,
-        addedDate: joinedDate,
-      };
-      const createdCustomer = result.customer && isRecord(result.customer)
-        ? mapCustomerRecord(result.customer) || fallbackCustomer
-        : fallbackCustomer;
-
-      dispatch({
-        type: 'ADD_CUSTOMER',
-        businessId,
-        payload: createdCustomer,
-      });
-      setCustomerOptions((options) => [createdCustomer, ...options.filter((customer) => customer.id !== createdCustomer.id)]);
-      setSelectedCustomerId(createdCustomer.id);
-      setSelectedCustomerSnapshot(createdCustomer);
-      setIsCustomerPanelHighlighted(false);
-      setCustomerSearchQuery(getCustomerDisplayName(createdCustomer));
-      setNewCustomerName(getCustomerDisplayName(createdCustomer));
-      setNewCustomerPhone(getCustomerPhone(createdCustomer));
-      setNewCustomerEmail(createdCustomer.email || '');
-      setNewCustomerAddress(createdCustomer.address || '');
-      setNewCustomerRemark(createdCustomer.remark || '');
-      setIsAddCustomerModalOpen(false);
-      setValidationError('');
-      onCustomersChanged?.();
-    } finally {
-      setIsCreatingCustomer(false);
-    }
-  };
+  }, []);
 
   const handleCurrentInventorySelect = (inventoryId: string) => {
     if (!ensureDepartmentSelected()) return;
@@ -614,8 +968,13 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       setValidationError('Please select an active service/product from the selected department.');
       return null;
     }
+    if (isStockManagedProduct(selectedService) && noOfTransaction > getAvailableStock(selectedService)) {
+      setValidationError('Insufficient stock available.');
+      return null;
+    }
 
     return {
+      childId: row.childId,
       formName: row.formName.trim(),
       transactionNo: row.transactionNo.trim(),
       noOfTransaction,
@@ -643,6 +1002,12 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const resetForm = () => {
     resetCurrentRow();
     setSavedRows([]);
+    setSelectedCustomerId('');
+    setSelectedCustomerSnapshot(null);
+    newCustomerDraftRef.current = createEmptyCustomerDraft();
+    setHasCompleteNewCustomerDraft(false);
+    setIsCustomerPanelHighlighted(false);
+    setHasUserChanges(false);
     setValidationError('');
   };
 
@@ -656,14 +1021,37 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     // Add Row moves currentRow into savedRows and clears currentRow for the next entry.
     setSavedRows((rows) => [{ ...payload, id: `${Date.now()}-${rows.length}` }, ...rows]);
     resetCurrentRow();
+    setHasUserChanges(true);
     setValidationError('');
   };
 
   const handleRemoveSavedRow = (rowId: string) => {
-    setSavedRows((rows) => rows.filter((row) => row.id !== rowId));
+    setHasUserChanges(true);
+    setSavedRows((rows) => {
+      const removedRow = rows.find((row) => row.id === rowId);
+      if (removedRow?.childId) {
+        setRemovedRowIds((ids) => ids.includes(removedRow.childId as string) ? ids : [...ids, removedRow.childId as string]);
+      }
+      return rows.filter((row) => row.id !== rowId);
+    });
+  };
+
+  const handleRemoveCurrentRow = () => {
+    setHasUserChanges(true);
+    if (currentRow.childId) {
+      setRemovedRowIds((ids) => ids.includes(currentRow.childId as string) ? ids : [...ids, currentRow.childId as string]);
+    }
+
+    setSavedRows((rows) => {
+      const [nextCurrentRow, ...remainingRows] = rows;
+      setCurrentRow(nextCurrentRow ? savedRowToDraftRow(nextCurrentRow) : createEmptyRow(defaultTransactionAccountId));
+      return remainingRows;
+    });
+    setValidationError('');
   };
 
   const updateSavedRow = (rowId: string, values: Partial<SavedTransactionRow>) => {
+    setHasUserChanges(true);
     setSavedRows((rows) => rows.map((row) => {
       if (row.id !== rowId) return row;
 
@@ -696,8 +1084,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     });
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const submitTransaction = async () => {
     if (isSubmitting) return;
     if (!ensureDepartmentSelected()) return;
 
@@ -731,36 +1118,118 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       setValidationError(`Inventory in row ${invalidInventoryRowIndex + 1} is inactive or not assigned to selected department.`);
       return;
     }
+    const requestedQuantityByInventory = rowsToSubmit.reduce<Record<string, number>>((totalsByInventory, row) => {
+      totalsByInventory[row.inventoryId] = (totalsByInventory[row.inventoryId] || 0) + row.noOfTransaction;
+      return totalsByInventory;
+    }, {});
+    const hasInsufficientStock = Object.entries(requestedQuantityByInventory).some(([inventoryId, requestedQuantity]) => {
+      const selectedService = inventoryItems.find((service) => service.id === inventoryId);
+      return isStockManagedProduct(selectedService) && requestedQuantity > getAvailableStock(selectedService);
+    });
+    if (hasInsufficientStock) {
+      setValidationError('Insufficient stock available.');
+      return;
+    }
     const selectedDepartmentId = selectedDepartment?.id;
     if (!selectedDepartmentId) {
       setValidationError('Please select department first.');
       return;
     }
+    if (isEditMode && !initialTransaction?.id) {
+      setValidationError('Transaction id is required in edit mode.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
+      let transactionCustomerId = selectedCustomerId;
+      let customerWasCreated = false;
+
+      if (!transactionCustomerId) {
+        const newCustomerDraft = newCustomerDraftRef.current;
+        const customerName = newCustomerDraft.customerName.trim();
+        const mobileNo = newCustomerDraft.mobileNo.trim();
+
+        if (!customerName || !mobileNo) {
+          setValidationError('Customer name and mobile number are required.');
+          return;
+        }
+
+        const customerResult = await createCustomer({
+          customerName,
+          mobileNo,
+          email: newCustomerDraft.email.trim() || null,
+          address: newCustomerDraft.address.trim() || null,
+          dob: newCustomerDraft.dob || null,
+          remark: null,
+        });
+
+        if (!customerResult.success) {
+          setValidationError(customerResult.message || 'Unable to create customer.');
+          return;
+        }
+
+        const createdCustomer = mapCreatedCustomerResponse(customerResult.customer, {
+          ...newCustomerDraft,
+          customerName,
+          mobileNo,
+        });
+        if (!createdCustomer) {
+          setValidationError('Customer was created, but the customer ID was missing from the API response.');
+          return;
+        }
+
+        transactionCustomerId = createdCustomer.id;
+        customerWasCreated = true;
+        setSelectedCustomerId(createdCustomer.id);
+        setSelectedCustomerSnapshot(createdCustomer);
+        newCustomerDraftRef.current = createEmptyCustomerDraft();
+        setHasCompleteNewCustomerDraft(false);
+        setIsCustomerPanelHighlighted(false);
+        dispatch({
+          type: 'ADD_CUSTOMER',
+          businessId,
+          payload: createdCustomer,
+        });
+        onCustomersChanged?.();
+      }
+
       const noOfTransaction = rowsToSubmit.reduce((sum, row) => sum + row.noOfTransaction, 0);
-      const result = await createTransaction({
-        customerId: selectedCustomerId,
-        counterId: selectedDepartmentId,
-        date: new Date().toISOString().split('T')[0],
-        rows: rowsToSubmit.map((row) => ({
-          formName: row.formName,
-          noOfTransaction: row.noOfTransaction,
-          inventoryId: row.inventoryId,
-          inventoryName: row.serviceProduct,
-          transactionAccount: row.transactionAccount,
-          amount: row.amount,
-          serviceCharge: row.serviceCharge,
-          bankCharge: row.bankCharge,
-          otherCharge: row.otherCharge,
-          totalAmount: row.totalAmount,
-          remark: row.remark || null,
-        })),
-      });
+      const transactionRows = rowsToSubmit.map((row) => ({
+        ...(row.childId ? { id: row.childId } : {}),
+        formName: row.formName,
+        noOfTransaction: row.noOfTransaction,
+        inventoryId: row.inventoryId,
+        inventoryName: row.serviceProduct,
+        transactionAccount: row.transactionAccount,
+        amount: row.amount,
+        serviceCharge: row.serviceCharge,
+        bankCharge: row.bankCharge,
+        otherCharge: row.otherCharge,
+        totalAmount: row.totalAmount,
+        remark: row.remark || null,
+      }));
+      const result = isEditMode && initialTransaction
+        ? await updateTransaction({
+            transactionId: initialTransaction.id,
+            customerId: transactionCustomerId,
+            counterId: selectedDepartmentId,
+            rows: transactionRows,
+            removedRowIds,
+          })
+        : await createTransaction({
+            customerId: transactionCustomerId,
+            counterId: selectedDepartmentId,
+            date: new Date().toISOString().split('T')[0],
+            rows: transactionRows,
+          });
 
       if (!result.success) {
-        setValidationError(result.message || 'Unable to save transaction.');
+        setValidationError(
+          customerWasCreated
+            ? `Customer created, but transaction failed. ${result.message || 'Please try transaction again.'}`
+            : result.message || `Unable to ${isEditMode ? 'update' : 'save'} transaction.`,
+        );
         return;
       }
 
@@ -780,12 +1249,17 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
         businessId,
         payload: {
           type: 'success',
-          message: `${noOfTransaction} transaction${noOfTransaction === 1 ? '' : 's'} saved.`,
+          message: isEditMode ? 'Transaction updated successfully.' : 'Transaction created successfully.',
         },
       });
 
       await onTransactionsChanged?.();
-      resetForm();
+      if (isEditMode) {
+        window.location.assign('/transactions/list');
+      } else {
+        resetForm();
+        router.refresh();
+      }
     } catch (error) {
       setValidationError(error instanceof Error ? error.message : 'Unable to save transaction.');
     } finally {
@@ -793,210 +1267,44 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     }
   };
 
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+    if (stockValidationError) {
+      setValidationError(stockValidationError);
+      return;
+    }
+    setIsSaveConfirmationOpen(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (isSubmitting) return;
+    await submitTransaction();
+    setIsSaveConfirmationOpen(false);
+  };
+
   return (
     <form onSubmit={handleSubmit} className="service-workflow-form" noValidate>
       <div className="form-section-card mb-4">
-        {validationError ? (
+        {(validationError || stockValidationError) ? (
           <div className="form-alert" role="alert">
-            {validationError}
+            {validationError || stockValidationError}
           </div>
         ) : null}
 
-        {isAddCustomerModalOpen ? (
-          <ActionModal
-            title="Add Customer"
-            eyebrow="Customer"
-            description="Create a customer and continue the transaction with the new selection."
-            onClose={() => setIsAddCustomerModalOpen(false)}
-          >
-            {customerModalError ? (
-              <div className="form-alert" role="alert">{customerModalError}</div>
-            ) : null}
-            <div className="row g-3">
-              <div className="col-12 col-md-6">
-                <label className="form-label" htmlFor="transaction-new-customer-name">Customer Name</label>
-                <input
-                  className="form-control"
-                  id="transaction-new-customer-name"
-                  value={newCustomerName}
-                  onChange={(event) => {
-                    setNewCustomerName(event.target.value);
-                    setCustomerModalError('');
-                  }}
-                  required
-                />
-              </div>
-              <div className="col-12 col-md-6">
-                <label className="form-label" htmlFor="transaction-new-customer-mobile">Mobile Number</label>
-                <input
-                  className="form-control"
-                  id="transaction-new-customer-mobile"
-                  value={newCustomerPhone}
-                  onChange={(event) => {
-                    setNewCustomerPhone(event.target.value);
-                    setCustomerModalError('');
-                  }}
-                  required
-                />
-              </div>
-              <div className="col-12 col-md-6">
-                <label className="form-label" htmlFor="transaction-new-customer-email">Email Optional</label>
-                <input
-                  className="form-control"
-                  id="transaction-new-customer-email"
-                  type="email"
-                  value={newCustomerEmail}
-                  onChange={(event) => setNewCustomerEmail(event.target.value)}
-                />
-              </div>
-              <div className="col-12 col-md-6">
-                <label className="form-label" htmlFor="transaction-new-customer-address">Address Optional</label>
-                <input
-                  className="form-control"
-                  id="transaction-new-customer-address"
-                  value={newCustomerAddress}
-                  onChange={(event) => setNewCustomerAddress(event.target.value)}
-                />
-              </div>
-              <div className="col-12">
-                <label className="form-label" htmlFor="transaction-new-customer-remark">Remark Optional</label>
-                <input
-                  className="form-control"
-                  id="transaction-new-customer-remark"
-                  value={newCustomerRemark}
-                  onChange={(event) => setNewCustomerRemark(event.target.value)}
-                />
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsAddCustomerModalOpen(false)} disabled={isCreatingCustomer}>
-                Cancel
-              </button>
-              <button type="button" className="btn-app btn-app-primary" onClick={handleCreateCustomer} disabled={isCreatingCustomer}>
-                {isCreatingCustomer ? 'Adding...' : 'Add Customer'}
-              </button>
-            </div>
-          </ActionModal>
-        ) : null}
-
-        <div
-          ref={customerPanelRef}
-          className={`transaction-customer-panel mb-4${isCustomerPanelHighlighted ? ' transaction-customer-panel--highlight' : ''}`}
-        >
-          <div className="transaction-customer-panel__header">
-            <div>
-              <div className="form-section-title mb-1">Customer Search</div>
-              <p className="page-muted small mb-0">Search by mobile number or name. Existing customer details will fill automatically.</p>
-            </div>
-            <button
-              type="button"
-              className="btn-app btn-app-primary transaction-customer-panel__add-button"
-              onClick={openAddCustomerModal}
-              disabled={isCreatingCustomer}
-            >
-              Add Customer
-            </button>
-          </div>
-
-          <div className="transaction-customer-panel__grid">
-            <div className="transaction-customer-panel__selector-row">
-              <div className="app-field">
-                <label className="form-label" htmlFor="transaction-customer-search">Select Customer</label>
-                <div className="transaction-search-combobox transaction-modern-select">
-                  <input
-                    ref={customerSearchInputRef}
-                    className="form-control transaction-modern-select__control"
-                    id="transaction-customer-search"
-                    placeholder="Select Customer"
-                    value={customerSearchQuery}
-                    autoComplete="off"
-                    onBlur={() => window.setTimeout(() => setIsCustomerDropdownOpen(false), 120)}
-                    onChange={(event) => handleCustomerSearchChange(event.target.value)}
-                  />
-                  <span className="transaction-modern-select__chevron" aria-hidden="true">
-                    <FaChevronDown />
-                  </span>
-                  {isCustomerDropdownOpen && normalizedCustomerSearchQuery.length >= 3 && (isCustomerSearchLoading || hasCustomerSearchCompleted) ? (
-                    <div className="transaction-search-dropdown transaction-search-dropdown--customer" role="listbox">
-                      {isCustomerSearchLoading ? (
-                        <div className="transaction-search-dropdown__empty">Searching customers...</div>
-                      ) : filteredCustomerSearchOptions.length > 0 ? (
-                        filteredCustomerSearchOptions.map(({ customer }) => (
-                          <button
-                            key={customer.id}
-                            type="button"
-                            className="transaction-search-dropdown__option"
-                            aria-selected={customer.id === selectedCustomerId}
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              selectCustomer(customer);
-                            }}
-                            role="option"
-                          >
-                            <span className="transaction-search-dropdown__primary">{getCustomerSearchLabel(customer)}</span>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="transaction-search-dropdown__empty">No customers found.</div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-                <p className="form-hint">
-                  {normalizedCustomerSearchQuery.length < 3
-                    ? 'Enter at least 3 characters to search customers'
-                    : 'Search by customer name, phone, or customer code.'}
-                </p>
-              </div>
-            </div>
-
-            {selectedCustomer ? (
-              <div className="transaction-customer-card">
-                <div className="transaction-customer-card__header">
-                  <span>Selected Customer</span>
-                  <button
-                    type="button"
-                    className="transaction-customer-card__remove"
-                    onClick={clearSelectedCustomer}
-                    aria-label="Clear customer"
-                    title="Clear customer"
-                  >
-                    x
-                  </button>
-                </div>
-                <div className="transaction-customer-card__row">
-                  <span>Name</span>
-                  <strong>{getCustomerDisplayName(selectedCustomer)}</strong>
-                </div>
-                {getCustomerCode(selectedCustomer) ? (
-                  <div className="transaction-customer-card__row">
-                    <span>Code</span>
-                    <strong>{getCustomerCode(selectedCustomer)}</strong>
-                  </div>
-                ) : null}
-                <div className="transaction-customer-card__row">
-                  <span>Phone</span>
-                  <strong>{getCustomerPhone(selectedCustomer) || '-'}</strong>
-                </div>
-                {selectedCustomer.email ? (
-                  <div className="transaction-customer-card__row">
-                    <span>Email</span>
-                    <strong>{selectedCustomer.email}</strong>
-                  </div>
-                ) : null}
-                {selectedCustomer.address ? (
-                  <div className="transaction-customer-card__row">
-                    <span>Address</span>
-                    <strong>{selectedCustomer.address}</strong>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className="form-hint mb-0">Please select an existing customer or add a new customer.</p>
-            )}
-          </div>
+        <div ref={customerPanelRef}>
+          <CustomerSearchPanel
+            inputRef={customerSearchInputRef}
+            isEditMode={isEditMode}
+            isHighlighted={isCustomerPanelHighlighted}
+            selectedCustomer={selectedCustomer}
+            initialDraft={initialNewCustomerDraft}
+            onCustomerSelected={handleCustomerSelected}
+            onCustomerCleared={handleCustomerCleared}
+            onDraftChange={handleCustomerDraftChange}
+            onValidationClear={clearValidationError}
+          />
         </div>
-
         <div className="transaction-section-header">
           <div>
             <div className="form-section-title mb-1">Transaction Details</div>
@@ -1005,14 +1313,6 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
               <p className="form-hint">Please select department first.</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="btn-app btn-app-secondary transaction-section-header__action"
-            onClick={handleAddRow}
-            disabled={isSubmitting}
-          >
-            Add Row
-          </button>
         </div>
 
         <div className="transaction-entry-table transaction-entry-table--editor data-table-wrapper overflow-x-auto w-full">
@@ -1024,11 +1324,12 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                 <th>Item</th>
                 <th>Account</th>
                 <th>Amount</th>
-                <th>Service Chg.</th>
-                <th>Bank Chg.</th>
-                <th>Other Chg.</th>
+                <th>Service</th>
+                <th>Bank</th>
+                <th>Other</th>
                 <th>Total</th>
                 <th>Remark</th>
+                <th aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -1088,6 +1389,11 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         </option>
                       ))}
                     </select>
+                    {currentSelectedInventory ? (
+                      <p className="form-hint transaction-entry-table__stock-hint">
+                        {getAvailableStockLabel(currentSelectedInventory)}
+                      </p>
+                    ) : null}
                   </div>
                 </td>
                 <td data-label="Account">
@@ -1215,6 +1521,33 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                     />
                   </div>
                 </td>
+                <td data-label="Add Row" className="transaction-entry-table__action-cell">
+                  <div className="transaction-entry-table__action-stack">
+                    <button
+                      type="button"
+                      className="btn-icon-sm btn-icon-sm--primary transaction-entry-table__add-row"
+                      onClick={handleAddRow}
+                      disabled={isSubmitting || Boolean(stockValidationError)}
+                      aria-label="Add transaction row"
+                      title="Add Row"
+                    >
+                      <FaPlus size={12} />
+                      
+                    </button>
+                    {isEditMode && currentRow.childId ? (
+                      <button
+                        type="button"
+                        className="transaction-entry-table__remove-row"
+                        onClick={handleRemoveCurrentRow}
+                        disabled={isSubmitting}
+                        aria-label="Remove transaction row"
+                        title="Remove row"
+                      >
+                        x
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
               </tr>
               {savedRows.map((row) => (
                   <tr key={row.id}>
@@ -1250,7 +1583,14 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                           </option>
                         ))}
                       </select>
-                      {/* <p className="form-hint transaction-entry-table__hint">Select the account from which payment was made.</p> */}
+                      {(() => {
+                        const selectedInventory = inventoryItems.find((service) => service.id === row.inventoryId);
+                        return selectedInventory ? (
+                          <p className="form-hint transaction-entry-table__stock-hint">
+                            {getAvailableStockLabel(selectedInventory)}
+                          </p>
+                        ) : null;
+                      })()}
                     </td>
                     <td data-label="Account">
                       <select
@@ -1329,14 +1669,18 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                           value={row.remark}
                           onChange={(event) => updateSavedRow(row.id, { remark: event.target.value })}
                         />
-                        <button
-                          type="button"
-                          className="transaction-entry-table__remove-row"
-                          onClick={() => handleRemoveSavedRow(row.id)}
-                        >
-                          Remove
-                        </button>
                       </div>
+                    </td>
+                    <td data-label="Action" className="transaction-entry-table__action-cell">
+                      <button
+                        type="button"
+                        className="transaction-entry-table__remove-row"
+                        onClick={() => handleRemoveSavedRow(row.id)}
+                        aria-label="Remove transaction row"
+                        title="Remove row"
+                      >
+                        x
+                      </button>
                     </td>
                   </tr>
               ))}
@@ -1348,17 +1692,30 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                 <td data-label="Other Chg.">{totals.otherCharge}</td>
                 <td data-label="Total">{totals.totalAmount}</td>
                 <td />
+                <td className="transaction-entry-table__action-cell" />
               </tr>
             </tbody>
           </table>
         </div>
 
         <div className="modal-actions transaction-entry-table__actions transaction-entry-table__save-actions mt-4">
-          <button type="submit" className="btn-app btn-app-primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : 'Submit'}
+          <button type="submit" className="btn-app btn-app-primary" disabled={isSubmitting || Boolean(stockValidationError)}>
+            {isSubmitting ? (isEditMode ? 'Updating...' : 'Submitting...') : isEditMode ? 'Update' : 'Submit'}
           </button>
         </div>
       </div>
+      {isSaveConfirmationOpen ? (
+        <ConfirmActionModal
+          title="Save Transaction"
+          description="Are you sure you want to save this transaction?"
+          confirmLabel="Confirm"
+          confirmingLabel={isEditMode ? 'Updating...' : 'Saving...'}
+          cancelLabel="Cancel"
+          isConfirming={isSubmitting}
+          onConfirm={handleConfirmSubmit}
+          onCancel={() => setIsSaveConfirmationOpen(false)}
+        />
+      ) : null}
     </form>
   );
 };

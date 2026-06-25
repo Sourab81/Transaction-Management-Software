@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaEye, FaTrashAlt } from 'react-icons/fa';
 import type { ReportItem } from '../../lib/store';
+import { formatDate } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface ReportsTableProps {
@@ -39,7 +40,7 @@ const ReportsTable: React.FC<ReportsTableProps> = ({
         { key: 'type', header: 'Type', render: (report) => report.type },
         { key: 'owner', header: 'Owner', render: (report) => report.owner },
         { key: 'status', header: 'Status', render: (report) => <span className={getStatusClass(report.status)}>{report.status}</span> },
-        { key: 'date', header: 'Date', render: (report) => report.date },
+        { key: 'date', header: 'Date', render: (report) => formatDate(report.date) },
       ]}
       renderActions={(report) => (
         <div className="table-actions">

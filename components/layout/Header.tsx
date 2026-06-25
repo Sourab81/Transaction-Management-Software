@@ -1,26 +1,16 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { FaBars, FaBell, FaEllipsisV, FaExchangeAlt, FaSearch, FaUser } from 'react-icons/fa';
+import { FaBars, FaBell, FaEllipsisV, FaUser } from 'react-icons/fa';
 import { getCustomerWorkspaceViewUi, getModuleLabel } from '../../lib/module-ui';
 import { getModuleDisplayById, getRoleLabel, type UserRole } from '../../lib/platform-structure';
 import type { CustomerWorkspaceView } from '../../lib/workspace-routes';
 
-interface Counter {
-  id: string;
-  name: string;
-  code: string;
-  openingBalance: number;
-  currentBalance: number;
-}
-
 interface HeaderProps {
   activeTab: string;
   customerPageView?: CustomerWorkspaceView;
-  counters: Counter[];
-  selectedCounterId: string;
+  departmentName?: string;
   notificationCount: number;
-  searchValue: string;
   currentUser: {
     id: string;
     name: string;
@@ -28,9 +18,6 @@ interface HeaderProps {
     role: UserRole;
     businessId?: string;
   };
-  onCounterChange: (counterId: string) => void;
-  onDepartmentPickerOpen: () => void;
-  onSearch: (query: string) => void;
   onProfileOpen: () => void;
   onNotificationsClick: () => void;
   isSidebarOpen: boolean;
@@ -40,20 +27,15 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   activeTab,
   customerPageView,
-  counters,
-  selectedCounterId,
+  departmentName,
   notificationCount,
-  searchValue,
   currentUser,
-  onDepartmentPickerOpen,
-  onSearch,
   onProfileOpen,
   onNotificationsClick,
   isSidebarOpen,
   onSidebarToggle,
 }) => {
   const [isCompactMenuOpen, setIsCompactMenuOpen] = useState(false);
-  const [isCompactSearchOpen, setIsCompactSearchOpen] = useState(false);
   const currentModule = getModuleDisplayById(activeTab, currentUser.role);
   const headerTitle = activeTab === 'customers' && currentUser.role === 'Admin'
     ? currentModule?.label || 'Businesses'
@@ -61,40 +43,29 @@ const Header: React.FC<HeaderProps> = ({
     ? getCustomerWorkspaceViewUi(customerPageView).label
     : getModuleLabel(activeTab) || currentModule?.label || 'Dashboard';
   const roleLabel = getRoleLabel(currentUser.role);
-  const showDepartmentSelector = (currentUser.role === 'Customer' || currentUser.role === 'Employee') && counters.length > 0;
-  const selectedCounter = counters.find((counter) => counter.id === selectedCounterId) || null;
+  const normalizedDepartmentName = departmentName?.trim();
   const headerRef = useRef<HTMLElement | null>(null);
-  const compactSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setIsCompactMenuOpen(false);
-    setIsCompactSearchOpen(false);
   }, [activeTab, customerPageView]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (isCompactSearchOpen) {
-      compactSearchInputRef.current?.focus();
-    }
-  }, [isCompactSearchOpen]);
-
-  useEffect(() => {
-    if (!isCompactMenuOpen && !isCompactSearchOpen) {
+    if (!isCompactMenuOpen) {
       return;
     }
 
     const handlePointerDown = (event: MouseEvent) => {
       if (!headerRef.current?.contains(event.target as Node)) {
         setIsCompactMenuOpen(false);
-        setIsCompactSearchOpen(false);
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsCompactMenuOpen(false);
-        setIsCompactSearchOpen(false);
       }
     };
 
@@ -105,31 +76,11 @@ const Header: React.FC<HeaderProps> = ({
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isCompactMenuOpen, isCompactSearchOpen]);
+  }, [isCompactMenuOpen]);
 
   const handleProfileOpen = () => {
     setIsCompactMenuOpen(false);
-    setIsCompactSearchOpen(false);
     onProfileOpen();
-  };
-
-  const renderDepartmentSelector = (className?: string) => {
-    if (showDepartmentSelector) {
-      return (
-        <div className={['header-counter', className].filter(Boolean).join(' ')}>
-          <p className="header-counter__label">Department</p>
-          <button type="button" className="header-counter__button" onClick={onDepartmentPickerOpen}>
-            <span className="header-counter__name">{selectedCounter?.name || 'Select department'}</span>
-            <span className="header-counter__change">
-              <FaExchangeAlt size={10} />
-              Change
-            </span>
-          </button>
-        </div>
-      );
-    }
-
-    return null;
   };
 
   const renderProfileCard = (className?: string) => (
@@ -165,22 +116,16 @@ const Header: React.FC<HeaderProps> = ({
             <div className="app-header__heading">
               <h1>{headerTitle}</h1>
             </div>
+            
           </div>
 
-          <label className="header-search header-search--desktop" aria-label="Global search">
-            <FaSearch className="header-search__icon" size={14} />
-            <input
-              type="text"
-              className="header-search__input"
-              placeholder="Search customers, transactions, services..."
-              value={searchValue}
-              onChange={(event) => onSearch(event.target.value)}
-            />
-          </label>
-
           <div className="app-header__actions">
-            {renderDepartmentSelector()}
-
+            {normalizedDepartmentName ? (
+              <span className="app-header__department" aria-label={`Department: ${normalizedDepartmentName}`}>
+                <span className="app-header__department-label">Department</span>
+                <span className="app-header__department-name">{normalizedDepartmentName}</span>
+              </span>
+            ) : null}
             <button
               type="button"
               className="icon-button app-header__notification"
@@ -197,24 +142,6 @@ const Header: React.FC<HeaderProps> = ({
           <div className="app-header__compact-actions">
             <button
               type="button"
-              className={`icon-button header-search-toggle ${isCompactSearchOpen ? 'is-active' : ''}`}
-              aria-label="Open search"
-              aria-expanded={isCompactSearchOpen}
-              onClick={() => {
-                setIsCompactSearchOpen((current) => {
-                  const next = !current;
-                  if (next) {
-                    setIsCompactMenuOpen(false);
-                  }
-                  return next;
-                });
-              }}
-            >
-              <FaSearch size={15} />
-            </button>
-
-            <button
-              type="button"
               className="icon-button app-header__notification"
               aria-label="Notifications"
               onClick={onNotificationsClick}
@@ -229,44 +156,19 @@ const Header: React.FC<HeaderProps> = ({
                 className={`icon-button header-overflow__toggle ${isCompactMenuOpen ? 'is-active' : ''}`}
                 aria-label="Open more options"
                 aria-expanded={isCompactMenuOpen}
-                onClick={() => {
-                  setIsCompactMenuOpen((current) => {
-                    const next = !current;
-                    if (next) {
-                      setIsCompactSearchOpen(false);
-                    }
-                    return next;
-                  });
-                }}
+                onClick={() => setIsCompactMenuOpen((current) => !current)}
               >
                 <FaEllipsisV size={15} />
               </button>
 
               {isCompactMenuOpen ? (
                 <div className="header-overflow__menu">
-                  {renderDepartmentSelector('header-counter--menu')}
                   {renderProfileCard('profile-card--menu')}
                 </div>
               ) : null}
             </div>
           </div>
         </div>
-
-        {isCompactSearchOpen ? (
-          <div className="header-search-panel">
-            <label className="header-search" aria-label="Global search">
-              <FaSearch className="header-search__icon" size={14} />
-              <input
-                ref={compactSearchInputRef}
-                type="text"
-                className="header-search__input"
-                placeholder="Search customers, transactions, services..."
-                value={searchValue}
-                onChange={(event) => onSearch(event.target.value)}
-              />
-            </label>
-          </div>
-        ) : null}
       </div>
     </header>
   );

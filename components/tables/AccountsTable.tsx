@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { Account } from '../../lib/store';
+import { formatDateTime } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface AccountsTableProps {
@@ -42,7 +43,7 @@ const AccountsTable: React.FC<AccountsTableProps> = ({ accounts, isLoading = fal
             </span>
           ),
         },
-        { key: 'date', header: 'Added Date', render: (account) => account.addedDate || account.date || '-' },
+        { key: 'date', header: 'Added Date', render: (account) => formatDateTime(account.addedDate || account.date) },
       ]}
       renderActions={(account) => (
         <div className="table-actions">

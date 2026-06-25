@@ -40,7 +40,6 @@ export type DashboardDeleteActionType =
   | 'DELETE_BUSINESS'
   | 'DELETE_ACCOUNT'
   | 'DELETE_SERVICE'
-  | 'DELETE_CUSTOMER'
   | 'DELETE_EMPLOYEE'
   | 'DELETE_COUNTER'
   | 'DELETE_EXPENSE'
@@ -109,6 +108,8 @@ export interface DashboardTabContext {
   isBusinessDirectoryLoading: boolean;
   businessDirectoryError: string;
   customerDirectoryPagination?: DataTablePagination;
+  customerOutstandingPagination?: DataTablePagination;
+  employeePagination?: DataTablePagination;
   historyStatusFilter: 'All' | 'Failed';
   departmentSearchInput: string;
   departmentAccountStatusFilter: 'All' | 'Active' | 'Inactive' | 'Unassigned';
@@ -159,6 +160,8 @@ export interface DashboardTabContext {
   reloadAccounts: () => void;
   reloadDepartments: () => void;
   reloadRoleTemplates: () => void;
+  handleCounterChange: (counterId: string) => void;
+  handleOpenDepartmentPicker: () => void;
   handleCustomerBalancePayment: (payload: PayCustomerBalancePayload) => Promise<boolean>;
   handleLogout: () => void;
   handleAdminProfileSave: (values: { name: string; email: string }) => void;
@@ -172,7 +175,6 @@ export interface DashboardTabContext {
   handleDeleteRecord: (actionType: DashboardDeleteActionType, id: string) => void;
   handleEditService: (service: Service) => void;
   handleDeleteService: (id: string) => void;
-  handleViewCustomerHistory: (recordId: string) => void;
   handleEditCustomer: (recordId: string) => void;
   handleViewHistory: (event: HistoryEvent) => void;
   handleEditEmployee: (employee: Employee) => void;

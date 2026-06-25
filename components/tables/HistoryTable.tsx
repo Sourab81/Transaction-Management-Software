@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaEye, FaTrashAlt } from 'react-icons/fa';
 import type { HistoryEvent } from '../../lib/store';
+import { formatDateTime } from '../../src/utils/dateFormatter';
 import ReusableListTable from '../common/ReusableListTable';
 
 interface HistoryTableProps {
@@ -33,7 +34,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ events, onView, onDelete })
         { key: 'module', header: 'Module', render: (event) => event.module },
         { key: 'actor', header: 'Actor', render: (event) => event.actor },
         { key: 'status', header: 'Status', render: (event) => <span className={getStatusClass(event.status)}>{event.status}</span> },
-        { key: 'date', header: 'Date', render: (event) => event.date },
+        { key: 'date', header: 'Date', render: (event) => formatDateTime(event.date) },
       ]}
       renderActions={(event) => (
         <div className="table-actions">

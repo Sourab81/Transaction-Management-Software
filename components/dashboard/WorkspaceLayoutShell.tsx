@@ -11,6 +11,7 @@ import {
   LOGIN_ROUTE,
   getWorkspaceModulePath,
   isCustomerWorkspaceView,
+  isExpenseWorkspaceView,
   isTransactionWorkspaceView,
   isWorkspaceModuleId,
   type CustomerWorkspaceView,
@@ -50,6 +51,14 @@ const resolveWorkspaceRouteState = (pathname: string): WorkspaceRouteState => {
       transactionPageView: nestedSegment && isTransactionWorkspaceView(nestedSegment)
         ? nestedSegment
         : 'add',
+    };
+  }
+
+  if (moduleId === 'expenses' && (!nestedSegment || isExpenseWorkspaceView(nestedSegment))) {
+    return {
+      activeTab: 'expense',
+      customerPageView: 'list',
+      transactionPageView: 'add',
     };
   }
 

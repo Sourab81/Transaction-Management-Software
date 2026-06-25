@@ -13,6 +13,8 @@ interface ConfirmActionModalProps {
   cancelLabel?: string;
   confirmVariant?: 'primary' | 'danger';
   tone?: 'default' | 'danger';
+  isConfirming?: boolean;
+  confirmingLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
   children?: React.ReactNode;
@@ -28,6 +30,8 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   cancelLabel = 'Cancel',
   confirmVariant = 'primary',
   tone = 'default',
+  isConfirming = false,
+  confirmingLabel = 'Saving...',
   onConfirm,
   onCancel,
   children,
@@ -37,7 +41,9 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
     eyebrow={eyebrow}
     description={description}
     tone={tone}
-    onClose={onCancel}
+    onClose={() => {
+      if (!isConfirming) onCancel();
+    }}
   >
     {promptTitle || promptDescription ? (
       <div className="confirm-action__intro">
@@ -52,11 +58,11 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
     ) : null}
     {children}
     <div className="modal-actions">
-      <Button type="button" variant="secondary" onClick={onCancel}>
+      <Button type="button" variant="secondary" onClick={onCancel} disabled={isConfirming}>
         {cancelLabel}
       </Button>
-      <Button type="button" variant={confirmVariant} onClick={onConfirm}>
-        {confirmLabel}
+      <Button type="button" variant={confirmVariant} onClick={onConfirm} disabled={isConfirming}>
+        {isConfirming ? confirmingLabel : confirmLabel}
       </Button>
     </div>
   </ActionModal>

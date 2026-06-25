@@ -17,6 +17,8 @@ export const mapCustomerPaymentRecord = (record: UnknownRecord): CustomerPayment
 
   const onlineAmount = readNumberValue(record, ['online_amount', 'onlineAmount', 'account_amount']) || 0;
   const cashAmount = readNumberValue(record, ['cash_amount', 'cashAmount']) || 0;
+  const debitAmount = readNumberValue(record, ['debit', 'debit_amount', 'debitAmount', 'transaction_amount', 'transactionAmount']);
+  const creditAmount = readNumberValue(record, ['credit', 'credit_amount', 'creditAmount', 'received_amount', 'receivedAmount']);
   const totalPaid = readNumberValue(record, ['total_paid', 'totalPaid', 'payment_amount', 'paid_amount'])
     ?? onlineAmount + cashAmount;
 
@@ -31,8 +33,12 @@ export const mapCustomerPaymentRecord = (record: UnknownRecord): CustomerPayment
     counterName: readStringValue(record, ['counter_name', 'counterName', 'department_name', 'departmentName']) || undefined,
     onlineAmount,
     cashAmount,
+    debitAmount: debitAmount ?? undefined,
+    creditAmount: creditAmount ?? undefined,
     totalPaid,
+    currentBalance: readNumberValue(record, ['current_balance', 'currentBalance', 'balance', 'running_balance', 'runningBalance']) ?? undefined,
     accountName: readStringValue(record, ['account_name', 'accountName', 'bank_name', 'bankName']) || undefined,
+    remark: readStringValue(record, ['remark', 'remarks', 'source_remark', 'sourceRemark', 'description']) || undefined,
     addedByName: readStringValue(record, ['added_by_name', 'addedByName']) || undefined,
     status: readStringValue(record, ['status']) || readNumberValue(record, ['status']) || 1,
   };

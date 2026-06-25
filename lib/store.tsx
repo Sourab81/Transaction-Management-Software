@@ -55,6 +55,7 @@ export interface BusinessCustomer {
   name: string;
   phone: string;
   email?: string;
+  dob?: string;
   address?: string | null;
   remark?: string | null;
   status?: 'Active' | 'Inactive';
@@ -144,6 +145,9 @@ export interface Transaction {
   customerCode?: string;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  customerDob?: string;
   serviceProduct?: string;
   inventoryItemId?: string;
   inventoryItemType?: 'service' | 'product';
@@ -161,6 +165,7 @@ export interface Transaction {
   currentBalance?: number;
   rows?: TransactionChildRow[];
   totalAmount: number;
+  total_amount?: number;
   paidAmount: number;
   dueAmount: number;
   paymentMode: TransactionPaymentMode;
@@ -241,9 +246,13 @@ export interface Service {
   description: string;
   type?: 'service' | 'product';
   quantity?: number;
+  openingStock?: number;
+  currentStock?: number;
+  lowStockThreshold?: number;
   remark?: string | null;
   counterId?: string | null;
   userId?: string;
+  addedByName?: string | null;
   addedDate?: string;
   updatedDate?: string;
 }

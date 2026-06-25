@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FaChevronDown, FaChevronUp, FaEye, FaFilter, FaMoneyBillWave, FaPrint, FaReceipt } from 'react-icons/fa';
 import type { Transaction } from '../../lib/store';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
+import { formatDate } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface TransactionTableProps {
@@ -45,7 +46,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         {
           key: 'date',
           header: 'Date',
-          render: (transaction: Transaction) => transaction.date,
+          render: (transaction: Transaction) => formatDate(transaction.date),
         },
         {
           key: 'customer',
@@ -83,7 +84,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         {
           key: 'date',
           header: 'Transaction Date',
-          render: (transaction: Transaction) => transaction.date,
+          render: (transaction: Transaction) => formatDate(transaction.date),
         },
         {
           key: 'customer',

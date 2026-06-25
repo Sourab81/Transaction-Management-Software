@@ -7,6 +7,7 @@ import {
   deleteRoleTemplate,
   updateRoleTemplate,
 } from '../../../lib/api/role-templates';
+import { formatDateTime } from '../../../src/utils/dateFormatter';
 import type {
   RoleTemplate,
   RoleTemplateFormValues,
@@ -114,12 +115,12 @@ export default function RoleTab({ ctx }: RoleTabProps) {
     {
       key: 'createdDate',
       header: 'Created Date',
-      render: (role: RoleTemplate) => role.createdDate || 'Not added',
+      render: (role: RoleTemplate) => formatDateTime(role.createdDate, 'Not added'),
     },
     {
       key: 'updatedDate',
       header: 'Updated Date',
-      render: (role: RoleTemplate) => role.updatedDate || 'Not added',
+      render: (role: RoleTemplate) => formatDateTime(role.updatedDate, 'Not added'),
     },
     {
       key: 'privileges',

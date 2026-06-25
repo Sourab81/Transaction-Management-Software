@@ -59,8 +59,6 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
         />
       </div>
 
-      {renderSummaryCards(departmentSummary)}
-
       <div className="col-12">
         <section className="panel department-toolbar">
           <div className="panel-header">
@@ -118,6 +116,8 @@ export default function DepartmentsTab({ ctx }: DepartmentsTabProps) {
           />
         )}
       </div>
+
+      {renderSummaryCards(departmentSummary)}
     </div>
   );
 }

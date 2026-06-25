@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaArrowRight, FaStar } from 'react-icons/fa';
 import { getRoleLabel, type UserRole } from '../../lib/platform-structure';
+import { formatDate } from '../../src/utils/dateFormatter';
 
 interface WelcomeHeroProps {
   userName: string;
@@ -59,11 +60,7 @@ const WelcomeHero: React.FC<WelcomeHeroProps> = ({
           <div className="hero-stat">
             <span className="hero-stat__label">Today</span>
             <span className="hero-stat__value">
-              {currentTime.toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-              })}
+              {formatDate(currentTime)}
             </span>
             <span className="hero-stat__hint">Plan the next wave of tasks</span>
           </div>

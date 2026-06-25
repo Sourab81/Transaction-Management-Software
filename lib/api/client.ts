@@ -39,8 +39,9 @@ export const readApiErrorMessage = (body: unknown, fallbackMessage: string) => {
 };
 
 interface AppApiRequestOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
+  signal?: AbortSignal;
 }
 
 export const requestAppApi = async <T = unknown>(
@@ -53,18 +54,23 @@ export const requestAppApi = async <T = unknown>(
   try {
     response = await fetch(path, {
       method,
-      headers: method === 'POST'
+      headers: method !== 'GET'
         ? {
             'Content-Type': 'application/json',
             Accept: 'application/json',
           }
         : undefined,
-      body: method === 'POST' && options.body
+      body: method !== 'GET' && options.body
         ? JSON.stringify(options.body)
         : undefined,
       cache: 'no-store',
+      signal: options.signal,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+
     throw new AppApiError('Unable to reach the local API route.', null, null);
   }
 

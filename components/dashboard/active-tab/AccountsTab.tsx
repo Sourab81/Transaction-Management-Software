@@ -47,8 +47,6 @@ export default function AccountsTab({ ctx }: AccountsTabProps) {
         />
       </div>
 
-      {renderSummaryCards(accountSummary)}
-
       <div className="col-12">
         {accounts.length === 0 && !isAccountsLoading ? (
           <EmptyState
@@ -66,6 +64,8 @@ export default function AccountsTab({ ctx }: AccountsTabProps) {
           />
         )}
       </div>
+
+      {renderSummaryCards(accountSummary)}
     </div>
   );
 }

@@ -7,7 +7,12 @@ import type {
   TransactionUpiPaymentDetails,
 } from '../store';
 import {
+  readBackendPagination,
+  type BackendPagination,
+} from '../api/pagination';
+import {
   extractCollectionItems,
+  extractFirstRecordWithKeys,
   isRecord,
   readBooleanLikeValue,
   readNumberValue,
@@ -137,9 +142,28 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
     return null;
   }
 
-  const customerId = readStringValue(record, ['customerId', 'customer_id']) || '';
-  const customerCode = readStringValue(record, ['customer_code', 'customerCode']) || undefined;
-  const customerName = readStringValue(record, ['customer_name', 'customerName', 'name']) || undefined;
+  const customerRecord = readRecordValue(record, ['customer', 'customer_details', 'customerDetails']);
+  const customerId = readStringValue(record, ['customerId', 'customer_id'])
+    || readStringValue(customerRecord, ['id', 'customerId', 'customer_id'])
+    || '';
+  const customerCode = readStringValue(record, ['customer_code', 'customerCode'])
+    || readStringValue(customerRecord, ['customer_code', 'customerCode', 'code'])
+    || undefined;
+  const customerName = readStringValue(record, ['customer_name', 'customerName', 'name'])
+    || readStringValue(customerRecord, ['customer_name', 'customerName', 'name'])
+    || undefined;
+  const customerPhone = readStringValue(record, ['mobile_no', 'mobileNo', 'customer_mobile_no', 'customerPhone', 'phone'])
+    || readStringValue(customerRecord, ['mobile_no', 'mobileNo', 'phone'])
+    || '';
+  const customerEmail = readStringValue(record, ['email', 'customer_email', 'customerEmail'])
+    || readStringValue(customerRecord, ['email', 'customer_email'])
+    || undefined;
+  const customerAddress = readStringValue(record, ['address', 'customer_address', 'customerAddress'])
+    || readStringValue(customerRecord, ['address', 'customer_address'])
+    || undefined;
+  const customerDob = readStringValue(record, ['dob', 'date_of_birth', 'customer_dob', 'customerDob'])
+    || readStringValue(customerRecord, ['dob', 'date_of_birth'])
+    || undefined;
   const customerDisplay = customerName || customerCode || (customerId ? `Customer #${customerId}` : 'Customer');
   const paymentMode = normalizePaymentMode(readStringValue(record, ['payment_mode', 'paymentMode', 'mode']));
   const amount = readNumberValue(record, ['transactionAmount', 'transaction_amount', 'amount', 'base_amount', 'baseAmount']) || 0;
@@ -181,7 +205,10 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
     customerId: customerId || id,
     customerCode,
     customerName: customerDisplay,
-    customerPhone: '',
+    customerPhone,
+    customerEmail,
+    customerAddress,
+    customerDob,
     serviceId: readStringValue(record, ['service_id', 'serviceId']) || id,
     serviceProduct,
     service: serviceProduct,
@@ -244,4 +271,32 @@ export const mapTransactionsResponse = (payload: unknown) => {
 
     return transactions;
   }, []);
+};
+
+export interface TransactionsPage {
+  transactions: Transaction[];
+  pagination: BackendPagination;
+}
+
+export const mapTransactionsPageResponse = (
+  payload: unknown,
+  requestedPage = 1,
+  requestedLimit = 10,
+): TransactionsPage => {
+  const transactions = mapTransactionsResponse(payload);
+
+  return {
+    transactions,
+    pagination: readBackendPagination(payload, transactions.length, requestedPage, requestedLimit),
+  };
+};
+
+export const mapTransactionDetailResponse = (payload: unknown): Transaction | null => {
+  const record = extractFirstRecordWithKeys(
+    payload,
+    ['transaction_id', 'transactionId', 'txn_id'],
+    ['data', 'transaction', 'item', 'result', 'details'],
+  );
+
+  return record ? mapTransactionRecord(record) : mapTransactionsResponse(payload)[0] || null;
 };

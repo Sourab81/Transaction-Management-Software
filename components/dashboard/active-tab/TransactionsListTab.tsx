@@ -1,22 +1,27 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { FaEye, FaPrint, FaSearch } from 'react-icons/fa';
-import { payTransaction } from '../../../lib/api/transactions';
+import { getTransactions, payTransaction } from '../../../lib/api/transactions';
+import { createFallbackPagination } from '../../../lib/api/pagination';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../../lib/customer-balance-format';
+import { mapTransactionsPageResponse } from '../../../lib/mappers/transaction-mapper';
 import type { Transaction } from '../../../lib/store';
+import { formatDate } from '../../../src/utils/dateFormatter';
 import DataTable, { type DataTableColumn } from '../../tables/DataTable';
 import PermissionState from '../../ui/state/PermissionState';
 import type { DashboardTabContext } from './types';
+import { usePersistentPageSize } from '../../../lib/hooks/usePersistentPageSize';
 
 interface TransactionsListTabProps {
   ctx: DashboardTabContext;
 }
 
-const pageSize = 10;
-
-const formatCurrency = (value: number | undefined) => `Rs. ${(value ?? 0).toLocaleString('en-IN')}`;
+const formatCurrency = (value: number | undefined) => `₹${(value ?? 0).toLocaleString('en-IN')}`;
+const getTodayDate = () => new Date().toLocaleDateString('en-CA');
 const readTransactionBalance = (transaction: Transaction) => Number(transaction.currentBalance ?? transaction.dueAmount ?? 0);
+const readTransactionTotalAmount = (transaction: Transaction) => transaction.totalAmount ?? transaction.total_amount ?? 0;
 const formatCustomerId = (transaction: Transaction) => {
   if (transaction.customerCode) return transaction.customerCode;
 
@@ -57,44 +62,121 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
     accounts,
     canManageModule,
     currentRole,
-    filteredTransactionRecords,
     getRoleLabel,
     handlePrintReceipt,
-    handleViewTransaction,
-    isTransactionsLoading,
+    renderSummaryCards,
     reloadAccounts,
     reloadCustomerBalance,
     reloadDepartments,
     reloadTransactions,
     selectedCounter,
     showNotification,
+    transactionSummary,
   } = ctx;
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const {
+    pageSize,
+    setPageSize,
+    isPageSizeReady,
+  } = usePersistentPageSize('transactions_page_size');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [listPagination, setListPagination] = useState(() => createFallbackPagination(0, 1, pageSize));
+  const [isListLoading, setIsListLoading] = useState(false);
+  const [listError, setListError] = useState('');
+  const [dateFrom, setDateFrom] = useState(getTodayDate);
+  const [dateTo, setDateTo] = useState(getTodayDate);
+  const requestSequence = useRef(0);
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, PaymentDraft>>({});
   const [settledTransactionIds, setSettledTransactionIds] = useState<string[]>([]);
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-  const pendingTransactionRecords = useMemo(() => (
-    filteredTransactionRecords.filter((transaction) =>
-      !settledTransactionIds.includes(transaction.id) && readTransactionBalance(transaction) !== 0
-    )
-  ), [filteredTransactionRecords, settledTransactionIds]);
-  const searchedTransactions = useMemo(() => (
-    normalizedSearch
-      ? pendingTransactionRecords.filter((transaction) => [
-          transaction.customerName,
-          transaction.customerCode,
-          transaction.customerId,
-          transaction.invoiceId,
-        ].filter(Boolean).some((value) => String(value).toLowerCase().includes(normalizedSearch)))
-      : pendingTransactionRecords
-  ), [pendingTransactionRecords, normalizedSearch]);
-  const totalPages = Math.max(1, Math.ceil(searchedTransactions.length / pageSize));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedTransactions = searchedTransactions.slice(
-    (safeCurrentPage - 1) * pageSize,
-    safeCurrentPage * pageSize,
-  );
+  const isShortSearch = debouncedSearch.length > 0 && debouncedSearch.length < 3;
+  const displayedTransactions = transactions.filter((transaction) => (
+    !settledTransactionIds.includes(transaction.id)
+  ));
+
+  useEffect(() => {
+    const trimmedSearch = searchQuery.trim();
+
+    if (trimmedSearch !== debouncedSearch) {
+      requestSequence.current += 1;
+      setTransactions([]);
+      setListError('');
+    }
+
+    if (trimmedSearch.length > 0 && trimmedSearch.length < 3) {
+      setListPagination(createFallbackPagination(0, 1, pageSize));
+      setIsListLoading(false);
+    }
+
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(trimmedSearch);
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [debouncedSearch, searchQuery]);
+
+  useEffect(() => {
+    if (isShortSearch || !isPageSizeReady) {
+      requestSequence.current += 1;
+      setTransactions([]);
+      setListPagination(createFallbackPagination(0, 1, pageSize));
+      setIsListLoading(false);
+      setListError('');
+      return;
+    }
+
+    const controller = new AbortController();
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+
+    setTransactions([]);
+    setListError('');
+    setIsListLoading(true);
+
+    const loadTransactions = async () => {
+      try {
+        const payload = await getTransactions({
+          pageNo: currentPage,
+          limit: pageSize,
+          status: 1,
+          search: debouncedSearch || undefined,
+          counterId: selectedCounter?.id,
+          ...(dateFrom ? { dateFrom } : {}),
+          ...(dateTo ? { dateTo } : {}),
+        }, {
+          signal: controller.signal,
+        });
+        const page = mapTransactionsPageResponse(payload, currentPage, pageSize);
+
+        if (requestSequence.current !== sequence) {
+          return;
+        }
+
+        setTransactions(page.transactions);
+        setListPagination(page.pagination);
+      } catch (error) {
+        if (controller.signal.aborted || requestSequence.current !== sequence) {
+          return;
+        }
+
+        setTransactions([]);
+        setListPagination(createFallbackPagination(0, currentPage, pageSize));
+        setListError(error instanceof Error ? error.message : 'Unable to load transactions.');
+      } finally {
+        if (!controller.signal.aborted && requestSequence.current === sequence) {
+          setIsListLoading(false);
+        }
+      }
+    };
+
+    loadTransactions();
+
+    return () => {
+      controller.abort();
+    };
+  }, [currentPage, dateFrom, dateTo, debouncedSearch, isPageSizeReady, isShortSearch, pageSize, selectedCounter?.id]);
   const getPaymentDraft = (transactionId: string) => paymentDrafts[transactionId] || createPaymentDraft();
   const getPaymentError = (draft: PaymentDraft) => {
     const onlineAmount = toPaymentAmount(draft.onlineAmount);
@@ -170,27 +252,37 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
     {
       key: 'date',
       header: 'Transaction Date',
-      render: (transaction) => transaction.date,
+      render: (transaction) => formatDate(transaction.date),
     },
     {
       key: 'customer',
-      header: 'Customer ID/Name',
+      header: 'Customer',
       render: (transaction) => (
-        <span className="transaction-list-customer">
-          <span className="data-table__primary">{formatCustomerId(transaction)}</span>
-          <span>{getCustomerName(transaction)}</span>
-        </span>
+        <div className="transaction-list-customer">
+          <span className="transaction-list-customer__name">{getCustomerName(transaction)}</span>
+          <span className="transaction-list-customer__code">{formatCustomerId(transaction)}</span>
+        </div>
       ),
     },
     {
-      key: 'transactionAmount',
-      header: 'Transaction Amount',
-      render: (transaction) => formatCurrency(transaction.transactionAmount ?? transaction.amount),
-    },
-    {
       key: 'totalAmount',
-      header: 'Total Amount',
-      render: (transaction) => <span className="data-table__primary">{formatCurrency(transaction.totalAmount)}</span>,
+      header: 'Amount',
+      render: (transaction) => (
+        <div className="transaction-list-amount">
+          <span className="transaction-list-amount__value">
+            {formatCurrency(readTransactionTotalAmount(transaction))}
+          </span>
+          <span className="transaction-list-amount__charges">
+            A: {formatCurrency(transaction.amount)}
+            <span aria-hidden="true"> | </span>
+            S: {formatCurrency(transaction.serviceCharge)}
+            <span aria-hidden="true"> | </span>
+            B: {formatCurrency(transaction.bankCharge)}
+            <span aria-hidden="true"> | </span>
+            O: {formatCurrency(transaction.otherCharge)}
+          </span>
+        </div>
+      ),
     },
     {
       key: 'currentBalance',
@@ -261,6 +353,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
               className="btn-app btn-app-primary transaction-payment-cell__button"
               disabled={isPayDisabled}
               onClick={() => submitPayment(transaction)}
+              style={{ minHeight: '2rem' }}
             >
               {draft.isSubmitting ? 'Paying...' : 'Pay'}
             </button>
@@ -285,53 +378,75 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
 
   return (
     <div className="row g-4">
-      <div className="col-12">
-        <section className="panel p-4">
-          <div className="form-section-title mb-1">Transactions List</div>
-          <p className="page-muted mb-0">Search, review, print, and collect payments for saved transactions.</p>
-        </section>
-      </div>
 
       <div className="col-12">
         <DataTable
-          rows={paginatedTransactions}
+          rows={displayedTransactions}
           getRowKey={(transaction) => transaction.id}
+          className="transaction-list-table"
           eyebrow="Transactions"
           title="Transactions List"
           copy="Saved customer transactions with department, balance, and operator details."
-          emptyLabel="No transactions found."
-          isLoading={isTransactionsLoading}
+          emptyLabel={
+            isShortSearch
+              ? 'Enter at least 3 characters to search'
+              : debouncedSearch
+                ? 'No matching records found'
+                : 'No transactions found'
+          }
+          isLoading={isListLoading}
+          error={listError}
           pagination={{
-            currentPage: safeCurrentPage,
-            totalPages,
-            totalRecords: searchedTransactions.length,
-            limit: pageSize,
-            isLoading: isTransactionsLoading,
+            currentPage: listPagination.currentPage,
+            totalPages: listPagination.totalPages,
+            totalRecords: listPagination.totalRecords,
+            limit: listPagination.limit,
+            isLoading: isListLoading,
             onPageChange: setCurrentPage,
+            showDateFilter: true,
+            dateFrom,
+            dateTo,
+            onDateFromChange: (value) => {
+              setDateFrom(value);
+              setCurrentPage(1);
+            },
+            onDateToChange: (value) => {
+              setDateTo(value);
+              setCurrentPage(1);
+            },
+            onLimitChange: (limit) => {
+              setPageSize(limit);
+              setCurrentPage(1);
+            },
           }}
-          headerAction={(
-            <div className="table-filter-trigger transaction-list-search">
-              <FaSearch />
-              <input
-                className="form-control"
-                placeholder="Search by customer, code, or invoice"
-                value={searchQuery}
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-          )}
+
+          // not needed this part in table 
+          
+          // headerAction={(
+          //   <div className="table-filter-trigger transaction-list-search">
+          //     <FaSearch />
+          //     <input
+          //       className="form-control"
+          //       placeholder="Search by customer, code, mobile, or invoice"
+          //       value={searchQuery}
+          //       autoComplete="off"
+          //       spellCheck={false}
+          //       onChange={(event) => {
+          //         setSearchQuery(event.target.value);
+          //         setCurrentPage(1);
+          //       }}
+          //     />
+          //   </div>
+          // )}
           columns={columns}
           renderActions={(transaction) => (
             <div className="table-actions">
               <button
                 type="button"
                 className="btn-icon-sm btn-icon-sm--primary"
-                onClick={() => handleViewTransaction(transaction)}
+                onClick={() => router.push(`/transactions/add?transaction_id=${encodeURIComponent(transaction.id)}&mode=edit`)}
                 aria-label="View transaction"
-                title="View transaction"
+                title="Open transaction"
               >
                 <FaEye size={12} />
               </button>
@@ -348,6 +463,8 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
           )}
         />
       </div>
+
+      {renderSummaryCards(transactionSummary)}
     </div>
   );
 }

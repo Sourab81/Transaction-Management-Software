@@ -17,8 +17,12 @@ interface DataTableProps<TRecord> {
   emptyLabel: string;
   headerAction?: React.ReactNode;
   isLoading?: boolean;
+  error?: string;
   pagination?: DataTablePagination;
   renderActions?: (record: TRecord) => React.ReactNode;
+  className?: string;
+  wrapperClassName?: string;
+  tableClassName?: string;
 }
 
 export default function DataTable<TRecord>({
@@ -31,8 +35,12 @@ export default function DataTable<TRecord>({
   emptyLabel,
   headerAction,
   isLoading = false,
+  error = '',
   pagination,
   renderActions,
+  className,
+  wrapperClassName,
+  tableClassName,
 }: DataTableProps<TRecord>) {
   return (
     <ReusableListTable
@@ -45,8 +53,12 @@ export default function DataTable<TRecord>({
       emptyMessage={emptyLabel}
       headerAction={headerAction}
       loading={isLoading}
+      error={error}
       pagination={pagination}
       renderActions={renderActions}
+      className={className}
+      wrapperClassName={wrapperClassName}
+      tableClassName={tableClassName}
     />
   );
 }

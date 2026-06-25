@@ -60,7 +60,9 @@ const parseResponseBody = async (response: Response): Promise<unknown> => {
 
 const readBackendMessage = (body: unknown, fallback: string) => {
   if (typeof body === 'string' && body.trim()) {
-    return body.trim();
+    const trimmedBody = body.trim();
+    const looksLikeHtml = /<!doctype html|<html|<body|<h1/i.test(trimmedBody);
+    return looksLikeHtml ? fallback : trimmedBody;
   }
 
   if (isRecord(body)) {

@@ -1,42 +1,51 @@
 import React from 'react';
-import type { CustomerPayment } from '../../lib/api/customerPayments';
+import type { CustomerBalance } from '../../lib/api/customerBalance';
+import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
+import { formatDateTime } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface CustomerPaymentsTableProps {
-  payments: CustomerPayment[];
+  rows: CustomerBalance[];
   isLoading?: boolean;
 }
 
-const formatMoney = (value: number) => `Rs. ${value.toLocaleString('en-IN')}`;
-const formatCustomer = (payment: CustomerPayment) => {
-  const id = payment.customerCode || payment.customerId || '-';
-  const name = payment.customerName || '-';
-  return `${id} / ${name}`;
+const formatLedgerAmount = (value: number | undefined) => {
+  const amount = Number(value ?? 0);
+  return amount === 0 ? '-' : amount.toLocaleString('en-IN');
 };
 
+const getLedgerBalance = (row: CustomerBalance) => row.balance ?? Number(formatCustomerBalance(row.currentBalanceStatus));
+
 const CustomerPaymentsTable: React.FC<CustomerPaymentsTableProps> = ({
-  payments,
+  rows,
   isLoading = false,
 }) => (
   <DataTable
-    rows={payments}
-    getRowKey={(payment) => String(payment.id)}
+    rows={rows}
+    getRowKey={(row) => String(row.id)}
     eyebrow="Customer Payments"
-    title="Customer Payment List"
-    copy="Payment transaction history collected from customers."
-    emptyLabel="No customer payment transactions found."
+    title=""
+    emptyLabel="No customer ledger records found."
     isLoading={isLoading}
+    className="customer-ledger-panel"
+    tableClassName="customer-ledger-table"
     columns={[
-      { key: 'paymentDate', header: 'Payment Date', render: (payment) => payment.paymentDate || '-' },
-      { key: 'invoiceId', header: 'Invoice ID', render: (payment) => payment.invoiceId || '-' },
-      { key: 'customer', header: 'Customer ID/Name', render: (payment) => <span className="data-table__primary">{formatCustomer(payment)}</span> },
-      { key: 'department', header: 'Department', render: (payment) => payment.counterName || '-' },
-      { key: 'onlineAmount', header: 'Online Amount', render: (payment) => formatMoney(payment.onlineAmount) },
-      { key: 'cashAmount', header: 'Cash Amount', render: (payment) => formatMoney(payment.cashAmount) },
-      { key: 'totalPaid', header: 'Total Paid', render: (payment) => <span className="data-table__primary">{formatMoney(payment.totalPaid)}</span> },
-      { key: 'account', header: 'Account', render: (payment) => payment.accountName || '-' },
-      { key: 'addedBy', header: 'Added By', render: (payment) => payment.addedByName || '-' },
-      { key: 'status', header: 'Status', render: (payment) => <span className="status-chip status-chip--active">{String(payment.status)}</span> },
+      { key: 'serial', header: 'S.No', render: (_row, index) => index + 1 },
+      { key: 'date', header: 'Date', render: (row) => formatDateTime(row.date || row.lastTransaction) },
+      { key: 'counterBank', header: 'Counter / Bank', render: (row) => row.counterOrBank || '-' },
+      { key: 'debit', header: 'Debit', render: (row) => formatLedgerAmount(row.debit) },
+      { key: 'credit', header: 'Credit', render: (row) => formatLedgerAmount(row.credit) },
+      {
+        key: 'balance',
+        header: 'Balance',
+        render: (row) => (
+          <span className={getCustomerBalanceClassName(getLedgerBalance(row))}>
+            {formatCustomerBalance(getLedgerBalance(row))}
+          </span>
+        ),
+      },
+      { key: 'remark', header: 'Remark', render: (row) => row.remark || '-' },
+      { key: 'addedBy', header: 'Added By', render: (row) => row.addedByName || '-' },
     ]}
   />
 );

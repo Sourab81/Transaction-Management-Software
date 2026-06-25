@@ -39,8 +39,6 @@ export default function ReminderTab({ ctx }: ReminderTabProps) {
         />
       </div>
 
-      {renderSummaryCards(reminderSummary)}
-
       <div className="col-12 col-xl-5">
         <NotificationCenter
           notifications={notifications}
@@ -55,6 +53,8 @@ export default function ReminderTab({ ctx }: ReminderTabProps) {
           onDelete={canDeleteModule('history') ? (id: string) => handleDeleteRecord('DELETE_HISTORY_EVENT', id) : undefined}
         />
       </div>
+
+      {renderSummaryCards(reminderSummary)}
     </div>
   );
 }

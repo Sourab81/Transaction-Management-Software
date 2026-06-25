@@ -1,13 +1,16 @@
 import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { Employee } from '../../lib/store';
+import { formatDateTime } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
+import type { DataTablePagination } from './DataTable';
 
 interface EmployeesTableProps {
   employees: Employee[];
   onEdit?: (employee: Employee) => void;
   onDelete?: (employeeId: string) => void;
   isLoading?: boolean;
+  pagination?: DataTablePagination;
 }
 
 const EmployeesTable: React.FC<EmployeesTableProps> = ({
@@ -15,6 +18,7 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({
   onEdit,
   onDelete,
   isLoading = false,
+  pagination,
 }) => {
   const hasActions = Boolean(onEdit || onDelete);
 
@@ -27,6 +31,7 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({
       copy="Staff contact details and status in a clean list the business owner can manage."
       emptyLabel="No employee records found."
       isLoading={isLoading}
+      pagination={pagination}
       columns={[
         { key: 'displayName', header: 'Display Name', render: (employee) => <span className="data-table__primary">{employee.displayName || employee.nickName || employee.name}</span> },
         { key: 'fullName', header: 'Full Name', render: (employee) => employee.fullName || employee.name },
@@ -45,7 +50,7 @@ const EmployeesTable: React.FC<EmployeesTableProps> = ({
             );
           },
         },
-        { key: 'addedDate', header: 'Added Date', render: (employee) => employee.addedDate || employee.createDate || employee.joinedDate || 'Not added' },
+        { key: 'addedDate', header: 'Added Date', render: (employee) => formatDateTime(employee.addedDate || employee.createDate || employee.joinedDate, 'Not added') },
       ]}
       renderActions={(employee) => (
         <div className="table-actions">

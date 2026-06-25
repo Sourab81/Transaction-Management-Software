@@ -1,4 +1,4 @@
-import { AppApiError, requestAppApiMutation } from './client';
+import { AppApiError, requestAppApi, requestAppApiMutation } from './client';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface Transaction {
@@ -59,9 +59,13 @@ export interface TransactionFilters {
   pageNo?: number;
   limit?: number;
   status?: number;
+  search?: string;
+  transactionId?: number | string;
   customerId?: number | string;
   counterId?: number | string;
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface CreateTransactionPayload {
@@ -76,6 +80,7 @@ export interface UpdateTransactionPayload {
   customerId?: number | string;
   counterId?: number | string;
   rows?: TransactionChild[];
+  removedRowIds?: Array<number | string>;
   status?: number;
 }
 
@@ -136,16 +141,37 @@ const handleTransactionMutation = async (
   }
 };
 
-export const getTransactions = (filters: TransactionFilters = {}) =>
-  requestAppApiMutation('/api/transactions', {
-    action: 'list',
-    pageNo: filters.pageNo ?? 1,
-    limit: filters.limit ?? 10,
-    status: filters.status ?? 1,
-    ...(typeof filters.customerId !== 'undefined' ? { customerId: filters.customerId } : {}),
-    ...(typeof filters.counterId !== 'undefined' ? { counterId: filters.counterId } : {}),
-    ...(typeof filters.date !== 'undefined' ? { date: filters.date } : {}),
-  });
+export interface TransactionRequestOptions {
+  signal?: AbortSignal;
+}
+
+export const buildTransactionsListPath = (filters: TransactionFilters = {}) => {
+  const params = new URLSearchParams();
+  const search = filters.search?.trim();
+
+  if (search) params.set('search', search);
+  params.set('pageNo', String(filters.pageNo ?? 1));
+  params.set('limit', String(filters.limit ?? 10));
+  params.set('status', String(filters.status ?? 1));
+  if (typeof filters.transactionId !== 'undefined') params.set('transactionId', String(filters.transactionId));
+  if (typeof filters.customerId !== 'undefined') params.set('customerId', String(filters.customerId));
+  if (typeof filters.counterId !== 'undefined') params.set('counterId', String(filters.counterId));
+  if (typeof filters.date !== 'undefined') params.set('date', filters.date);
+  if (typeof filters.dateFrom !== 'undefined') params.set('dateFrom', filters.dateFrom);
+  if (typeof filters.dateTo !== 'undefined') params.set('dateTo', filters.dateTo);
+
+  return `/api/transactions?${params.toString()}`;
+};
+
+export const getTransactions = (
+  filters: TransactionFilters = {},
+  options: TransactionRequestOptions = {},
+) => requestAppApi(buildTransactionsListPath(filters), {
+  signal: options.signal,
+});
+
+export const getTransactionById = (id: string | number) =>
+  requestAppApi(`/api/transactions/${encodeURIComponent(String(id))}`);
 
 export const createTransaction = (payload: CreateTransactionPayload) =>
   handleTransactionMutation(

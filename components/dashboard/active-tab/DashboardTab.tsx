@@ -5,10 +5,12 @@ import DashboardCard from '../DashboardCard';
 import QuickActions from '../QuickActions';
 import NotificationCenter from '../NotificationCenter';
 import WelcomeHero from '../WelcomeHero';
+import DashboardStatsSection from '../DashboardStatsSection';
 import CountersTable from '../../tables/CountersTable';
 import RecentServicesTable from '../../tables/RecentServicesTable';
 import TransactionTable from '../../tables/TransactionTable';
 import { FaPlusCircle, FaDollarSign, FaHourglassHalf, FaUsers, FaCog, FaFilter } from 'react-icons/fa';
+import { useDashboardStats } from '../../../lib/hooks/useDashboardStats';
 import type { DashboardTabContext } from './types';
 
 interface DashboardTabProps {
@@ -16,6 +18,10 @@ interface DashboardTabProps {
 }
 
 export default function DashboardTab({ ctx }: DashboardTabProps) {
+  const {
+    stats,
+    isLoading: isDashboardStatsLoading,
+  } = useDashboardStats(true);
   const {
     currentRole,
     dashboardSummary,
@@ -153,6 +159,8 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
 
   return (
     <div className="dashboard-page-stack dashboard-page-stack--modern">
+      <DashboardStatsSection stats={stats} isLoading={isDashboardStatsLoading} />
+
       <div className="dashboard-command-grid">
         <WelcomeHero
           userName={displayUserName}

@@ -10,6 +10,7 @@ import {
 } from '../../lib/api/business-users';
 import { buildCsv } from '../../lib/csv';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
+import { formatDate, formatDateTime } from '../../src/utils/dateFormatter';
 import {
   canPerformModuleActionForSession,
   canDeleteModuleForSession,
@@ -34,7 +35,6 @@ import {
   useFilteredTransactionRecords,
   useRecentServices,
   useRoleScopedWorkspace,
-  useSearchResults,
   useTransactionFilterOptions,
   useTransactionStats,
   useVisibleCustomerRecords,
@@ -48,6 +48,7 @@ import { useBackendBusinesses } from '../../lib/hooks/useBackendBusinesses';
 import { useDepartments } from '../../lib/hooks/useDepartments';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useReports } from '../../lib/hooks/useReports';
+import { usePersistentPageSize } from '../../lib/hooks/usePersistentPageSize';
 import { useRoleTemplates } from '../../lib/hooks/useRoleTemplates';
 import { useInventory } from '../../lib/hooks/useInventory';
 import { useTransactions } from '../../lib/hooks/useTransactions';
@@ -61,7 +62,6 @@ import {
 } from '../../lib/api/accounts';
 import {
   createCustomer,
-  deleteCustomer,
   updateCustomer,
 } from '../../lib/api/customers';
 import {
@@ -105,9 +105,7 @@ import SubscriptionPlanForm from '../forms/SubscriptionPlanForm';
 import TransactionEditForm, { type TransactionEditorValues } from '../forms/TransactionEditForm';
 import { type SummaryCardProps } from './SummaryCard';
 import SummaryGrid from './SummaryGrid';
-import ReusableListTable from '../common/ReusableListTable';
 import {
-  readDataTableDateRangeFilter,
   readDataTableMultiSelectFilter,
   readDataTableSingleSelectFilter,
   type DataTableFiltersConfig,
@@ -253,7 +251,6 @@ type ModalMode =
   | 'edit-expense'
   | 'edit-transaction'
   | 'view-transaction'
-  | 'view-customer-history'
   | 'view-history'
   | 'view-report'
   | 'manage-plan'
@@ -272,7 +269,6 @@ type DeleteActionType =
   | 'DELETE_BUSINESS'
   | 'DELETE_ACCOUNT'
   | 'DELETE_SERVICE'
-  | 'DELETE_CUSTOMER'
   | 'DELETE_EMPLOYEE'
   | 'DELETE_COUNTER'
   | 'DELETE_EXPENSE'
@@ -285,7 +281,6 @@ const deleteActionModuleIds: Record<DeleteActionType, string> = {
   DELETE_BUSINESS: 'customers',
   DELETE_ACCOUNT: 'accounts',
   DELETE_SERVICE: 'services',
-  DELETE_CUSTOMER: 'customers',
   DELETE_EMPLOYEE: 'employee',
   DELETE_COUNTER: 'departments',
   DELETE_EXPENSE: 'expense',
@@ -331,7 +326,6 @@ interface DashboardUiState {
   editingExpense: Expense | null;
   editingTransaction: Transaction | null;
   selectedTransaction: Transaction | null;
-  selectedCustomerHistory: BusinessCustomer | null;
   selectedHistoryEvent: HistoryEvent | null;
   selectedReport: ReportItem | null;
   selectedOption: AdditionOption | null;
@@ -476,6 +470,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     isLoading: isBackendBusinessesLoading,
     error: backendBusinessesError,
     setPage: setBackendBusinessPage,
+    setLimit: setBackendBusinessLimit,
     reload: reloadBackendBusinesses,
   } = useBackendBusinesses(
     shouldLoadAdminBusinessDirectory,
@@ -535,7 +530,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     editingExpense: null,
     editingTransaction: null,
     selectedTransaction: null,
-    selectedCustomerHistory: null,
     selectedHistoryEvent: null,
     selectedReport: null,
     selectedOption: null,
@@ -556,7 +550,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     editingExpense,
     editingTransaction,
     selectedTransaction,
-    selectedCustomerHistory,
     selectedHistoryEvent,
     selectedReport,
     selectedOption,
@@ -576,6 +569,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [transactionPaymentRemark, setTransactionPaymentRemark] = useState('');
   const [transactionPaymentError, setTransactionPaymentError] = useState('');
   const [isPayingTransaction, setIsPayingTransaction] = useState(false);
+  const [outstandingPage, setOutstandingPage] = useState(1);
+  const {
+    pageSize: outstandingLimit,
+    setPageSize: setOutstandingLimit,
+    isPageSizeReady: isOutstandingPageSizeReady,
+  } = usePersistentPageSize('customer_outstanding_page_size');
   const requestedApiCounterId = selectedCounterId;
   const inventoryCounterId = selectedCounterId || editingTransaction?.departmentId || '';
   const isAddTransactionPage = activeTab === 'transactions' && transactionPageView === 'add';
@@ -584,13 +583,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isAccountsTab = activeTab === 'accounts';
   const isTransactionEditModalOpen = activeModal === 'edit-transaction';
   // Accounts/services stay page-scoped and load on transactions only because the form needs dropdowns.
-  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && customerPageView === 'outstanding'));
+  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'expense' || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && (customerPageView === 'outstanding' || customerPageView === 'payments')));
   // Departments are shared shell data because the header selector scopes
   // transactions, services, and search on every workspace page.
   const shouldLoadDepartmentsApi = shouldLoadWorkspaceApi;
   const shouldLoadCustomersApi = shouldLoadWorkspaceApi
     && activeTab === 'customers';
-  const shouldLoadEmployeesApi = shouldLoadWorkspaceApi && activeTab === 'employee';
+  const shouldLoadEmployeesApi = shouldLoadWorkspaceApi
   // Inventory page owns inventory API loading and does not preload other modules.
   const shouldLoadServicesApi = shouldLoadWorkspaceApi
     && Boolean(inventoryCounterId)
@@ -613,14 +612,22 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
   const {
     customers: apiCustomers,
+    pagination: apiCustomersPagination,
     isLoading: isCustomersLoading,
     error: customersError,
+    setPage: setCustomersPage,
+    setLimit: setCustomersLimit,
     reload: reloadCustomers,
-  } = useCustomers(shouldLoadCustomersApi, initialWorkspaceApiData?.customers);
+  } = useCustomers(shouldLoadCustomersApi, initialWorkspaceApiData?.customers, {
+    status: 1,
+  }, 10);
   const {
     employees: apiEmployees,
+    pagination: employeeApiPagination,
     isLoading: isEmployeesLoading,
     error: employeesError,
+    setPage: setEmployeePage,
+    setLimit: setEmployeeLimit,
     reload: reloadEmployees,
   } = useEmployees(shouldLoadEmployeesApi, initialWorkspaceApiData?.employees);
   const {
@@ -635,8 +642,33 @@ const Dashboard: React.FC<DashboardProps> = ({
     rows: customerOutstandingRows,
     isLoading: isCustomerOutstandingApiLoading,
     error: customerOutstandingError,
+    pagination: customerOutstandingApiPagination,
     reload: reloadCustomerBalance,
-  } = useCustomerOutstanding(shouldLoadCustomerOutstandingApi);
+  } = useCustomerOutstanding(
+    shouldLoadCustomerOutstandingApi && isOutstandingPageSizeReady,
+    undefined,
+    outstandingPage,
+    outstandingLimit,
+  );
+  const nonZeroCustomerOutstandingRows = customerOutstandingRows;
+  if (process.env.NODE_ENV !== 'production' && shouldLoadCustomerOutstandingApi) {
+    console.log('[Customers Outstanding][Dashboard] Data passed to page context:', nonZeroCustomerOutstandingRows);
+  }
+  const customerOutstandingPagination = useMemo(
+    () => customerOutstandingApiPagination ? {
+      currentPage: customerOutstandingApiPagination.currentPage,
+      totalPages: customerOutstandingApiPagination.totalPages,
+      totalRecords: customerOutstandingApiPagination.totalRecords,
+      limit: customerOutstandingApiPagination.limit,
+      isLoading: isCustomerOutstandingApiLoading,
+      onPageChange: setOutstandingPage,
+      onLimitChange: (limit: number) => {
+        setOutstandingLimit(limit);
+        setOutstandingPage(1);
+      },
+    } : undefined,
+    [customerOutstandingApiPagination, isCustomerOutstandingApiLoading],
+  );
   const {
     payments: customerPaymentRows,
     isLoading: isCustomerPaymentsApiLoading,
@@ -725,8 +757,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   const customers: Array<Business | BusinessCustomer> = useMemo(
     () => currentRole === 'Admin'
       ? businesses
-      : mergeWorkspaceRecords(workspace.customers, apiCustomers),
-    [apiCustomers, businesses, currentRole, workspace.customers],
+      : shouldLoadCustomersApi
+        ? apiCustomers
+        : workspace.customers,
+    [apiCustomers, businesses, currentRole, shouldLoadCustomersApi, workspace.customers],
   );
   const employees = useMemo(
     () => mergeWorkspaceRecords(workspace.employees, apiEmployees),
@@ -748,7 +782,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     [adminWorkspace.reports, apiReports, currentRole, workspace.reports],
   );
   const additionOptions = adminWorkspace.additionOptions;
-  const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState<DashboardFilterState>(initialDashboardFilterState);
   const [dismissedGeneratedNotificationIds, setDismissedGeneratedNotificationIds] = useState<string[]>([]);
   const [identityConflictDialog, setIdentityConflictDialog] = useState<IdentityConflictDialog | null>(null);
@@ -1025,16 +1058,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     () => visibleServices.filter((service) => favoriteServiceIds.includes(service.id)),
     [favoriteServiceIds, visibleServices],
   );
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const isSearchActive = !isBusinessSubscriptionLocked && normalizedSearchQuery.length > 0;
-  const searchMatches = useSearchResults({
-    context: accessContext,
-    query: isSearchActive ? normalizedSearchQuery : '',
-    services: departmentScopedServices,
-    customers,
-    transactions: transactionHistory,
-  });
-
   const deferredBusinessSearchQuery = useDeferredValue(businessDirectoryFilters.search.trim().toLowerCase());
   const businessPermissionFilterValues = useMemo(
     () => readDataTableMultiSelectFilter(businessDirectoryFilters, 'permissions'),
@@ -1044,15 +1067,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     () => readDataTableSingleSelectFilter(businessDirectoryFilters, 'status'),
     [businessDirectoryFilters],
   );
-  const businessJoinedDateFilter = useMemo(
-    () => readDataTableDateRangeFilter(businessDirectoryFilters, 'joinedDate'),
-    [businessDirectoryFilters],
-  );
   const activeBusinessFilterCount = [
     deferredBusinessSearchQuery ? 1 : 0,
     businessPermissionFilterValues.length > 0 ? 1 : 0,
     businessStatusFilterValue ? 1 : 0,
-    businessJoinedDateFilter.from || businessJoinedDateFilter.to ? 1 : 0,
   ].filter(Boolean).length;
   const hasActiveBusinessDirectoryFilters = activeBusinessFilterCount > 0;
   const businessPermissionFilterLabel = hasActiveBusinessDirectoryFilters
@@ -1076,14 +1094,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         isPermissionEnabled(business.permissions, permissionId)
       );
       const matchesStatus = !selectedStatus || selectedStatus === (business.status || 'Active');
-      const matchesFromDate = !businessJoinedDateFilter.from || (joinedDate && joinedDate >= businessJoinedDateFilter.from);
-      const matchesToDate = !businessJoinedDateFilter.to || (joinedDate && joinedDate <= businessJoinedDateFilter.to);
 
-      return matchesSearch && matchesPermissions && matchesStatus && matchesFromDate && matchesToDate;
+      return matchesSearch && matchesPermissions && matchesStatus;
     });
   }, [
-    businessJoinedDateFilter.from,
-    businessJoinedDateFilter.to,
     businessPermissionFilterValues,
     businessStatusFilterValue,
     businesses,
@@ -1110,10 +1124,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const hasRequestedCustomerPageAccess = currentRole === 'Admin'
     ? customerPageView === 'list'
     : Boolean(requestedCustomerPageOption);
-  const customerDirectoryRecords = currentRole === 'Admin' ? filteredBusinesses : visibleCustomers;
+  const customerDirectoryRecords = useMemo(
+    () => (currentRole === 'Admin' ? filteredBusinesses : visibleCustomers),
+    [currentRole, filteredBusinesses, visibleCustomers],
+  );
   const adminBusinessTotalRecords = currentRole === 'Admin'
-    ? Math.max(filteredBusinesses.length, backendBusinessPagination.totalRecords - 1)
-    : visibleCustomers.length;
+    ? backendBusinessPagination.totalRecords
+    : apiCustomersPagination.totalRecords;
   const adminBusinessTotalPages = currentRole === 'Admin'
     ? Math.max(1, Math.ceil(adminBusinessTotalRecords / backendBusinessPagination.limit))
     : 1;
@@ -1125,26 +1142,17 @@ const Dashboard: React.FC<DashboardProps> = ({
         limit: backendBusinessPagination.limit,
         isLoading: isBackendBusinessesLoading,
         onPageChange: setBackendBusinessPage,
+        onLimitChange: setBackendBusinessLimit,
       }
-    : undefined;
-  const selectedCustomerTransactions = useMemo(
-    () => selectedCustomerHistory
-      ? transactionHistory
-        .filter((transaction) =>
-          transaction.customerId === selectedCustomerHistory.id ||
-          transaction.customerPhone === selectedCustomerHistory.phone
-        )
-        .sort((left, right) => right.date.localeCompare(left.date))
-      : [],
-    [selectedCustomerHistory, transactionHistory],
-  );
-  const selectedCustomerSummary = useMemo(() => ({
-    totalTransactions: selectedCustomerTransactions.length,
-    grossAmount: selectedCustomerTransactions.reduce((total, transaction) => total + transaction.totalAmount, 0),
-    collectedAmount: selectedCustomerTransactions.reduce((total, transaction) => total + transaction.paidAmount, 0),
-    outstandingAmount: selectedCustomerTransactions.reduce((total, transaction) => total + transaction.dueAmount, 0),
-    lastVisit: selectedCustomerTransactions[0]?.date || 'No transactions',
-  }), [selectedCustomerTransactions]);
+    : {
+        currentPage: apiCustomersPagination.currentPage,
+        totalPages: apiCustomersPagination.totalPages,
+        totalRecords: apiCustomersPagination.totalRecords,
+        limit: apiCustomersPagination.limit,
+        isLoading: isCustomersLoading,
+        onPageChange: setCustomersPage,
+        onLimitChange: setCustomersLimit,
+      };
   const todayDate = new Date().toISOString().split('T')[0];
   const todayReportSummary = useMemo(
     () => buildDailyClosingSummary(transactionHistory, expenses, todayDate),
@@ -1257,14 +1265,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const {
     accounts: transactionAccountOptions,
   } = useTransactionFilterOptions(scopedTransactionRecords);
-  const transactionDateFilter = readDataTableDateRangeFilter(transactionFilters, 'date');
   const filteredTransactionRecords = useFilteredTransactionRecords(scopedTransactionRecords, {
     query: transactionFilters.search,
     transactionAccount: typeof transactionFilters.fields.transactionAccount === 'string'
       ? transactionFilters.fields.transactionAccount
       : 'All',
-    dateFrom: transactionDateFilter.from,
-    dateTo: transactionDateFilter.to,
+    dateFrom: '',
+    dateTo: '',
   });
 
   const transactionFiltersConfig: DataTableFiltersConfig = {
@@ -1279,11 +1286,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         label: 'Transaction Account',
         type: 'single-select',
         options: [{ label: 'All', value: 'All' }, ...transactionAccountOptions.map(account => ({ label: account, value: account }))],
-      },
-      {
-        field: 'date',
-        label: 'Date',
-        type: 'date-range',
       },
     ],
   };
@@ -1338,9 +1340,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const hasActiveTransactionFilters = transactionFilters.search.trim() !== '' ||
-    transactionFilters.fields.transactionAccount !== '' ||
-    transactionDateFilter.from !== '' ||
-    transactionDateFilter.to !== '';
+    transactionFilters.fields.transactionAccount !== '';
 
   const hasActiveAdminPlanFilters = adminPlanFilters.search.trim() !== '' ||
     adminPlanFilters.fields.planId !== '' ||
@@ -1569,10 +1569,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   }, [isAddTransactionPage, workflowDraftToken]);
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-  };
-
   const handleDepartmentSearch = () => {
     updateDepartmentFilters('searchQuery', departmentSearchInput.trim().toLowerCase());
   };
@@ -1666,7 +1662,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateUiState('editingExpense', null);
     updateUiState('editingTransaction', null);
     updateUiState('selectedTransaction', null);
-    updateUiState('selectedCustomerHistory', null);
     updateUiState('selectedHistoryEvent', null);
     updateUiState('selectedReport', null);
     updateUiState('selectedOption', null);
@@ -1877,7 +1872,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const renderSummaryCards = (cards: SummaryCardProps[]) => (
-    <SummaryGrid cards={cards} loading={getActiveSummaryLoading()} />
+    <div className="col-12 summary-grid-section">
+      <SummaryGrid cards={cards} loading={getActiveSummaryLoading()} />
+    </div>
   );
 
   const renderBusinessPlanSection = (lockedMode = false) => {
@@ -2171,17 +2168,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateUiState('activeModal', 'edit-transaction');
   };
 
-  const handleViewCustomerHistory = (recordId: string) => {
-    if (currentRole === 'Admin') return;
-    if (!requireModuleAccess('customers', 'view')) return;
-
-    const customer = workspace.customers.find((item) => item.id === recordId);
-    if (!customer) return;
-
-    updateUiState('selectedCustomerHistory', customer);
-    updateUiState('activeModal', 'view-customer-history');
-  };
-
   const handleViewTransaction = (transaction: Transaction) => {
     if (!requireModuleAccess('transactions', 'view')) return;
 
@@ -2386,12 +2372,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         label: services.find((service) => service.id === id)?.name || 'this inventory item',
         module: getModuleLabel('services'),
       },
-      DELETE_CUSTOMER: {
-        actionType,
-        id,
-        label: workspace.customers.find((customer) => customer.id === id)?.name || 'this customer',
-        module: customerEntityPlural,
-      },
       DELETE_EMPLOYEE: {
         actionType,
         id,
@@ -2523,15 +2503,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         );
         return;
       }
-    } else if (pendingDelete.actionType === 'DELETE_CUSTOMER' && shouldLoadWorkspaceApi) {
-      const result = await deleteCustomer(pendingDelete.id);
-
-      if (!result.success) {
-        addNotification('error', result.message || 'Unable to delete customer right now.');
-        return;
-      }
-
-      reloadCustomers();
     } else if (pendingDelete.actionType === 'DELETE_EMPLOYEE' && shouldLoadWorkspaceApi) {
       const result = await deleteEmployee(pendingDelete.id);
 
@@ -2753,6 +2724,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             name: values.name,
             type: values.type || 'service',
             quantity: values.quantity ?? 0,
+            openingStock: values.openingStock ?? values.quantity ?? 0,
+            currentStock: values.currentStock ?? values.quantity ?? 0,
+            lowStockThreshold: values.lowStockThreshold ?? 0,
             remark: values.remark ?? values.description ?? null,
             counterId: inventoryCounterIdForSubmit,
             status: values.status === 'Active' ? 1 : 0,
@@ -2790,6 +2764,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             name: values.name,
             type: values.type || 'service',
             quantity: values.quantity ?? 0,
+            openingStock: values.openingStock ?? values.quantity ?? 0,
+            currentStock: values.currentStock ?? values.quantity ?? 0,
+            lowStockThreshold: values.lowStockThreshold ?? 0,
             remark: values.remark ?? values.description ?? null,
             counterId: inventoryCounterIdForSubmit,
           });
@@ -3811,86 +3788,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
   };
 
-  const renderSearchResults = () => {
-    const totalResults = searchMatches.services.length + searchMatches.customers.length + searchMatches.transactions.length;
-
-    return (
-      <div className="row g-4">
-        <div className="col-12">
-          <div className="panel p-4">
-              <div className="d-flex flex-column flex-md-row justify-content-between gap-3">
-                <div>
-                  <p className="eyebrow mb-2">Global Search</p>
-                  <h2 className="h4 mb-1 fw-semibold">Results for <span className="text-primary">{searchQuery}</span></h2>
-                  <p className="page-muted mb-0">Found {totalResults} matching records in modules your role can access.</p>
-                </div>
-                <button type="button" className="btn-app btn-app-secondary align-self-start" onClick={() => setSearchQuery('')}>
-                  Clear Search
-                </button>
-              </div>
-          </div>
-        </div>
-
-        {totalResults === 0 ? (
-          <div className="col-12">
-            <EmptyState
-              eyebrow="Global Search"
-              title={`No results for "${searchQuery}"`}
-              description="Try a customer name, transaction number, phone number, or inventory item name."
-              action={{
-                label: 'Clear Search',
-                onClick: () => setSearchQuery(''),
-                variant: 'secondary',
-              }}
-            />
-          </div>
-        ) : null}
-
-        {searchMatches.services.length > 0 && (
-          <div className="col-12 col-xl-4">
-            <h3 className="h5 fw-semibold mb-3">Inventory</h3>
-            <div className="d-flex flex-column gap-2">
-              {searchMatches.services.map((service) => (
-                <button key={service.id} type="button" className="search-result-button" onClick={() => { openModule('services'); setSearchQuery(''); }}>
-                  <span className="fw-semibold d-block">{service.name}</span>
-                  <span className="page-muted small">{service.type === 'product' ? 'Product' : 'Service'} | Qty. {service.quantity ?? 0}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {searchMatches.customers.length > 0 && (
-          <div className="col-12 col-xl-4">
-            <h3 className="h5 fw-semibold mb-3">{customerEntityPlural}</h3>
-            <div className="d-flex flex-column gap-2">
-              {searchMatches.customers.map((customer) => (
-                <button key={customer.id} type="button" className="search-result-button" onClick={() => { openModule('customers'); setSearchQuery(''); }}>
-                  <span className="fw-semibold d-block">{customer.name}</span>
-                  <span className="page-muted small">{customer.phone} | {customer.email || 'No email'}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {searchMatches.transactions.length > 0 && (
-          <div className="col-12 col-xl-4">
-            <h3 className="h5 fw-semibold mb-3">Transactions</h3>
-            <div className="d-flex flex-column gap-2">
-              {searchMatches.transactions.map((transaction) => (
-                <button key={transaction.id} type="button" className="search-result-button" onClick={() => { openModule('transactions'); setSearchQuery(''); }}>
-                  <span className="fw-semibold d-block">{transaction.customerName}</span>
-                  <span className="page-muted small">{transaction.serviceProduct || transaction.service} | Rs. {transaction.totalAmount.toLocaleString('en-IN')}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const getModalPermission = (modal: Exclude<ModalMode, null>) => {
     if (modal === 'confirm-delete') {
       return pendingDelete
@@ -3924,7 +3821,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       'edit-expense': { moduleId: 'expense', permission: 'edit' },
       'edit-transaction': { moduleId: 'transactions', permission: 'edit' },
       'view-transaction': { moduleId: 'transactions', permission: 'access' },
-      'view-customer-history': { moduleId: 'customers', permission: 'access' },
       'view-history': { moduleId: 'history', permission: 'access' },
       'view-report': { moduleId: 'reports', permission: 'access' },
       'configure-option': { moduleId: 'additions', permission: 'edit' },
@@ -4442,7 +4338,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             ['Total Amount', `Rs. ${selectedTransaction.totalAmount.toLocaleString('en-IN')}`],
             ['Handled By', `${selectedTransaction.handledByName} (${selectedTransaction.handledByRole})`],
             ['Remark', selectedTransaction.remark || selectedTransaction.note || 'No remark'],
-            ['Date', selectedTransaction.date],
+            ['Date', formatDate(selectedTransaction.date)],
           ]} />
           {selectedTransaction.rows && selectedTransaction.rows.length > 0 ? (
             <div className="data-table-wrapper mt-4">
@@ -4532,73 +4428,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       );
     }
 
-    if (activeModal === 'view-customer-history' && selectedCustomerHistory) {
-      return (
-        <ActionModal
-          title="Customer History"
-          eyebrow="Customers"
-          description="Review this customer’s transaction history, collections, and outstanding balance before creating the next transaction."
-          onClose={closeModal}
-        >
-          <div className="row g-3 mb-4">
-            <div className="col-12 col-md-6">
-              <DetailList rows={[
-                ['Customer', selectedCustomerHistory.name],
-                ['Phone', selectedCustomerHistory.phone],
-                ['Email', selectedCustomerHistory.email || 'Not added'],
-                ['Status', selectedCustomerHistory.status || 'Active'],
-              ]} />
-            </div>
-            <div className="col-12 col-md-6">
-              <DetailList rows={[
-                ['Transactions', selectedCustomerSummary.totalTransactions],
-                ['Gross Amount', `Rs. ${selectedCustomerSummary.grossAmount.toLocaleString('en-IN')}`],
-                ['Collected Amount', `Rs. ${selectedCustomerSummary.collectedAmount.toLocaleString('en-IN')}`],
-                ['Outstanding Amount', `Rs. ${selectedCustomerSummary.outstandingAmount.toLocaleString('en-IN')}`],
-                ['Last Visit', selectedCustomerSummary.lastVisit],
-              ]} />
-            </div>
-          </div>
-          <ReusableListTable
-            data={selectedCustomerTransactions}
-            rowKey={(transaction) => transaction.id}
-            eyebrow="Customer Ledger"
-            title="Transaction history"
-            copy="All saved service transactions for this customer."
-            emptyMessage="No transaction history found for this customer."
-            className="mb-4"
-            mobileCards={false}
-            columns={[
-              { key: 'formName', header: 'Form Name', render: (transaction) => transaction.formName || 'Not added' },
-              { key: 'transactionNumber', header: 'Txn No.', render: (transaction) => transaction.transactionNo || transaction.transactionNumber },
-              { key: 'serviceProduct', header: 'Service/Product', render: (transaction) => transaction.serviceProduct || transaction.service },
-              { key: 'account', header: 'Transaction Account', render: (transaction) => transaction.accountLabel || transaction.transactionAccountId || 'Not linked' },
-              { key: 'amount', header: 'Amount', render: (transaction) => `Rs. ${(transaction.amount ?? transaction.totalAmount).toLocaleString('en-IN')}` },
-              { key: 'total', header: 'Total Amount', render: (transaction) => `Rs. ${transaction.totalAmount.toLocaleString('en-IN')}` },
-              { key: 'date', header: 'Date', render: (transaction) => transaction.date },
-            ]}
-          />
-          <div className="modal-actions">
-            <button type="button" className="btn-app btn-app-secondary" onClick={closeModal}>Close</button>
-            <button
-              type="button"
-              className="btn-app btn-app-primary"
-              onClick={() => startWorkflowWithDraft({
-                customerId: selectedCustomerHistory.id,
-                customerName: selectedCustomerHistory.name,
-                customerPhone: selectedCustomerHistory.phone,
-                customerEmail: selectedCustomerHistory.email,
-              }, {
-                notice: `${selectedCustomerHistory.name} loaded into the transaction workflow.`,
-              })}
-            >
-              Load Customer Into Workflow
-            </button>
-          </div>
-        </ActionModal>
-      );
-    }
-
     if (activeModal === 'view-history' && selectedHistoryEvent) {
       return (
         <ActionModal title="History Details" onClose={closeModal}>
@@ -4607,7 +4436,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             ['Module', selectedHistoryEvent.module],
             ['Actor', selectedHistoryEvent.actor],
             ['Status', selectedHistoryEvent.status],
-            ['Date', selectedHistoryEvent.date],
+            ['Date', formatDateTime(selectedHistoryEvent.date)],
           ]} />
         </ActionModal>
       );
@@ -4621,7 +4450,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             ['Type', selectedReport.type],
             ['Owner', selectedReport.owner],
             ['Status', selectedReport.status],
-            ['Date', selectedReport.date],
+            ['Date', formatDate(selectedReport.date)],
           ]} />
           {selectedReport.summary ? (
             <div className="form-section-card mt-4">
@@ -4757,9 +4586,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     filteredDepartments,
     filteredBusinesses,
     customerDirectoryRecords,
-    customerOutstandingRows,
+    customerOutstandingRows: nonZeroCustomerOutstandingRows,
     customerPaymentRows,
-    customerBalanceRows: customerOutstandingRows,
+    customerBalanceRows: nonZeroCustomerOutstandingRows,
     isCustomerBalanceLoading: isCustomerOutstandingApiLoading,
     customerBalanceError: customerOutstandingError,
     isCustomerPaymentsLoading: isCustomerPaymentsApiLoading,
@@ -4777,6 +4606,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     isBusinessDirectoryLoading: isBackendBusinessesLoading,
     businessDirectoryError: backendBusinessesError,
     customerDirectoryPagination,
+    customerOutstandingPagination,
+    employeePagination: {
+      ...employeeApiPagination,
+      isLoading: isEmployeesLoading,
+      onPageChange: setEmployeePage,
+      onLimitChange: setEmployeeLimit,
+    },
     historyStatusFilter,
     departmentSearchInput,
     departmentAccountStatusFilter,
@@ -4827,6 +4663,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     reloadAccounts,
     reloadDepartments,
     reloadRoleTemplates,
+    handleCounterChange,
+    handleOpenDepartmentPicker: () => setIsDepartmentPickerOpen(true),
     handleCustomerBalancePayment,
     handleLogout: onLogout,
     handleAdminProfileSave,
@@ -4840,7 +4678,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     handleDeleteRecord,
     handleEditService,
     handleDeleteService,
-    handleViewCustomerHistory,
     handleEditCustomer,
     handleViewHistory,
     handleEditEmployee,
@@ -5053,14 +4890,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         <Header
           activeTab={activeTab}
           customerPageView={customerPageView}
-          counters={availableCounters}
-          selectedCounterId={safeSelectedCounterId}
+          departmentName={selectedDepartmentName}
           notificationCount={notifications.length}
-          searchValue={searchQuery}
           currentUser={{ ...currentUser, name: displayUserName }}
-          onCounterChange={handleCounterChange}
-          onDepartmentPickerOpen={() => setIsDepartmentPickerOpen(true)}
-          onSearch={handleSearch}
           onProfileOpen={() => onNavigate('profile')}
           onNotificationsClick={() => updateUiState('activeModal', 'notifications')}
           isSidebarOpen={isSidebarOpen}
@@ -5068,7 +4900,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
         <main className="dashboard-content">
           <div className="content-container">
-            {isSearchActive ? renderSearchResults() : renderContent()}
+            {renderContent()}
           </div>
         </main>
         <Footer />

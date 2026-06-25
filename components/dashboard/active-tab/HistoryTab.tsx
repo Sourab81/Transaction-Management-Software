@@ -38,8 +38,6 @@ export default function HistoryTab({ ctx }: HistoryTabProps) {
         />
       </div>
 
-      {renderSummaryCards(historySummary)}
-
       <div className="col-12">
         <HistoryTable
           events={filteredHistoryEvents}
@@ -47,6 +45,8 @@ export default function HistoryTab({ ctx }: HistoryTabProps) {
           onDelete={canDeleteModule('history') ? (id: string) => handleDeleteRecord('DELETE_HISTORY_EVENT', id) : undefined}
         />
       </div>
+
+      {renderSummaryCards(historySummary)}
     </div>
   );
 }

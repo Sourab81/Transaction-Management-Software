@@ -8,6 +8,15 @@ export interface CustomerBalance {
   customerName?: string;
   phoneNo: string;
   lastTransaction: string;
+  date?: string;
+  counterOrBank?: string;
+  debit?: number;
+  credit?: number;
+  balance?: number;
+  todayBalance?: number;
+  todayBalanceStatus?: string;
+  remark?: string;
+  addedByName?: string;
   currentBalanceStatus: number | string;
   status: number | string;
 }

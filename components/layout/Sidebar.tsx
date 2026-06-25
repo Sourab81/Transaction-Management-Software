@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FaChevronDown } from 'react-icons/fa';
+import { FaChevronDown, FaLayerGroup } from 'react-icons/fa';
 import { getModuleLabel } from '../../lib/module-ui';
 import {
   getModuleDisplay,
@@ -9,8 +9,7 @@ import {
   getSidebarModulesForSession,
   type SessionAccessContext,
 } from '../../lib/platform-structure';
-import { getCustomerWorkspacePath, getWorkspaceModulePath } from '../../lib/workspace-routes';
-import { getTransactionWorkspacePath } from '../../lib/workspace-routes';
+import { getExpenseWorkspacePath, getTransactionWorkspacePath, getWorkspaceModulePath } from '../../lib/workspace-routes';
 
 interface SidebarProps {
   activeTab: string;
@@ -20,19 +19,78 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+const MASTER_MODULE_IDS = ['departments', 'services', 'accounts'];
+
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isCollapsed = false, onClose }) => {
   const visibleModules = getSidebarModulesForSession(accessContext);
   const roleLabel = getRoleLabel(accessContext.role);
   const pathname = usePathname();
   const isTransactionsRoute = activeTab === 'transactions';
-  const isCustomersRoute = activeTab === 'customers';
+  const isExpenseRoute = activeTab === 'expense';
+  const isMasterRoute = MASTER_MODULE_IDS.includes(activeTab);
+
   const [isTransactionsMenuOpen, setIsTransactionsMenuOpen] = useState(false);
-  const [isCustomersMenuOpen, setIsCustomersMenuOpen] = useState(false);
+  const [isExpenseMenuOpen, setIsExpenseMenuOpen] = useState(false);
+  const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(false);
+
   const isTransactionsMenuExpanded = isTransactionsRoute || isTransactionsMenuOpen;
-  const isCustomersMenuExpanded = isCustomersRoute || isCustomersMenuOpen;
+  const isExpenseMenuExpanded = isExpenseRoute || isExpenseMenuOpen;
+  const isMasterMenuExpanded = isMasterRoute || isMasterMenuOpen;
+
   const closeOnNavigate = () => {
     if (onClose) onClose();
   };
+
+  const masterModules = visibleModules.filter((module) => MASTER_MODULE_IDS.includes(module.id));
+  const moduleList = visibleModules.filter((module) => !MASTER_MODULE_IDS.includes(module.id));
+  const masterRendered = masterModules.length > 0;
+
+  const renderMasterDropdown = () => (
+    masterRendered ? (
+      <div key="master" className={`sidebar-subnav-group ${isMasterRoute ? 'is-active' : ''}`}>
+        <button
+          type="button"
+          onClick={() => setIsMasterMenuOpen((current) => !current)}
+          aria-label="Master"
+          aria-expanded={isMasterMenuExpanded}
+          title={isCollapsed ? 'Master' : undefined}
+          className={`sidebar-link sidebar-link--parent ${isMasterRoute ? 'is-active' : ''}`}
+        >
+          <span className="sidebar-link__icon">
+            <FaLayerGroup />
+          </span>
+          <span className="fw-semibold sidebar-link__label">Master</span>
+          {!isCollapsed ? (
+            <FaChevronDown className={`sidebar-link__chevron ${isMasterMenuExpanded ? 'is-open' : ''}`} />
+          ) : null}
+        </button>
+        {!isCollapsed && isMasterMenuExpanded ? (
+          <div className="sidebar-subnav">
+            {masterModules.map((item) => {
+              const displayItem = getModuleDisplay(item, accessContext.role);
+              const label = displayItem.id === 'departments'
+                ? 'Department'
+                : displayItem.id === 'services'
+                  ? 'Inventory'
+                  : displayItem.id === 'accounts'
+                    ? 'Account'
+                    : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
+              return (
+                <Link
+                  key={displayItem.id}
+                  onClick={closeOnNavigate}
+                  href={getWorkspaceModulePath(displayItem.id)}
+                  className={`sidebar-subnav__link ${activeTab === displayItem.id || pathname === getWorkspaceModulePath(displayItem.id) ? 'is-active' : ''}`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    ) : null
+  );
 
   return (
     <aside className={`sidebar-shell sidebar-mobile ${isOpen ? 'sidebar-open' : 'sidebar-closed'} ${isCollapsed ? 'is-collapsed' : ''}`}>
@@ -47,31 +105,29 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
       <p className="sidebar-section-title">Navigation</p>
 
       <nav className="sidebar-nav">
-        {visibleModules.map((item) => {
+        {moduleList.map((item) => {
           const displayItem = getModuleDisplay(item, accessContext.role);
           const Icon = displayItem.icon;
           const sidebarLabel = displayItem.id === 'transactions'
             ? 'Transactions'
-            : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
+            : displayItem.id === 'expense'
+              ? 'Expenses'
+              : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
           const isTransactionsModule = displayItem.id === 'transactions';
-          const isTransactionsActive = isTransactionsRoute;
-          const isCustomersModule = displayItem.id === 'customers';
-          const isCustomersActive = isCustomersRoute;
+          const isExpenseModule = displayItem.id === 'expense';
 
           if (isTransactionsModule) {
             return (
-              <div key={displayItem.id} className={`sidebar-subnav-group ${isTransactionsActive ? 'is-active' : ''}`}>
+              <div key={displayItem.id} className={`sidebar-subnav-group ${isTransactionsRoute ? 'is-active' : ''}`}>
                 <button
                   type="button"
                   onClick={() => setIsTransactionsMenuOpen((current) => !current)}
                   aria-label="Transactions"
                   aria-expanded={isTransactionsMenuExpanded}
                   title={isCollapsed ? sidebarLabel : undefined}
-                  className={`sidebar-link sidebar-link--parent ${isTransactionsActive ? 'is-active' : ''}`}
+                  className={`sidebar-link sidebar-link--parent ${isTransactionsRoute ? 'is-active' : ''}`}
                 >
-                  <span className="sidebar-link__icon">
-                    <Icon />
-                  </span>
+                  <span className="sidebar-link__icon"><Icon /></span>
                   <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
                   {!isCollapsed ? (
                     <FaChevronDown className={`sidebar-link__chevron ${isTransactionsMenuExpanded ? 'is-open' : ''}`} />
@@ -99,47 +155,38 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
             );
           }
 
-          if (isCustomersModule) {
+          if (isExpenseModule) {
             return (
-              <div key={displayItem.id} className={`sidebar-subnav-group ${isCustomersActive ? 'is-active' : ''}`}>
+              <div key={displayItem.id} className={`sidebar-subnav-group ${isExpenseRoute ? 'is-active' : ''}`}>
                 <button
                   type="button"
-                  onClick={() => setIsCustomersMenuOpen((current) => !current)}
-                  aria-label="Customers"
-                  aria-expanded={isCustomersMenuExpanded}
+                  onClick={() => setIsExpenseMenuOpen((current) => !current)}
+                  aria-label="Expenses"
+                  aria-expanded={isExpenseMenuExpanded}
                   title={isCollapsed ? sidebarLabel : undefined}
-                  className={`sidebar-link sidebar-link--parent ${isCustomersActive ? 'is-active' : ''}`}
+                  className={`sidebar-link sidebar-link--parent ${isExpenseRoute ? 'is-active' : ''}`}
                 >
-                  <span className="sidebar-link__icon">
-                    <Icon />
-                  </span>
+                  <span className="sidebar-link__icon"><Icon /></span>
                   <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
                   {!isCollapsed ? (
-                    <FaChevronDown className={`sidebar-link__chevron ${isCustomersMenuExpanded ? 'is-open' : ''}`} />
+                    <FaChevronDown className={`sidebar-link__chevron ${isExpenseMenuExpanded ? 'is-open' : ''}`} />
                   ) : null}
                 </button>
-                {!isCollapsed && isCustomersMenuExpanded ? (
+                {!isCollapsed && isExpenseMenuExpanded ? (
                   <div className="sidebar-subnav">
                     <Link
                       onClick={closeOnNavigate}
-                      href={getCustomerWorkspacePath('list')}
-                      className={`sidebar-subnav__link ${pathname === getCustomerWorkspacePath('list') || pathname === getWorkspaceModulePath('customers') ? 'is-active' : ''}`}
+                      href={getExpenseWorkspacePath('list')}
+                      className={`sidebar-subnav__link ${pathname === getExpenseWorkspacePath('list') || pathname === getWorkspaceModulePath('expense') || pathname === getExpenseWorkspacePath('add') ? 'is-active' : ''}`}
                     >
-                      Customer List
+                      Expense List
                     </Link>
                     <Link
                       onClick={closeOnNavigate}
-                      href={getCustomerWorkspacePath('outstanding')}
-                      className={`sidebar-subnav__link ${pathname === getCustomerWorkspacePath('outstanding') ? 'is-active' : ''}`}
+                      href={getExpenseWorkspacePath('categories')}
+                      className={`sidebar-subnav__link ${pathname === getExpenseWorkspacePath('categories') ? 'is-active' : ''}`}
                     >
-                      Customers Outstanding
-                    </Link>
-                    <Link
-                      onClick={closeOnNavigate}
-                      href={getCustomerWorkspacePath('payments')}
-                      className={`sidebar-subnav__link ${pathname === getCustomerWorkspacePath('payments') ? 'is-active' : ''}`}
-                    >
-                      Customers Payment List
+                      Expense Categories
                     </Link>
                   </div>
                 ) : null}
@@ -148,19 +195,19 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
           }
 
           return (
-            <Link
-              key={displayItem.id}
-              onClick={closeOnNavigate}
-              href={getWorkspaceModulePath(displayItem.id)}
-              aria-label={sidebarLabel}
-              title={isCollapsed ? sidebarLabel : undefined}
-              className={`sidebar-link ${activeTab === displayItem.id ? 'is-active' : ''}`}
-            >
-              <span className="sidebar-link__icon">
-                <Icon />
-              </span>
-              <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
-            </Link>
+            <React.Fragment key={displayItem.id}>
+              <Link
+                onClick={closeOnNavigate}
+                href={getWorkspaceModulePath(displayItem.id)}
+                aria-label={sidebarLabel}
+                title={isCollapsed ? sidebarLabel : undefined}
+                className={`sidebar-link ${activeTab === displayItem.id ? 'is-active' : ''}`}
+              >
+                <span className="sidebar-link__icon"><Icon /></span>
+                <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
+              </Link>
+              {displayItem.id === 'dashboard' ? renderMasterDropdown() : null}
+            </React.Fragment>
           );
         })}
       </nav>

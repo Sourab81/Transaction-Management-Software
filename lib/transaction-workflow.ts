@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDate } from '../src/utils/dateFormatter';
+
 export type WorkflowTransactionStatus = 'completed' | 'pending' | 'cancelled' | 'refunded';
 export type WorkflowPaymentMode = 'cash' | 'upi' | 'bank' | 'card';
 
@@ -127,7 +129,7 @@ export const buildTransactionReceiptText = (transaction: WorkflowTransactionSumm
     'eNest Service Receipt',
     '---------------------',
     `Transaction No: ${transaction.transactionNumber || 'Not assigned'}`,
-    `Date: ${transaction.date}`,
+    `Date: ${formatDate(transaction.date)}`,
     `Customer: ${transaction.customerName}`,
     `Phone: ${transaction.customerPhone || 'Not added'}`,
     `Service: ${transaction.service}`,

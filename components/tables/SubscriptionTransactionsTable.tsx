@@ -1,5 +1,6 @@
 import React from 'react';
 import { FaCog, FaEdit, FaFilter } from 'react-icons/fa';
+import { formatDate } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 export interface SubscriptionTransactionRow {
@@ -71,8 +72,8 @@ const SubscriptionTransactionsTable: React.FC<SubscriptionTransactionsTableProps
         { key: 'plan', header: 'Plan Purchased', render: (row) => row.planLabel },
         { key: 'planStatus', header: 'Plan Status', render: (row) => <span className={row.planStatusClass}>{row.planStatusLabel}</span> },
         { key: 'workspace', header: 'Workspace', render: (row) => <span className={row.workspaceStatusClass}>{row.workspaceStatusLabel}</span> },
-        { key: 'start', header: 'Start', render: (row) => row.startDate },
-        { key: 'end', header: 'End', render: (row) => row.endDate },
+        { key: 'start', header: 'Start', render: (row) => formatDate(row.startDate) },
+        { key: 'end', header: 'End', render: (row) => formatDate(row.endDate) },
         { key: 'remaining', header: 'Remaining', render: (row) => `${row.daysRemaining} day${row.daysRemaining === 1 ? '' : 's'}` },
       ]}
       renderActions={(row) => (

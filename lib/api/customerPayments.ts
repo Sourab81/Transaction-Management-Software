@@ -11,8 +11,12 @@ export interface CustomerPayment {
   counterName?: string;
   onlineAmount: number;
   cashAmount: number;
+  debitAmount?: number;
+  creditAmount?: number;
   totalPaid: number;
+  currentBalance?: number;
   accountName?: string;
+  remark?: string;
   addedByName?: string;
   status: number | string;
 }

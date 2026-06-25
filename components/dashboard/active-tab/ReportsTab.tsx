@@ -46,8 +46,6 @@ export default function ReportsTab({ ctx }: ReportsTabProps) {
         />
       </div>
 
-      {renderSummaryCards(reportSummary)}
-
       <div className="col-12">
         {reports.length === 0 && !isReportsLoading ? (
           <EmptyState
@@ -65,6 +63,8 @@ export default function ReportsTab({ ctx }: ReportsTabProps) {
           />
         )}
       </div>
+
+      {renderSummaryCards(reportSummary)}
     </div>
   );
 }

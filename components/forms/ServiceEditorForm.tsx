@@ -48,7 +48,9 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
   const resolvedDefaultDepartmentId = initialValues?.counterId || initialValues?.departmentId || defaultDepartmentId || '';
   const [name, setName] = useState(initialValues?.name || '');
   const [type, setType] = useState<InventoryFormType>(initialValues?.type || 'service');
-  const [quantity, setQuantity] = useState(String(initialValues?.quantity ?? 0));
+  const [openingStock, setOpeningStock] = useState(String(initialValues?.openingStock ?? initialValues?.quantity ?? 0));
+  const [currentStock, setCurrentStock] = useState(String(initialValues?.currentStock ?? initialValues?.quantity ?? 0));
+  const [lowStockThreshold, setLowStockThreshold] = useState(String(initialValues?.lowStockThreshold ?? 0));
   const [departmentId, setDepartmentId] = useState(resolvedDefaultDepartmentId);
   const [status, setStatus] = useState<Service['status']>(initialValues?.status || 'Active');
   const [remark, setRemark] = useState(initialValues?.remark ?? initialValues?.description ?? '');
@@ -69,9 +71,21 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
       return;
     }
 
-    const parsedQuantity = isServiceType ? 0 : parseNonNegativeNumber(quantity);
-    if (parsedQuantity === null) {
-      setValidationError('Quantity must be a valid zero or positive number.');
+    const parsedOpeningStock = isServiceType ? 0 : parseNonNegativeNumber(openingStock);
+    if (parsedOpeningStock === null) {
+      setValidationError('Opening stock must be a valid zero or positive number.');
+      return;
+    }
+
+    const parsedCurrentStock = isServiceType ? 0 : parseNonNegativeNumber(currentStock);
+    if (parsedCurrentStock === null) {
+      setValidationError('Current stock must be a valid zero or positive number.');
+      return;
+    }
+
+    const parsedLowStockThreshold = isServiceType ? 0 : parseNonNegativeNumber(lowStockThreshold);
+    if (parsedLowStockThreshold === null) {
+      setValidationError('Low stock threshold must be a valid zero or positive number.');
       return;
     }
 
@@ -93,7 +107,10 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
       status,
       description: trimmedRemark,
       type,
-      quantity: parsedQuantity,
+      quantity: isEditMode ? parsedCurrentStock : parsedOpeningStock,
+      openingStock: parsedOpeningStock,
+      currentStock: isEditMode ? parsedCurrentStock : parsedOpeningStock,
+      lowStockThreshold: parsedLowStockThreshold,
       remark: trimmedRemark || null,
       counterId: selectedDepartment?.id || null,
     });
@@ -144,7 +161,9 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
                 const nextType = event.target.value as InventoryFormType;
                 setType(nextType);
                 if (nextType === 'service') {
-                  setQuantity('0');
+                  setOpeningStock('0');
+                  setCurrentStock('0');
+                  setLowStockThreshold('0');
                 }
                 setValidationError('');
               }}
@@ -155,20 +174,51 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
           </div>
           <div className="col-12 col-md-6">
             <Input
-              label="Quantity"
+              label="Opening Stock"
               type="number"
               min="0"
-              value={isServiceType ? '0' : quantity}
+              value={isServiceType ? '0' : openingStock}
               onChange={(event) => {
-                setQuantity(event.target.value);
+                setOpeningStock(event.target.value);
+                if (!isEditMode) {
+                  setCurrentStock(event.target.value);
+                }
                 setValidationError('');
               }}
               disabled={isSubmitting || isServiceType}
               required={!isServiceType}
             />
             {isServiceType ? (
-              <p className="form-hint">Quantity is used for products only.</p>
+              <p className="form-hint">Stock is used for products only.</p>
             ) : null}
+          </div>
+          <div className="col-12 col-md-6">
+            <Input
+              label="Current Stock"
+              type="number"
+              min="0"
+              value={isServiceType ? '0' : currentStock}
+              onChange={(event) => {
+                setCurrentStock(event.target.value);
+                setValidationError('');
+              }}
+              disabled
+              readOnly
+            />
+            <p className="form-hint">{isEditMode ? 'Current stock is adjusted by transactions.' : 'Current stock starts from opening stock.'}</p>
+          </div>
+          <div className="col-12 col-md-6">
+            <Input
+              label="Low Stock Threshold"
+              type="number"
+              min="0"
+              value={isServiceType ? '0' : lowStockThreshold}
+              onChange={(event) => {
+                setLowStockThreshold(event.target.value);
+                setValidationError('');
+              }}
+              disabled={isSubmitting || isServiceType}
+            />
           </div>
           <div className="col-12 col-md-6">
             <Select

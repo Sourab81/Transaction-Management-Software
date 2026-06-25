@@ -8,9 +8,13 @@ export interface InventoryItem {
   name: string;
   type: InventoryItemType;
   quantity: number;
+  openingStock?: number;
+  currentStock?: number;
+  lowStockThreshold?: number;
   remark?: string | null;
   counterId: number | string;
   userId?: number | string;
+  addedByName?: string | null;
   status: number;
   addedDate?: string;
   updatedDate?: string;
@@ -20,6 +24,9 @@ export interface CreateInventoryPayload {
   name: string;
   type: InventoryItemType;
   quantity?: number;
+  openingStock?: number;
+  currentStock?: number;
+  lowStockThreshold?: number;
   remark?: string | null;
   counterId: number | string;
 }
@@ -29,6 +36,9 @@ export interface UpdateInventoryPayload {
   name?: string;
   type?: InventoryItemType;
   quantity?: number;
+  openingStock?: number;
+  currentStock?: number;
+  lowStockThreshold?: number;
   remark?: string | null;
   counterId?: number | string | null;
   status?: 0 | 1;
@@ -116,6 +126,9 @@ export const createInventory = (payload: CreateInventoryPayload) =>
       name: payload.name,
       type: payload.type,
       quantity: payload.quantity ?? 0,
+      openingStock: payload.openingStock ?? payload.quantity ?? 0,
+      currentStock: payload.currentStock ?? payload.quantity ?? 0,
+      lowStockThreshold: payload.lowStockThreshold ?? 0,
       remark: payload.remark ?? null,
       counterId: payload.counterId,
     }),
@@ -130,6 +143,9 @@ export const updateInventory = (payload: UpdateInventoryPayload) =>
       ...(typeof payload.name !== 'undefined' ? { name: payload.name } : {}),
       ...(typeof payload.type !== 'undefined' ? { type: payload.type } : {}),
       ...(typeof payload.quantity !== 'undefined' ? { quantity: payload.quantity } : {}),
+      ...(typeof payload.openingStock !== 'undefined' ? { openingStock: payload.openingStock } : {}),
+      ...(typeof payload.currentStock !== 'undefined' ? { currentStock: payload.currentStock } : {}),
+      ...(typeof payload.lowStockThreshold !== 'undefined' ? { lowStockThreshold: payload.lowStockThreshold } : {}),
       ...(typeof payload.remark !== 'undefined' ? { remark: payload.remark } : {}),
       ...(typeof payload.counterId !== 'undefined' ? { counterId: payload.counterId } : {}),
       ...(typeof payload.status !== 'undefined' ? { status: payload.status } : {}),

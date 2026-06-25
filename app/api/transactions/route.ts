@@ -117,9 +117,13 @@ const buildListPayload = (payload: Record<string, unknown>) => {
   addOptionalField(backendPayload, 'page_no', payload, ['pageNo', 'page_no']);
   addOptionalField(backendPayload, 'limit', payload, ['limit']);
   addOptionalField(backendPayload, 'status', payload, ['status']);
+  addOptionalField(backendPayload, 'search', payload, ['search']);
+  addOptionalField(backendPayload, 'transaction_id', payload, ['transactionId', 'transaction_id']);
   addOptionalField(backendPayload, 'customer_id', payload, ['customerId', 'customer_id']);
   addOptionalField(backendPayload, 'counter_id', payload, ['counterId', 'counter_id']);
   addOptionalField(backendPayload, 'date', payload, ['date']);
+  addOptionalField(backendPayload, 'date_from', payload, ['dateFrom', 'date_from']);
+  addOptionalField(backendPayload, 'date_to', payload, ['dateTo', 'date_to']);
 
   return backendPayload;
 };
@@ -178,6 +182,8 @@ const buildChildRowsPayload = (payload: Record<string, unknown>) => {
       total_amount: totalAmount,
     };
 
+    addOptionalField(mappedRow, 'id', row, ['id', 'childId', 'transactionChildId']);
+    addOptionalField(mappedRow, 'transaction_child_id', row, ['id', 'childId', 'transactionChildId']);
     addOptionalField(mappedRow, 'remark', row, ['remark']);
     mappedRows.push(mappedRow);
   }
@@ -221,6 +227,9 @@ const buildUpdatePayload = (payload: Record<string, unknown>) => {
     const rows = buildChildRowsPayload(payload);
     if (rows instanceof Response) return rows;
     backendPayload.rows = rows;
+  }
+  if (Array.isArray(payload.removedRowIds)) {
+    backendPayload.removed_row_ids = payload.removedRowIds;
   }
   addOptionalField(backendPayload, 'status', payload, ['status']);
 

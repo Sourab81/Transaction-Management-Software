@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaCog, FaTrashAlt } from 'react-icons/fa';
 import type { AdditionOption } from '../../lib/store';
+import { formatDate } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface AdditionsTableProps {
@@ -34,7 +35,7 @@ const AdditionsTable: React.FC<AdditionsTableProps> = ({ options, onConfigure, o
             </span>
           ),
         },
-        { key: 'date', header: 'Date', render: (option) => option.date },
+        { key: 'date', header: 'Date', render: (option) => formatDate(option.date) },
       ]}
       renderActions={(option) => (
         <div className="table-actions">

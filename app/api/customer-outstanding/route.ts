@@ -39,10 +39,14 @@ export async function POST(request: Request) {
 
   try {
     // Token is httpOnly, so outstanding requests go through this local server route.
-    return Response.json(await backendFetch('getCustomerOutstanding', {
+    const backendResponse = await backendFetch('getCustomerOutstanding', {
       method: 'POST',
       body: buildListPayload(payload),
-    }));
+    });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Customers Outstanding][API Route] Raw backend response:', backendResponse);
+    }
+    return Response.json(backendResponse);
   } catch (error) {
     if (error instanceof BackendFetchError && (error.statusCode === 404 || error.statusCode === 501)) {
       return Response.json(await backendFetch('getCustomerBalance', {

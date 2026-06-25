@@ -4,6 +4,7 @@ export const DEFAULT_WORKSPACE_MODULE_ID = 'dashboard';
 export const LOGIN_ROUTE = '/login';
 export type CustomerWorkspaceView = 'list' | 'payments' | 'outstanding';
 export type TransactionWorkspaceView = 'add' | 'list';
+export type ExpenseWorkspaceView = 'add' | 'list' | 'categories';
 
 const customerWorkspaceViewPathMap: Record<CustomerWorkspaceView, string> = {
   list: '/customers',
@@ -14,6 +15,12 @@ const customerWorkspaceViewPathMap: Record<CustomerWorkspaceView, string> = {
 const transactionWorkspaceViewPathMap: Record<TransactionWorkspaceView, string> = {
   add: '/transactions/add',
   list: '/transactions/list',
+};
+
+const expenseWorkspaceViewPathMap: Record<ExpenseWorkspaceView, string> = {
+  add: '/expenses/add',
+  list: '/expenses/list',
+  categories: '/expenses/categories',
 };
 
 export const isWorkspaceModuleId = (moduleId: string) => Boolean(getModuleById(moduleId));
@@ -40,3 +47,8 @@ export const isTransactionWorkspaceView = (view: string): view is TransactionWor
   view === 'add' || view === 'list';
 
 export const getTransactionWorkspacePath = (view: TransactionWorkspaceView = 'add') => transactionWorkspaceViewPathMap[view];
+
+export const isExpenseWorkspaceView = (view: string): view is ExpenseWorkspaceView =>
+  view === 'add' || view === 'list' || view === 'categories';
+
+export const getExpenseWorkspacePath = (view: ExpenseWorkspaceView = 'list') => expenseWorkspaceViewPathMap[view];
