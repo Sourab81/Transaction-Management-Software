@@ -3,6 +3,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaChevronDown, FaPlus } from 'react-icons/fa';
+import CustomerName from '../common/CustomerName';
 import ConfirmActionModal from '../ui/state/ConfirmActionModal';
 import { parseNonNegativeNumber } from '../../lib/number-validation';
 import { createCustomer, getCustomers } from '../../lib/api/customers';
@@ -270,7 +271,7 @@ const isCurrentRowEmpty = (row: TransactionDraftRow) => (
 );
 
 const getInventoryLabel = (service: Service) =>
-  `${service.name} - ${service.type === 'product' ? 'Product' : 'Service'}`;
+  `${service.name} (Stock: ${service.currentStock ?? service.quantity ?? 0})`;
 
 const getAvailableStock = (service: Service | undefined) => (
   service ? Number(service.currentStock ?? service.quantity ?? 0) : 0
@@ -300,14 +301,6 @@ const idsMatch = (
 
   return normalizedLeft === normalizedRight;
 };
-
-const getServiceCounterId = (service: Service) => service.counterId ?? service.departmentId ?? null;
-
-const isServiceActiveForCounter = (service: Service, counterId: string | number | null | undefined) => (
-  service.status === 'Active'
-  && getServiceCounterId(service) !== null
-  && idsMatch(getServiceCounterId(service), counterId)
-);
 
 const CustomerSearchPanel = memo(function CustomerSearchPanel({
   inputRef,
@@ -493,7 +486,11 @@ const CustomerSearchPanel = memo(function CustomerSearchPanel({
                         }}
                         role="option"
                       >
-                        <span className="transaction-search-dropdown__primary">{getCustomerSearchLabel(customer)}</span>
+                        <CustomerName
+                          name={getCustomerSearchLabel(customer)}
+                          color={customer.color}
+                          className="transaction-search-dropdown__primary"
+                        />
                       </button>
                     ))
                   ) : (
@@ -511,15 +508,17 @@ const CustomerSearchPanel = memo(function CustomerSearchPanel({
 
           {selectedCustomer ? (
             <div className="transaction-customer-summary">
-              <span className="transaction-customer-summary__text">
-                {[
+              <CustomerName
+                name={[
                   getCustomerDisplayName(selectedCustomer),
                   getCustomerPhone(selectedCustomer),
                   getCustomerCode(selectedCustomer),
                   selectedCustomer.email,
                   selectedCustomer.address,
                 ].filter(Boolean).join(' | ')}
-              </span>
+                color={selectedCustomer.color}
+                className="transaction-customer-summary__text"
+              />
               {!isEditMode ? (
                 <button
                   type="button"
@@ -718,18 +717,16 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const inventoryItems = useMemo(() => {
     const byId = new Map<string, Service>();
     services.forEach((service) => {
-      if (isServiceActiveForCounter(service, selectedCounterId)) {
+      if (service.status === 'Active') {
         byId.set(service.id, service);
       }
     });
 
     return Array.from(byId.values());
-  }, [selectedCounterId, services]);
+  }, [services]);
 
   const isInventoryValidForSelectedDepartment = (inventoryId: string | number | null | undefined) => (
-    inventoryItems.some((service) =>
-      idsMatch(service.id, inventoryId) && isServiceActiveForCounter(service, selectedCounterId)
-    )
+    inventoryItems.some((service) => idsMatch(service.id, inventoryId))
   );
 
   const currentAmounts = useMemo(() => ({

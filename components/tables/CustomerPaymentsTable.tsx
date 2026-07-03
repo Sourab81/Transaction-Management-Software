@@ -2,6 +2,7 @@ import React from 'react';
 import type { CustomerBalance } from '../../lib/api/customerBalance';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
 import { formatDateTime } from '../../src/utils/dateFormatter';
+import RemarkCell from '../common/RemarkCell';
 import DataTable from './DataTable';
 
 interface CustomerPaymentsTableProps {
@@ -15,6 +16,15 @@ const formatLedgerAmount = (value: number | undefined) => {
 };
 
 const getLedgerBalance = (row: CustomerBalance) => row.balance ?? Number(formatCustomerBalance(row.currentBalanceStatus));
+const formatPaymentRemark = (row: CustomerBalance) => {
+  const base = `CustomerPaymentToBank/${row.customerName || row.customerId || 'Customer'}`.replace(/\/+$/, '');
+  const remark = (row.remark || '').trim().replace(/\/+$/, '');
+
+  if (!remark) return base;
+  if (remark.startsWith(base) || remark.startsWith('CustomerPaymentToBank/')) return remark;
+
+  return `${base}/${remark}`;
+};
 
 const CustomerPaymentsTable: React.FC<CustomerPaymentsTableProps> = ({
   rows,
@@ -44,7 +54,7 @@ const CustomerPaymentsTable: React.FC<CustomerPaymentsTableProps> = ({
           </span>
         ),
       },
-      { key: 'remark', header: 'Remark', render: (row) => row.remark || '-' },
+      { key: 'remark', header: 'Remark', render: (row) => <RemarkCell value={formatPaymentRemark(row)} /> },
       { key: 'addedBy', header: 'Added By', render: (row) => row.addedByName || '-' },
     ]}
   />

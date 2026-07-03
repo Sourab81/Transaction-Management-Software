@@ -126,7 +126,7 @@ const mapTransactionChildRow = (record: UnknownRecord) => ({
   noOfTransaction: readNumberValue(record, ['no_of_transaction', 'noOfTransaction']) || 1,
   inventoryId: readStringValue(record, ['inventory_id', 'inventoryId', 'inventoryItemId']) || '',
   inventoryName: readStringValue(record, ['inventory_name', 'inventoryName', 'service_name', 'product_name']) || undefined,
-  transactionAccount: readStringValue(record, ['transaction_account', 'transactionAccount', 'transaction_account_id', 'transactionAccountId']) || 'cash',
+  transactionAccount: readStringValue(record, ['account_id', 'transaction_account', 'transactionAccount', 'transaction_account_id', 'transactionAccountId']) || 'other',
   amount: readNumberValue(record, ['amount', 'transaction_amount', 'transactionAmount']) || 0,
   serviceCharge: readNumberValue(record, ['service_charge', 'serviceCharge']) || 0,
   bankCharge: readNumberValue(record, ['bank_charge', 'bankCharge']) || 0,
@@ -164,6 +164,12 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
   const customerDob = readStringValue(record, ['dob', 'date_of_birth', 'customer_dob', 'customerDob'])
     || readStringValue(customerRecord, ['dob', 'date_of_birth'])
     || undefined;
+  const customerColor = readStringValue(record, ['customer_color', 'customerColor', 'color_code', 'colorCode', 'color'])
+    || readStringValue(customerRecord, ['customer_color', 'customerColor', 'color_code', 'colorCode', 'color'])
+    || null;
+  const customerColorId = readStringValue(record, ['customer_color_id', 'customerColorId', 'colorId', 'color_id'])
+    || readStringValue(customerRecord, ['customer_color_id', 'customerColorId', 'colorId', 'color_id'])
+    || null;
   const customerDisplay = customerName || customerCode || (customerId ? `Customer #${customerId}` : 'Customer');
   const paymentMode = normalizePaymentMode(readStringValue(record, ['payment_mode', 'paymentMode', 'mode']));
   const amount = readNumberValue(record, ['transactionAmount', 'transaction_amount', 'amount', 'base_amount', 'baseAmount']) || 0;
@@ -205,6 +211,8 @@ export const mapTransactionRecord = (record: UnknownRecord): Transaction | null 
     customerId: customerId || id,
     customerCode,
     customerName: customerDisplay,
+    customerColorId,
+    customerColor,
     customerPhone,
     customerEmail,
     customerAddress,

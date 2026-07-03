@@ -58,6 +58,8 @@ export interface BusinessCustomer {
   dob?: string;
   address?: string | null;
   remark?: string | null;
+  colorId?: string | null;
+  color?: string | null;
   status?: 'Active' | 'Inactive';
   joinedDate?: string;
   updatedDate?: string;
@@ -144,6 +146,8 @@ export interface Transaction {
   customerId: string;
   customerCode?: string;
   customerName: string;
+  customerColorId?: string | null;
+  customerColor?: string | null;
   customerPhone: string;
   customerEmail?: string;
   customerAddress?: string;
@@ -568,13 +572,16 @@ const normalizeBusiness = (
 
 const normalizeBusinessCustomer = (customer: Partial<BusinessCustomer> & Pick<BusinessCustomer, 'id' | 'name' | 'phone'>): BusinessCustomer => ({
   id: customer.id,
+  customerCode: customer.customerCode,
   name: customer.name,
   customerName: customer.customerName || customer.name,
   phone: customer.phone,
   mobileNo: customer.mobileNo || customer.phone,
   email: customer.email ?? '',
+  dob: customer.dob,
   address: customer.address ?? null,
   remark: customer.remark ?? null,
+  color: customer.color ?? null,
   status: customer.status || 'Active',
   joinedDate: customer.joinedDate || today(),
   addedDate: customer.addedDate || customer.joinedDate || today(),

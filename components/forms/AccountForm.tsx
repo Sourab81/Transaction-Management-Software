@@ -15,6 +15,7 @@ interface AccountFormProps {
 }
 
 const AccountForm: React.FC<AccountFormProps> = ({ initialValues, submitLabel, onCancel, onSubmit }) => {
+  const isEditing = Boolean(initialValues);
   const [accountHolder, setAccountHolder] = useState(initialValues?.accountHolder || '');
   const [bankName, setBankName] = useState(initialValues?.bankName || '');
   const [accountNumber, setAccountNumber] = useState(initialValues?.accountNumber || '');
@@ -58,7 +59,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialValues, submitLabel, o
       <div className="form-workflow-panel mb-4" >
         <div>
           <p className="eyebrow mb-2">Payment</p>
-          <h3 className="h5 fw-semibold mb-1">{initialValues ? 'Update account record' : 'Create account record'}</h3>
+          <h3 className="h5 fw-semibold mb-1">{isEditing ? 'Update account record' : 'Create account record'}</h3>
           <p className="page-muted small mb-0">Keep bank and balance details clean for payment tracking.</p>
         </div>
         <span className={`status-chip ${status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
@@ -103,6 +104,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ initialValues, submitLabel, o
                 setOpeningBalance(event.target.value);
                 setValidationError('');
               }}
+              disabled={isEditing}
               required
             />
           </div>

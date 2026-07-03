@@ -1,4 +1,4 @@
-import { AppApiError, requestAppApi, requestAppApiMutation } from './client';
+import { AppApiError, readApiErrorMessage } from './client';
 import {
   extractCollectionItems,
   isRecord,
@@ -24,8 +24,8 @@ export interface ExpenseCategoryMutationResult {
 }
 
 const mapExpenseCategory = (record: UnknownRecord): ExpenseCategory | null => {
-  const id = readStringValue(record, ['id', 'category_id', 'expense_category_id', 'categoryId']) || '';
-  const name = readStringValue(record, ['name', 'category_name', 'expense_category_name', 'categoryName']) || '';
+  const id = readStringValue(record, ['id', 'expense_type_id', 'category_id', 'expense_category_id', 'categoryId']) || '';
+  const name = readStringValue(record, ['name', 'expense_type_name', 'category_name', 'expense_category_name', 'categoryName']) || '';
 
   if (!id || !name) return null;
 
@@ -85,11 +85,53 @@ const handleCategoryMutation = async (
   }
 };
 
-export const getExpenseCategories = async () => requestAppApi('/api/expense-categories');
+const parseResponseBody = async (response: Response) => {
+  const rawBody = await response.text();
+
+  if (!rawBody.trim()) return null;
+
+  try {
+    return JSON.parse(rawBody) as unknown;
+  } catch {
+    return rawBody;
+  }
+};
+
+const requestExpenseTypeApi = async (
+  apiUrl: string,
+  payload?: Record<string, unknown>,
+) => {
+  console.log('Expense Type Payload:', payload ?? null);
+  console.log('Request URL:', apiUrl);
+
+  const response = await fetch(apiUrl, {
+    method: payload ? 'POST' : 'GET',
+    headers: payload
+      ? {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        }
+      : undefined,
+    body: payload ? JSON.stringify(payload) : undefined,
+    cache: 'no-store',
+  });
+  const data = await parseResponseBody(response);
+
+  console.log('Response Status:', response.status);
+  console.log('Response Data:', data);
+
+  if (!response.ok) {
+    throw new AppApiError(readApiErrorMessage(data, 'The expense type request failed.'), response.status, data);
+  }
+
+  return data;
+};
+
+export const getExpenseCategories = async () => requestExpenseTypeApi('/api/expense-types');
 
 export const createExpenseCategory = (payload: { name: string; remark?: string | null; status?: number | string }) =>
   handleCategoryMutation(
-    () => requestAppApiMutation('/api/expense-categories', {
+    () => requestExpenseTypeApi('/api/expense-types', {
       action: 'create',
       name: payload.name,
       remark: payload.remark ?? null,
@@ -100,7 +142,7 @@ export const createExpenseCategory = (payload: { name: string; remark?: string |
 
 export const updateExpenseCategory = (payload: { id: string | number; name: string; remark?: string | null; status?: number | string }) =>
   handleCategoryMutation(
-    () => requestAppApiMutation('/api/expense-categories', {
+    () => requestExpenseTypeApi('/api/expense-types', {
       action: 'update',
       ...payload,
     }),
@@ -109,7 +151,7 @@ export const updateExpenseCategory = (payload: { id: string | number; name: stri
 
 export const deleteExpenseCategory = (id: string | number) =>
   handleCategoryMutation(
-    () => requestAppApiMutation('/api/expense-categories', {
+    () => requestExpenseTypeApi('/api/expense-types', {
       action: 'delete',
       id,
     }),

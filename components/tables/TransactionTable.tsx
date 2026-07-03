@@ -3,6 +3,7 @@ import { FaChevronDown, FaChevronUp, FaEye, FaFilter, FaMoneyBillWave, FaPrint, 
 import type { Transaction } from '../../lib/store';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
 import { formatDate } from '../../src/utils/dateFormatter';
+import RemarkCell from '../common/RemarkCell';
 import DataTable from './DataTable';
 
 interface TransactionTableProps {
@@ -78,6 +79,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               </span>
             );
           },
+        },
+        {
+          key: 'remark',
+          header: 'Remark',
+          render: (transaction: Transaction) => <RemarkCell value={transaction.remark || transaction.note} />,
         },
       ]
     : [
@@ -157,6 +163,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           key: 'added',
           header: 'Added By',
           render: (transaction: Transaction) => transaction.addedByName || '-',
+        },
+        {
+          key: 'remark',
+          header: 'Remark',
+          render: (transaction: Transaction) => <RemarkCell value={transaction.remark || transaction.note} />,
         },
       ];
 

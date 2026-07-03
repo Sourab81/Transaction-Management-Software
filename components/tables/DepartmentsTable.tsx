@@ -2,6 +2,7 @@ import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { Counter } from '../../lib/store';
 import { formatDateTime } from '../../src/utils/dateFormatter';
+import RemarkCell from '../common/RemarkCell';
 import DataTable from './DataTable';
 
 interface DepartmentsTableProps {
@@ -41,7 +42,7 @@ const DepartmentsTable: React.FC<DepartmentsTableProps> = ({
         },
         { key: 'openingBalance', header: 'Opening Balance', render: (counter) => formatMoney(counter.openingBalance) },
         { key: 'currentBalance', header: 'Current Balance', render: (counter) => formatMoney(counter.currentBalance) },
-        { key: 'remark', header: 'Remark', render: (counter) => counter.remark || '-' },
+        { key: 'remark', header: 'Remark', render: (counter) => <RemarkCell value={counter.remark} /> },
         {
           key: 'departmentStatus',
           header: 'Status',

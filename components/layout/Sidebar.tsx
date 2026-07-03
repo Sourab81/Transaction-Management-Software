@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FaChevronDown, FaLayerGroup } from 'react-icons/fa';
+import { FaChevronDown, FaLayerGroup, FaUniversity } from 'react-icons/fa';
 import { getModuleLabel } from '../../lib/module-ui';
 import {
   getModuleDisplay,
@@ -9,7 +9,12 @@ import {
   getSidebarModulesForSession,
   type SessionAccessContext,
 } from '../../lib/platform-structure';
-import { getExpenseWorkspacePath, getTransactionWorkspacePath, getWorkspaceModulePath } from '../../lib/workspace-routes';
+import {
+  getAccountWorkspacePath,
+  getExpenseWorkspacePath,
+  getTransactionWorkspacePath,
+  getWorkspaceModulePath,
+} from '../../lib/workspace-routes';
 
 interface SidebarProps {
   activeTab: string;
@@ -19,23 +24,26 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-const MASTER_MODULE_IDS = ['departments', 'services', 'accounts'];
+const MASTER_MODULE_IDS = ['departments', 'services', 'accounts', 'colors'];
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isCollapsed = false, onClose }) => {
   const visibleModules = getSidebarModulesForSession(accessContext);
   const roleLabel = getRoleLabel(accessContext.role);
   const pathname = usePathname();
   const isTransactionsRoute = activeTab === 'transactions';
-  const isExpenseRoute = activeTab === 'expense';
-  const isMasterRoute = MASTER_MODULE_IDS.includes(activeTab);
+  const isExpenseCategoriesRoute = pathname === getExpenseWorkspacePath('categories');
+  const isExpenseRoute = activeTab === 'expense' && !isExpenseCategoriesRoute;
+  const isAccountsWorkflowRoute = pathname.startsWith('/accounts/');
+  const isMasterRoute = (MASTER_MODULE_IDS.includes(activeTab) && !isAccountsWorkflowRoute) || isExpenseCategoriesRoute;
+  const isAccountsWorkflowVisible = visibleModules.some((module) => module.id === 'accounts');
 
   const [isTransactionsMenuOpen, setIsTransactionsMenuOpen] = useState(false);
-  const [isExpenseMenuOpen, setIsExpenseMenuOpen] = useState(false);
   const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(false);
+  const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(false);
 
   const isTransactionsMenuExpanded = isTransactionsRoute || isTransactionsMenuOpen;
-  const isExpenseMenuExpanded = isExpenseRoute || isExpenseMenuOpen;
   const isMasterMenuExpanded = isMasterRoute || isMasterMenuOpen;
+  const isAccountsMenuExpanded = isAccountsWorkflowRoute || isAccountsMenuOpen;
 
   const closeOnNavigate = () => {
     if (onClose) onClose();
@@ -43,7 +51,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
 
   const masterModules = visibleModules.filter((module) => MASTER_MODULE_IDS.includes(module.id));
   const moduleList = visibleModules.filter((module) => !MASTER_MODULE_IDS.includes(module.id));
-  const masterRendered = masterModules.length > 0;
+  const canViewExpenseCategories = visibleModules.some((module) => module.id === 'expense');
+  const masterRendered = masterModules.length > 0 || canViewExpenseCategories;
 
   const renderMasterDropdown = () => (
     masterRendered ? (
@@ -74,18 +83,77 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
                   ? 'Inventory'
                   : displayItem.id === 'accounts'
                     ? 'Account'
+                    : displayItem.id === 'colors'
+                      ? 'Colors'
                     : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
               return (
                 <Link
                   key={displayItem.id}
                   onClick={closeOnNavigate}
                   href={getWorkspaceModulePath(displayItem.id)}
-                  className={`sidebar-subnav__link ${activeTab === displayItem.id || pathname === getWorkspaceModulePath(displayItem.id) ? 'is-active' : ''}`}
+                  className={`sidebar-subnav__link ${pathname === getWorkspaceModulePath(displayItem.id) || (activeTab === displayItem.id && !isAccountsWorkflowRoute) ? 'is-active' : ''}`}
                 >
                   {label}
                 </Link>
               );
             })}
+            {canViewExpenseCategories ? (
+              <Link
+                onClick={closeOnNavigate}
+                href={getExpenseWorkspacePath('categories')}
+                className={`sidebar-subnav__link ${isExpenseCategoriesRoute ? 'is-active' : ''}`}
+              >
+                Expense Categories
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    ) : null
+  );
+
+  const renderAccountsWorkflowDropdown = () => (
+    isAccountsWorkflowVisible ? (
+      <div key="accounts-workflow" className={`sidebar-subnav-group ${isAccountsWorkflowRoute ? 'is-active' : ''}`}>
+        <button
+          type="button"
+          onClick={() => setIsAccountsMenuOpen((current) => !current)}
+          aria-label="Accounts"
+          aria-expanded={isAccountsMenuExpanded}
+          title={isCollapsed ? 'Accounts' : undefined}
+          className={`sidebar-link sidebar-link--parent ${isAccountsWorkflowRoute ? 'is-active' : ''}`}
+        >
+          <span className="sidebar-link__icon">
+            <FaUniversity />
+          </span>
+          <span className="fw-semibold sidebar-link__label">Accounts</span>
+          {!isCollapsed ? (
+            <FaChevronDown className={`sidebar-link__chevron ${isAccountsMenuExpanded ? 'is-open' : ''}`} />
+          ) : null}
+        </button>
+        {!isCollapsed && isAccountsMenuExpanded ? (
+          <div className="sidebar-subnav">
+            <Link
+              onClick={closeOnNavigate}
+              href={getAccountWorkspacePath('cash-deposit')}
+              className={`sidebar-subnav__link ${pathname === getAccountWorkspacePath('cash-deposit') ? 'is-active' : ''}`}
+            >
+              Cash Deposit
+            </Link>
+            <Link
+              onClick={closeOnNavigate}
+              href={getAccountWorkspacePath('balance-transfer')}
+              className={`sidebar-subnav__link ${pathname === getAccountWorkspacePath('balance-transfer') ? 'is-active' : ''}`}
+            >
+              Balance Transfer
+            </Link>
+            <Link
+              onClick={closeOnNavigate}
+              href={getAccountWorkspacePath('balance-update')}
+              className={`sidebar-subnav__link ${pathname === getAccountWorkspacePath('balance-update') ? 'is-active' : ''}`}
+            >
+              Balance Update
+            </Link>
           </div>
         ) : null}
       </div>
@@ -157,40 +225,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
 
           if (isExpenseModule) {
             return (
-              <div key={displayItem.id} className={`sidebar-subnav-group ${isExpenseRoute ? 'is-active' : ''}`}>
-                <button
-                  type="button"
-                  onClick={() => setIsExpenseMenuOpen((current) => !current)}
-                  aria-label="Expenses"
-                  aria-expanded={isExpenseMenuExpanded}
-                  title={isCollapsed ? sidebarLabel : undefined}
-                  className={`sidebar-link sidebar-link--parent ${isExpenseRoute ? 'is-active' : ''}`}
-                >
-                  <span className="sidebar-link__icon"><Icon /></span>
-                  <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
-                  {!isCollapsed ? (
-                    <FaChevronDown className={`sidebar-link__chevron ${isExpenseMenuExpanded ? 'is-open' : ''}`} />
-                  ) : null}
-                </button>
-                {!isCollapsed && isExpenseMenuExpanded ? (
-                  <div className="sidebar-subnav">
-                    <Link
-                      onClick={closeOnNavigate}
-                      href={getExpenseWorkspacePath('list')}
-                      className={`sidebar-subnav__link ${pathname === getExpenseWorkspacePath('list') || pathname === getWorkspaceModulePath('expense') || pathname === getExpenseWorkspacePath('add') ? 'is-active' : ''}`}
-                    >
-                      Expense List
-                    </Link>
-                    <Link
-                      onClick={closeOnNavigate}
-                      href={getExpenseWorkspacePath('categories')}
-                      className={`sidebar-subnav__link ${pathname === getExpenseWorkspacePath('categories') ? 'is-active' : ''}`}
-                    >
-                      Expense Categories
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
+              <Link
+                key={displayItem.id}
+                onClick={closeOnNavigate}
+                href={getExpenseWorkspacePath('list')}
+                aria-label={sidebarLabel}
+                title={isCollapsed ? sidebarLabel : undefined}
+                className={`sidebar-link ${isExpenseRoute ? 'is-active' : ''}`}
+              >
+                <span className="sidebar-link__icon"><Icon /></span>
+                <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
+              </Link>
             );
           }
 
@@ -207,6 +252,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
                 <span className="fw-semibold sidebar-link__label">{sidebarLabel}</span>
               </Link>
               {displayItem.id === 'dashboard' ? renderMasterDropdown() : null}
+              {displayItem.id === 'dashboard' ? renderAccountsWorkflowDropdown() : null}
             </React.Fragment>
           );
         })}

@@ -39,6 +39,8 @@ export const mapCustomerRecord = (record: UnknownRecord): BusinessCustomer | nul
     dob: readStringValue(record, ['dob', 'date_of_birth', 'dateOfBirth']) || undefined,
     address: readStringValue(record, ['address']) || null,
     remark: readStringValue(record, ['remark', 'remarks']) || null,
+    colorId: readStringValue(record, ['colorId', 'color_id', 'customer_color_id', 'customerColorId']) || null,
+    color: readStringValue(record, ['color', 'color_code', 'colorCode', 'customer_color', 'customerColor', 'customer_colour']) || null,
     status: readStatusNumber(record),
     joinedDate: addedDate,
     addedDate,

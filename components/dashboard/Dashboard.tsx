@@ -20,7 +20,6 @@ import {
 import {
   createRecordId,
   getDepartmentLinkedAccountIds,
-  getServicesForDepartment,
   useAppDispatch,
 } from '../../lib/store';
 import type { Account, AdditionOption, Business, BusinessCustomer, BusinessOnboardingStep, Counter, Employee, Expense, HistoryEvent, ReportItem, Service, Transaction } from '../../lib/store';
@@ -576,7 +575,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     isPageSizeReady: isOutstandingPageSizeReady,
   } = usePersistentPageSize('customer_outstanding_page_size');
   const requestedApiCounterId = selectedCounterId;
-  const inventoryCounterId = selectedCounterId || editingTransaction?.departmentId || '';
   const isAddTransactionPage = activeTab === 'transactions' && transactionPageView === 'add';
   const isTransactionsListPage = activeTab === 'transactions' && transactionPageView === 'list';
   const shouldLoadWorkspaceApi = currentRole !== 'Admin' && Boolean(currentUser.businessId);
@@ -592,7 +590,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const shouldLoadEmployeesApi = shouldLoadWorkspaceApi
   // Inventory page owns inventory API loading and does not preload other modules.
   const shouldLoadServicesApi = shouldLoadWorkspaceApi
-    && Boolean(inventoryCounterId)
     && (activeTab === 'services' || isAddTransactionPage || isTransactionEditModalOpen);
   const shouldLoadTransactionsApi = shouldLoadWorkspaceApi && (activeTab === 'dashboard' || isTransactionsListPage) && Boolean(requestedApiCounterId);
   const shouldLoadCustomerOutstandingApi = shouldLoadWorkspaceApi && activeTab === 'customers' && customerPageView === 'outstanding';
@@ -697,7 +694,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     updateInventory: updateBackendInventory,
     deleteInventory: deleteBackendInventory,
     reload: reloadServices,
-  } = useInventory(shouldLoadServicesApi, undefined, { counterId: inventoryCounterId, status: 1 });
+  } = useInventory(shouldLoadServicesApi, undefined, { status: 1 });
   const {
     summary: apiDashboardSummary,
     isLoading: isDashboardSummaryLoading,
@@ -1030,10 +1027,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     && availableCounters.length > 0
     && !safeSelectedCounterId;
   const shouldRenderDepartmentPicker = shouldShowDepartmentSelectionModal || isDepartmentPickerOpen;
-  const departmentScopedServices = safeSelectedCounterId
-    ? getServicesForDepartment(services, safeSelectedCounterId)
-    : [];
-  const visibleServices = useVisibleServiceRecords(accessContext, departmentScopedServices);
+  const visibleServices = useVisibleServiceRecords(accessContext, services);
   const visibleCustomers = useVisibleCustomerRecords(accessContext, customers);
   const visibleBusinessCustomers = useMemo(
     () => visibleCustomers.filter((customer): customer is BusinessCustomer => !('permissions' in customer)),
@@ -2139,9 +2133,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       updateUiState('editingBusiness', business);
     } else {
-      const customer = workspace.customers.find((item) => item.id === recordId);
+      const customer = apiCustomers.find((item) => String(item.id) === String(recordId))
+        || visibleBusinessCustomers.find((item) => String(item.id) === String(recordId))
+        || workspace.customers.find((item) => String(item.id) === String(recordId));
       if (!customer) return;
 
+      console.log('Customer Before Edit', customer);
       updateUiState('editingCustomer', customer);
     }
     updateUiState('activeModal', 'edit-customer');
@@ -2706,12 +2703,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (!requireModuleAction('services', editingService ? 'edit' : 'add')) return;
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
-    const inventoryCounterIdForSubmit = values.counterId || values.departmentId;
-    if (!inventoryCounterIdForSubmit) {
-      setServiceSubmitError('Counter/Department is required.');
-      addNotification('warning', 'Select a department before saving inventory.');
-      return;
-    }
 
     if (editingService) {
       if (shouldLoadWorkspaceApi) {
@@ -2722,13 +2713,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           const result = await updateBackendInventory({
             id: editingService.id,
             name: values.name,
-            type: values.type || 'service',
-            quantity: values.quantity ?? 0,
-            openingStock: values.openingStock ?? values.quantity ?? 0,
-            currentStock: values.currentStock ?? values.quantity ?? 0,
-            lowStockThreshold: values.lowStockThreshold ?? 0,
+            type: values.type || 'product',
+            ...(values.type === 'product' && typeof values.quantity !== 'undefined' ? { quantity: values.quantity } : {}),
             remark: values.remark ?? values.description ?? null,
-            counterId: inventoryCounterIdForSubmit,
             status: values.status === 'Active' ? 1 : 0,
           });
 
@@ -2762,13 +2749,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         try {
           const result = await createBackendInventory({
             name: values.name,
-            type: values.type || 'service',
-            quantity: values.quantity ?? 0,
-            openingStock: values.openingStock ?? values.quantity ?? 0,
-            currentStock: values.currentStock ?? values.quantity ?? 0,
-            lowStockThreshold: values.lowStockThreshold ?? 0,
+            type: values.type || 'product',
+            ...(values.type === 'product' && typeof values.quantity !== 'undefined' ? { quantity: values.quantity } : {}),
             remark: values.remark ?? values.description ?? null,
-            counterId: inventoryCounterIdForSubmit,
+            status: values.status === 'Active' ? 1 : 0,
           });
 
           if (!result.success) {
@@ -3306,14 +3290,19 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     if (editingCustomer) {
       if (shouldLoadWorkspaceApi) {
-        const result = await updateCustomer({
+        const payload = {
           id: editingCustomer.id,
           customerName: values.customerName || values.name,
           mobileNo: values.mobileNo || values.phone,
           email: values.email || null,
           address: values.address || null,
           remark: values.remark || null,
-        });
+          dob: values.dob || null,
+          colorId: values.colorId || null,
+          color: values.color || null,
+        };
+        console.log('Update Payload', payload);
+        const result = await updateCustomer(payload);
 
         if (!result.success) {
           addNotification('error', result.message || 'Unable to update customer.');
@@ -3334,6 +3323,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           email: values.email || null,
           address: values.address || null,
           remark: values.remark || null,
+          dob: values.dob || null,
+          colorId: values.colorId || null,
+          color: values.color || null,
         });
 
         if (!result.success) {
@@ -4132,17 +4124,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         <ActionModal
           title={editingService ? 'Edit Inventory' : 'Add Inventory'}
           eyebrow="Inventory"
-          description={
-            editingService
-              ? 'Update the inventory item details and department mapping operators use during transactions.'
-              : 'Create an inventory item that operators can select in the one-page workflow.'
-          }
           onClose={closeModal}
         >
           <ServiceEditorForm
-            departments={availableCounters}
-            defaultDepartmentId={selectedCounter?.id}
-            departmentLocked={currentRole === 'Employee'}
             initialValues={editingService || undefined}
             isSubmitting={isServiceSubmitting}
             submitError={serviceSubmitError}
@@ -4891,6 +4875,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           activeTab={activeTab}
           customerPageView={customerPageView}
           departmentName={selectedDepartmentName}
+          departmentBalance={selectedCounter?.currentBalance}
           notificationCount={notifications.length}
           currentUser={{ ...currentUser, name: displayUserName }}
           onProfileOpen={() => onNavigate('profile')}

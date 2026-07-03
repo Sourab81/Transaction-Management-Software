@@ -92,17 +92,29 @@ const addOptionalField = (
 const buildUpdatePayload = (payload: Record<string, unknown>, expenseId: string) => {
   const category = readRequiredString(payload, ['category', 'categoryName', 'category_name'], 'Expense category');
   if (category instanceof Response) return category;
-  const counterId = readRequiredString(payload, ['counterId', 'counter_id'], 'Department');
-  if (counterId instanceof Response) return counterId;
-  const paymentMode = readRequiredString(payload, ['paymentMode', 'payment_mode'], 'Payment mode');
-  if (paymentMode instanceof Response) return paymentMode;
+  const paidFromType = readRequiredString(payload, ['paidFromType', 'paid_from_type'], 'Paid From');
+  if (paidFromType instanceof Response) return paidFromType;
   const amount = readRequiredNumber(payload, ['amount'], 'Amount');
   if (amount instanceof Response) return amount;
 
-  const normalizedPaymentMode = String(paymentMode).trim().toLowerCase();
-  if (normalizedPaymentMode === 'account') {
-    const accountId = readRequiredString(payload, ['accountId', 'account_id'], 'Account');
-    if (accountId instanceof Response) return accountId;
+  const normalizedPaidFromType = String(paidFromType).trim().toLowerCase();
+  if (normalizedPaidFromType !== 'account' && normalizedPaidFromType !== 'department') {
+    return Response.json({ success: false, message: 'Paid From must be department or account.' }, { status: 400 });
+  }
+
+  let departmentId: string | null = null;
+  let accountId: string | null = null;
+  if (normalizedPaidFromType === 'account') {
+    const resolvedAccountId = readRequiredString(payload, ['accountId', 'account_id'], 'Account');
+    if (resolvedAccountId instanceof Response) return resolvedAccountId;
+    const fallbackDepartmentId = readRequiredString(payload, ['departmentId', 'department_id', 'counterId', 'counter_id'], 'Department');
+    if (fallbackDepartmentId instanceof Response) return fallbackDepartmentId;
+    departmentId = fallbackDepartmentId;
+    accountId = resolvedAccountId;
+  } else {
+    const resolvedDepartmentId = readRequiredString(payload, ['departmentId', 'department_id', 'counterId', 'counter_id'], 'Department');
+    if (resolvedDepartmentId instanceof Response) return resolvedDepartmentId;
+    departmentId = resolvedDepartmentId;
   }
 
   const title = typeof payload.title === 'string' && payload.title.trim()
@@ -110,7 +122,6 @@ const buildUpdatePayload = (payload: Record<string, unknown>, expenseId: string)
     : typeof payload.expense_title === 'string' && payload.expense_title.trim()
       ? payload.expense_title.trim()
       : category;
-  const backendPaymentMode = normalizedPaymentMode === 'department' ? 'cash' : normalizedPaymentMode;
   const backendPayload: Record<string, unknown> = {
     id: expenseId,
     expense_id: expenseId,
@@ -118,15 +129,17 @@ const buildUpdatePayload = (payload: Record<string, unknown>, expenseId: string)
     expense_title: title,
     category,
     amount,
-    payment_mode: backendPaymentMode,
-    counter_id: counterId,
+    paid_from_type: normalizedPaidFromType,
+    department_id: departmentId,
   };
 
-  addOptionalField(backendPayload, 'category_id', payload, ['categoryId', 'category_id']);
-  addOptionalField(backendPayload, 'account_id', payload, ['accountId', 'account_id']);
+  if (normalizedPaidFromType === 'account') {
+    backendPayload.account_id = accountId;
+  }
+
+  addOptionalField(backendPayload, 'expense_type_id', payload, ['expenseTypeId', 'expense_type_id', 'categoryId', 'category_id']);
+  addOptionalField(backendPayload, 'category_id', payload, ['categoryId', 'category_id', 'expenseTypeId', 'expense_type_id']);
   addOptionalField(backendPayload, 'remark', payload, ['remark', 'notes']);
-  addOptionalField(backendPayload, 'expense_date', payload, ['expenseDate', 'expense_date', 'date']);
-  addOptionalField(backendPayload, 'date', payload, ['date', 'expenseDate', 'expense_date']);
 
   return backendPayload;
 };

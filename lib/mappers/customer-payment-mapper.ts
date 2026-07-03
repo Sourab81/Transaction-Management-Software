@@ -29,6 +29,8 @@ export const mapCustomerPaymentRecord = (record: UnknownRecord): CustomerPayment
     customerId,
     customerCode: readStringValue(record, ['customer_code', 'customerCode']) || undefined,
     customerName: readStringValue(record, ['customer_name', 'customerName', 'name']) || undefined,
+    colorId: readStringValue(record, ['colorId', 'color_id', 'customer_color_id', 'customerColorId']) || null,
+    color: readStringValue(record, ['color', 'color_code', 'colorCode', 'customer_color', 'customerColor', 'customer_colour']) || null,
     counterId: readStringValue(record, ['counter_id', 'counterId']) || undefined,
     counterName: readStringValue(record, ['counter_name', 'counterName', 'department_name', 'departmentName']) || undefined,
     onlineAmount,

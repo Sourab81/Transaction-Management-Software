@@ -9,6 +9,8 @@ import { formatCustomerBalance, getCustomerBalanceClassName } from '../../../lib
 import { mapTransactionsPageResponse } from '../../../lib/mappers/transaction-mapper';
 import type { Transaction } from '../../../lib/store';
 import { formatDate } from '../../../src/utils/dateFormatter';
+import CustomerName from '../../common/CustomerName';
+import RemarkCell from '../../common/RemarkCell';
 import DataTable, { type DataTableColumn } from '../../tables/DataTable';
 import PermissionState from '../../ui/state/PermissionState';
 import type { DashboardTabContext } from './types';
@@ -259,7 +261,11 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
       header: 'Customer',
       render: (transaction) => (
         <div className="transaction-list-customer">
-          <span className="transaction-list-customer__name">{getCustomerName(transaction)}</span>
+          <CustomerName
+            name={getCustomerName(transaction)}
+            color={transaction.customerColor}
+            className="transaction-list-customer__name"
+          />
           <span className="transaction-list-customer__code">{formatCustomerId(transaction)}</span>
         </div>
       ),
@@ -301,6 +307,11 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
       key: 'addedBy',
       header: 'Added By',
       render: (transaction) => transaction.addedByName || '-',
+    },
+    {
+      key: 'remark',
+      header: 'Remark',
+      render: (transaction) => <RemarkCell value={transaction.remark || transaction.note} />,
     },
     {
       key: 'payment',
@@ -441,12 +452,12 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
           columns={columns}
           renderActions={(transaction) => (
             <div className="table-actions">
-              <button
+              <button 
                 type="button"
                 className="btn-icon-sm btn-icon-sm--primary"
                 onClick={() => router.push(`/transactions/add?transaction_id=${encodeURIComponent(transaction.id)}&mode=edit`)}
                 aria-label="View transaction"
-                title="Open transaction"
+                title="Open transaction" 
               >
                 <FaEye size={12} />
               </button>

@@ -7,6 +7,8 @@ import DataTable, {
   type DataTableColumn,
   type DataTablePagination,
 } from './DataTable';
+import RemarkCell from '../common/RemarkCell';
+import CustomerName from '../common/CustomerName';
 
 type CustomerDirectoryRecord = Business | BusinessCustomer;
 type UserRoleDisplayRecord = Partial<Pick<
@@ -93,8 +95,14 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
     {
       key: 'name',
       header: entityLabel === 'Customer' ? 'Customer Name' : entityLabel,
-      render: (customer) => <span className="data-table__primary">{getCustomerName(customer)}</span>,
+      render: (customer) => {
+        const color = 'color' in customer ? (customer as BusinessCustomer).color : undefined;
+        return (
+          <CustomerName name={getCustomerName(customer)} color={color} />
+        );
+      },
     },
+    
     ...(showRoleColumn
       ? [{
           key: 'role',
@@ -117,6 +125,16 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       header: 'Address',
       render: (customer) => 'address' in customer ? customer.address || 'Not added' : 'Not added',
     },
+
+    {
+  key: 'remark',
+  header: 'Remark',
+  render: (customer) =>
+    'remark' in customer
+      ? customer.remark || 'Not added'
+      : 'Not added',
+    },
+
     {
       key: 'status',
       header: 'Status',

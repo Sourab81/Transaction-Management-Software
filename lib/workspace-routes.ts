@@ -5,6 +5,7 @@ export const LOGIN_ROUTE = '/login';
 export type CustomerWorkspaceView = 'list' | 'payments' | 'outstanding';
 export type TransactionWorkspaceView = 'add' | 'list';
 export type ExpenseWorkspaceView = 'add' | 'list' | 'categories';
+export type AccountWorkspaceView = 'cash-deposit' | 'balance-transfer' | 'balance-update';
 
 const customerWorkspaceViewPathMap: Record<CustomerWorkspaceView, string> = {
   list: '/customers',
@@ -21,6 +22,12 @@ const expenseWorkspaceViewPathMap: Record<ExpenseWorkspaceView, string> = {
   add: '/expenses/add',
   list: '/expenses/list',
   categories: '/expenses/categories',
+};
+
+const accountWorkspaceViewPathMap: Record<AccountWorkspaceView, string> = {
+  'cash-deposit': '/accounts/cash-deposit',
+  'balance-transfer': '/accounts/balance-transfer',
+  'balance-update': '/accounts/balance-update',
 };
 
 export const isWorkspaceModuleId = (moduleId: string) => Boolean(getModuleById(moduleId));
@@ -52,3 +59,8 @@ export const isExpenseWorkspaceView = (view: string): view is ExpenseWorkspaceVi
   view === 'add' || view === 'list' || view === 'categories';
 
 export const getExpenseWorkspacePath = (view: ExpenseWorkspaceView = 'list') => expenseWorkspaceViewPathMap[view];
+
+export const isAccountWorkspaceView = (view: string): view is AccountWorkspaceView =>
+  view === 'cash-deposit' || view === 'balance-transfer' || view === 'balance-update';
+
+export const getAccountWorkspacePath = (view: AccountWorkspaceView = 'cash-deposit') => accountWorkspaceViewPathMap[view];

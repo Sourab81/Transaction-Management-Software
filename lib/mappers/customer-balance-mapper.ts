@@ -24,8 +24,10 @@ export const mapCustomerBalanceRecord = (record: UnknownRecord): CustomerBalance
     customerCode: readStringValue(record, ['customer_code', 'customerCode']) || undefined,
     customerName: readStringValue(record, ['customer_name', 'customerName', 'name']) || undefined,
     phoneNo: readStringValue(record, ['phone', 'phone_no', 'phoneNo', 'mobile_no', 'mobileNo', 'customer_mobile_no']) || '',
-    lastTransaction: readStringValue(record, ['last_transaction', 'lastTransaction', 'last_transaction_date']) || '',
+    lastTransaction: readStringValue(record, ['last_service_date', 'lastServiceDate', 'latest_service_date', 'latestServiceDate', 'last_transaction', 'lastTransaction', 'last_transaction_date']) || '',
     date: readStringValue(record, ['date', 'ledger_date', 'ledgerDate', 'payment_date', 'paymentDate', 'added_date', 'addedDate', 'last_transaction', 'lastTransaction']) || undefined,
+    colorId: readStringValue(record, ['colorId', 'color_id', 'customer_color_id', 'customerColorId']) || null,
+    color: readStringValue(record, ['color', 'color_code', 'colorCode', 'customer_color', 'customerColor', 'customer_colour']) || null,
     counterOrBank: readStringValue(record, [
       'counter_bank',
       'counterBank',

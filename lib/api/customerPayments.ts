@@ -7,6 +7,8 @@ export interface CustomerPayment {
   customerId: number | string;
   customerCode?: string;
   customerName?: string;
+  colorId?: string | null;
+  color?: string | null;
   counterId?: number | string;
   counterName?: string;
   onlineAmount: number;

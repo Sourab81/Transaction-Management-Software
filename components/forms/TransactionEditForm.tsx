@@ -117,11 +117,9 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
   onSubmit,
 }) => {
   const initialInventoryItemId = initialValues.inventoryItemId || initialValues.serviceId || '';
-  const selectedDepartmentId = initialValues.departmentId || '';
   const availableServices = useMemo(() => services.filter((service) => (
     service.status === 'Active'
-    && (!selectedDepartmentId || idsMatch(service.counterId ?? service.departmentId, selectedDepartmentId))
-  )), [selectedDepartmentId, services]);
+  )), [services]);
 
   // currentRow is the active entry row shown at the top of the table.
   const [currentRow, setCurrentRow] = useState<TransactionEditorDraftRow>({
@@ -193,7 +191,7 @@ const TransactionEditForm: React.FC<TransactionEditFormProps> = ({
       : []),
     ...availableServices.map((service) => ({
       value: service.id,
-      label: `${service.name} - ${service.type === 'product' ? 'Product' : 'Service'}`,
+      label: `${service.name} (Stock: ${service.currentStock ?? service.quantity ?? 0})`,
     })),
   ];
 

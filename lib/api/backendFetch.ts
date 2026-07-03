@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { AUTH_TOKEN_COOKIE_NAME } from '../auth-cookie';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
-type BackendFetchMethod = 'GET' | 'POST';
+type BackendFetchMethod = 'GET' | 'POST' | 'PUT';
 type BackendFetchBodyFormat = 'json' | 'form';
 
 interface BackendFetchOptions {
@@ -160,7 +160,7 @@ export async function backendFetch<T>(
           ? 'application/x-www-form-urlencoded;charset=UTF-8'
           : 'application/json',
       },
-      body: method === 'POST' && typeof options.body !== 'undefined'
+      body: (method === 'POST' || method === 'PUT') && typeof options.body !== 'undefined'
         ? buildRequestBody(options.body, bodyFormat)
         : undefined,
       cache: 'no-store',

@@ -15,6 +15,10 @@ export const canUseBusinessFeature = (
         return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
       }
       if (action === 'add') return isPermissionEnabled(permissions, 'customers_add');
+      if (action === 'edit') return (
+        isPermissionEnabled(permissions, 'customers_add') ||
+        isPermissionEnabled(permissions, 'customers_list')
+      );
       return isPermissionEnabled(permissions, 'customers_list');
     case 'employee':
       if (action === 'view') {
@@ -27,6 +31,9 @@ export const canUseBusinessFeature = (
     case 'accounts':
       if (action === 'view') return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
       return isPermissionEnabled(permissions, 'master_account_manage');
+    case 'colors':
+      if (action === 'view') return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
+      return isPermissionEnabled(permissions, 'customers_add') || isPermissionEnabled(permissions, 'customers_list');
     case 'departments':
       if (action === 'view') return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
       return isPermissionEnabled(permissions, 'master_department_manage');

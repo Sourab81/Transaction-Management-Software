@@ -1,7 +1,6 @@
 import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { Service } from '../../lib/store';
-import { formatDateTime } from '../../src/utils/dateFormatter';
 import DataTable from './DataTable';
 
 interface ServicesTableProps {
@@ -10,20 +9,29 @@ interface ServicesTableProps {
   onDelete?: (serviceId: string) => void;
 }
 
-const getCurrentStock = (service: Service) => service.currentStock ?? service.quantity ?? 0;
-const getLowStockThreshold = (service: Service) => service.lowStockThreshold ?? 0;
-const getStockStatus = (service: Service) => {
-  if (service.type !== 'product') return 'In Stock';
+const RemarkCell: React.FC<{ text: string }> = ({ text }) => {
+  const [expanded, setExpanded] = React.useState(false);
+  if (!text || text === 'No remark') return <span className="page-muted">—</span>;
 
-  const currentStock = getCurrentStock(service);
-  if (currentStock <= 0) return 'Out Of Stock';
-  if (getLowStockThreshold(service) > 0 && currentStock <= getLowStockThreshold(service)) return 'Low Stock';
-  return 'In Stock';
-};
-const getStockStatusClassName = (status: string) => {
-  if (status === 'Out Of Stock') return 'stock-status-badge stock-status-badge--out';
-  if (status === 'Low Stock') return 'stock-status-badge stock-status-badge--low';
-  return 'stock-status-badge stock-status-badge--in';
+  const isLong = text.length > 40;
+
+  return (
+    <span>
+      <span className="data-table__secondary">
+        {expanded || !isLong ? text : `${text.slice(0, 40)}…`}
+      </span>
+      {isLong ? (
+        <button
+          type="button"
+          className="btn-inline-link ms-1"
+          onClick={() => setExpanded((value) => !value)}
+          style={{ fontSize: 11, color: '#3B82F6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          {expanded ? 'less' : 'more'}
+        </button>
+      ) : null}
+    </span>
+  );
 };
 
 const ServicesTable: React.FC<ServicesTableProps> = ({ services, onEdit, onDelete }) => {
@@ -35,24 +43,30 @@ const ServicesTable: React.FC<ServicesTableProps> = ({ services, onEdit, onDelet
       getRowKey={(service) => service.id}
       eyebrow="Inventory"
       title="Inventory catalog"
-      copy="Inventory items with quantity, department, and availability."
       emptyLabel="No inventory records found."
       columns={[
         { key: 'serial', header: 'S.No', render: (_service, index) => index + 1 },
-        { key: 'name', header: 'Name', render: (service) => <span className="data-table__primary">{service.name}</span> },
-        { key: 'type', header: 'Type', render: (service) => service.type === 'product' ? 'Product' : 'Service' },
-        { key: 'openingStock', header: 'Opening Stock', render: (service) => service.openingStock ?? service.quantity ?? 0 },
-        { key: 'currentStock', header: 'Current Stock', render: (service) => getCurrentStock(service) },
         {
-          key: 'stockStatus',
-          header: 'Stock Status',
-          render: (service) => {
-            const stockStatus = getStockStatus(service);
-            return <span className={getStockStatusClassName(stockStatus)}>{stockStatus}</span>;
-          },
+          key: 'name',
+          header: 'Inventory Name',
+          render: (service) => <span className="data-table__primary">{service.name}</span>,
         },
-        { key: 'remark', header: 'Remark', render: (service) => <span className="data-table__secondary">{service.remark || service.description || 'No remark'}</span> },
-        { key: 'addedBy', header: 'Added By', render: (service) => service.addedByName || '-' },
+        {
+          key: 'type',
+          header: 'Inventory Type',
+          render: (service) => (
+            <span className={`status-chip ${service.type === 'product' ? 'status-chip--info' : 'status-chip--active'}`}>
+              {service.type === 'product' ? 'Product' : 'Service'}
+            </span>
+          ),
+        },
+        {
+          key: 'quantity',
+          header: 'Current Quantity',
+          render: (service) => service.type === 'product'
+            ? <span className="data-table__primary">{service.currentStock ?? service.quantity ?? 0}</span>
+            : <span className="page-muted">—</span>,
+        },
         {
           key: 'status',
           header: 'Status',
@@ -62,7 +76,16 @@ const ServicesTable: React.FC<ServicesTableProps> = ({ services, onEdit, onDelet
             </span>
           ),
         },
-        { key: 'addedDate', header: 'Added Date', render: (service) => formatDateTime(service.addedDate, 'Not added') },
+        {
+          key: 'remark',
+          header: 'Remark',
+          render: (service) => <RemarkCell text={service.remark || service.description || ''} />,
+        },
+        {
+          key: 'addedBy',
+          header: 'Added By',
+          render: (service) => service.addedByName || '-',
+        },
       ]}
       renderActions={(service) => (
         <div className="table-actions">

@@ -936,6 +936,16 @@ small {
   text-overflow: ellipsis;
 }
 
+.app-header__department-balance {
+  color: var(--foreground-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .header-search {
   align-items: center;
   background: rgba(247, 250, 255, 0.96);
@@ -6191,6 +6201,127 @@ body,
   min-width: min(18rem, 100%);
 }
 
+.remark-cell {
+  color: var(--text-secondary);
+  display: inline-block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.color-master-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.color-master-cell__swatch {
+  border: 0.0625rem solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 0.85rem;
+  width: 0.85rem;
+}
+
+.customer-payment-modal__summary,
+.customer-payment-modal__preview,
+.customer-payment-modal__confirm {
+  background: var(--bg-surface-alt);
+  border: 0.0625rem solid var(--border-soft);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.customer-payment-modal__summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-payment-modal__summary--compact,
+.customer-payment-modal__preview--compact {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem;
+}
+
+.customer-payment-modal__summary--compact {
+  margin-bottom: 0.85rem;
+}
+
+.customer-payment-modal__preview--compact {
+  justify-content: space-between;
+}
+
+.customer-payment-modal__summary > div,
+.customer-payment-modal__preview > div,
+.customer-payment-modal__confirm > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.customer-payment-modal__summary--compact > div,
+.customer-payment-modal__preview--compact > div {
+  align-items: baseline;
+  display: inline-flex;
+  flex: 1 1 auto;
+  gap: 0.35rem;
+  min-width: max-content;
+}
+
+.customer-payment-modal__summary span,
+.customer-payment-modal__preview span,
+.customer-payment-modal__confirm span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.customer-payment-modal__summary strong,
+.customer-payment-modal__preview strong,
+.customer-payment-modal__confirm strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.customer-payment-modal__summary--compact strong,
+.customer-payment-modal__preview--compact strong {
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.customer-payment-modal__preview {
+  margin: 1rem 0 0;
+}
+
+@media (max-width: 47.99875rem) {
+  .customer-payment-modal__summary:not(.customer-payment-modal__summary--compact) {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-payment-modal__summary--compact,
+  .customer-payment-modal__preview--compact {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-payment-modal__summary--compact > div,
+  .customer-payment-modal__preview--compact > div {
+    justify-content: space-between;
+    min-width: 0;
+    width: 100%;
+  }
+}
+
 .table-panel__header {
   padding: 1.25rem 1.5rem 1rem;
 }
@@ -6205,6 +6336,7 @@ body,
 }
 
 .data-table tbody td {
+  width: auto;
   border-bottom: 0.0625rem solid var(--border-soft);
   color: var(--text-secondary);
   padding: 0.95rem 0.6rem;

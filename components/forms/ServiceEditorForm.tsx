@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { parseNonNegativeNumber } from '../../lib/number-validation';
-import type { Counter, Service } from '../../lib/store';
+import type { Service } from '../../lib/store';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -8,9 +7,6 @@ import Select from '../ui/Select';
 export type ServiceFormValues = Omit<Service, 'id'>;
 
 interface ServiceEditorFormProps {
-  departments: Counter[];
-  defaultDepartmentId?: string;
-  departmentLocked?: boolean;
   initialValues?: Service;
   isSubmitting?: boolean;
   submitError?: string;
@@ -19,9 +15,9 @@ interface ServiceEditorFormProps {
   onSubmit: (values: ServiceFormValues) => void | Promise<void>;
 }
 
-const typeOptions = [
-  { value: 'service', label: 'Service' },
+const inventoryTypeOptions = [
   { value: 'product', label: 'Product' },
+  { value: 'service', label: 'Service' },
 ];
 
 const statusOptions = [
@@ -29,14 +25,9 @@ const statusOptions = [
   { value: 'Inactive', label: 'Inactive' },
 ];
 
-type InventoryFormType = NonNullable<Service['type']>;
-
-const toTypeLabel = (type: InventoryFormType) => type === 'product' ? 'Product' : 'Service';
+const isPositiveWholeNumber = (value: string) => /^[1-9]\d*$/.test(value.trim());
 
 const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
-  departments,
-  defaultDepartmentId,
-  departmentLocked = false,
   initialValues,
   isSubmitting = false,
   submitError = '',
@@ -44,75 +35,60 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
   onCancel,
   onSubmit,
 }) => {
-  const isEditMode = Boolean(initialValues);
-  const resolvedDefaultDepartmentId = initialValues?.counterId || initialValues?.departmentId || defaultDepartmentId || '';
+  const initialType = initialValues?.type || 'product';
   const [name, setName] = useState(initialValues?.name || '');
-  const [type, setType] = useState<InventoryFormType>(initialValues?.type || 'service');
-  const [openingStock, setOpeningStock] = useState(String(initialValues?.openingStock ?? initialValues?.quantity ?? 0));
-  const [currentStock, setCurrentStock] = useState(String(initialValues?.currentStock ?? initialValues?.quantity ?? 0));
-  const [lowStockThreshold, setLowStockThreshold] = useState(String(initialValues?.lowStockThreshold ?? 0));
-  const [departmentId, setDepartmentId] = useState(resolvedDefaultDepartmentId);
+  const [type, setType] = useState<Service['type']>(initialType);
+  const [quantity, setQuantity] = useState(
+    initialType === 'product'
+      ? String(initialValues?.currentStock ?? initialValues?.quantity ?? '')
+      : '',
+  );
   const [status, setStatus] = useState<Service['status']>(initialValues?.status || 'Active');
   const [remark, setRemark] = useState(initialValues?.remark ?? initialValues?.description ?? '');
   const [validationError, setValidationError] = useState('');
-  const isServiceType = type === 'service';
+
+  const handleTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextType = event.target.value as Service['type'];
+    setType(nextType);
+    setValidationError('');
+
+    if (nextType === 'service') {
+      setQuantity('');
+    }
+  };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const trimmedName = name.trim();
+    const trimmedRemark = remark.trim();
+    const normalizedType = type || 'product';
 
     if (!trimmedName) {
       setValidationError('Inventory name is required.');
       return;
     }
 
-    if (type !== 'service' && type !== 'product') {
-      setValidationError('Inventory type must be Service or Product.');
+    if (!normalizedType) {
+      setValidationError('Inventory type is required.');
       return;
     }
 
-    const parsedOpeningStock = isServiceType ? 0 : parseNonNegativeNumber(openingStock);
-    if (parsedOpeningStock === null) {
-      setValidationError('Opening stock must be a valid zero or positive number.');
+    if (normalizedType === 'product' && !isPositiveWholeNumber(quantity)) {
+      setValidationError('Quantity is required and must be a positive whole number.');
       return;
     }
-
-    const parsedCurrentStock = isServiceType ? 0 : parseNonNegativeNumber(currentStock);
-    if (parsedCurrentStock === null) {
-      setValidationError('Current stock must be a valid zero or positive number.');
-      return;
-    }
-
-    const parsedLowStockThreshold = isServiceType ? 0 : parseNonNegativeNumber(lowStockThreshold);
-    if (parsedLowStockThreshold === null) {
-      setValidationError('Low stock threshold must be a valid zero or positive number.');
-      return;
-    }
-
-    const selectedDepartment = departments.find((department) => department.id === departmentId);
-    if (!selectedDepartment) {
-      setValidationError('Counter/Department is required.');
-      return;
-    }
-
-    const trimmedRemark = remark.trim();
 
     setValidationError('');
     onSubmit({
-      departmentId: selectedDepartment?.id,
-      departmentName: selectedDepartment?.name || 'General',
+      departmentName: initialValues?.departmentName || 'General',
       name: trimmedName,
-      category: toTypeLabel(type),
-      price: 0,
+      category: normalizedType === 'product' ? 'Product' : 'Service',
+      price: initialValues?.price ?? 0,
       status,
       description: trimmedRemark,
-      type,
-      quantity: isEditMode ? parsedCurrentStock : parsedOpeningStock,
-      openingStock: parsedOpeningStock,
-      currentStock: isEditMode ? parsedCurrentStock : parsedOpeningStock,
-      lowStockThreshold: parsedLowStockThreshold,
+      type: normalizedType,
+      ...(normalizedType === 'product' ? { quantity: Number(quantity.trim()) } : {}),
       remark: trimmedRemark || null,
-      counterId: selectedDepartment?.id || null,
     });
   };
 
@@ -124,26 +100,13 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
         </div>
       )}
 
-      <div className="form-workflow-panel mb-4">
-        <div>
-          <p className="eyebrow mb-2">Inventory</p>
-          <h3 className="h5 fw-semibold mb-1">{isEditMode ? 'Update inventory item' : 'Create inventory item'}</h3>
-          <p className="page-muted small mb-0">Store services and products operators can select during transaction entry.</p>
-        </div>
-        {isEditMode ? (
-          <span className={`status-chip ${status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
-            {status}
-          </span>
-        ) : null}
-      </div>
-
       <div className="form-section-card mb-4">
         <div className="form-section-title">Inventory Details</div>
         <div className="row g-3">
           <div className="col-12 col-md-6">
             <Input
               label="Inventory Name"
-              placeholder="Example: Website Design"
+              placeholder="Example: SIM Card"
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
@@ -153,106 +116,47 @@ const ServiceEditorForm: React.FC<ServiceEditorFormProps> = ({
               required
             />
           </div>
+
           <div className="col-12 col-md-6">
             <Select
-              label="Type"
-              value={type}
-              onChange={(event) => {
-                const nextType = event.target.value as InventoryFormType;
-                setType(nextType);
-                if (nextType === 'service') {
-                  setOpeningStock('0');
-                  setCurrentStock('0');
-                  setLowStockThreshold('0');
-                }
-                setValidationError('');
-              }}
-              options={typeOptions}
+              label="Inventory Type"
+              value={type || 'product'}
+              onChange={handleTypeChange}
+              options={inventoryTypeOptions}
               disabled={isSubmitting}
               required
             />
           </div>
-          <div className="col-12 col-md-6">
-            <Input
-              label="Opening Stock"
-              type="number"
-              min="0"
-              value={isServiceType ? '0' : openingStock}
-              onChange={(event) => {
-                setOpeningStock(event.target.value);
-                if (!isEditMode) {
-                  setCurrentStock(event.target.value);
-                }
-                setValidationError('');
-              }}
-              disabled={isSubmitting || isServiceType}
-              required={!isServiceType}
-            />
-            {isServiceType ? (
-              <p className="form-hint">Stock is used for products only.</p>
-            ) : null}
-          </div>
-          <div className="col-12 col-md-6">
-            <Input
-              label="Current Stock"
-              type="number"
-              min="0"
-              value={isServiceType ? '0' : currentStock}
-              onChange={(event) => {
-                setCurrentStock(event.target.value);
-                setValidationError('');
-              }}
-              disabled
-              readOnly
-            />
-            <p className="form-hint">{isEditMode ? 'Current stock is adjusted by transactions.' : 'Current stock starts from opening stock.'}</p>
-          </div>
-          <div className="col-12 col-md-6">
-            <Input
-              label="Low Stock Threshold"
-              type="number"
-              min="0"
-              value={isServiceType ? '0' : lowStockThreshold}
-              onChange={(event) => {
-                setLowStockThreshold(event.target.value);
-                setValidationError('');
-              }}
-              disabled={isSubmitting || isServiceType}
-            />
-          </div>
-          <div className="col-12 col-md-6">
-            <Select
-              label="Counter/Department"
-              value={departmentId}
-              onChange={(event) => {
-                setDepartmentId(event.target.value);
-                setValidationError('');
-              }}
-              options={[
-                { value: '', label: 'Select Counter/Department' },
-                ...departments.map((department) => ({
-                  value: department.id,
-                  label: `${department.name} (${department.code})`,
-                })),
-              ]}
-              disabled={departmentLocked || departments.length === 0 || isSubmitting}
-              required
-            />
-            {departmentLocked ? (
-              <p className="form-hint">Employees can create or update inventory only inside their assigned department.</p>
-            ) : null}
-          </div>
-          {isEditMode ? (
+
+          {type === 'product' ? (
             <div className="col-12 col-md-6">
-              <Select
-                label="Status"
-                value={status}
-                onChange={(event) => setStatus(event.target.value as Service['status'])}
-                options={statusOptions}
+              <Input
+                label="Quantity"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={quantity}
+                onChange={(event) => {
+                  setQuantity(event.target.value);
+                  setValidationError('');
+                }}
                 disabled={isSubmitting}
+                required
               />
             </div>
           ) : null}
+
+          <div className="col-12 col-md-6">
+            <Select
+              label="Status"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as Service['status'])}
+              options={statusOptions}
+              disabled={isSubmitting}
+            />
+          </div>
+
           <div className="col-12">
             <label className="form-label">Remark</label>
             <textarea

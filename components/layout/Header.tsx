@@ -10,6 +10,7 @@ interface HeaderProps {
   activeTab: string;
   customerPageView?: CustomerWorkspaceView;
   departmentName?: string;
+  departmentBalance?: number;
   notificationCount: number;
   currentUser: {
     id: string;
@@ -28,6 +29,7 @@ const Header: React.FC<HeaderProps> = ({
   activeTab,
   customerPageView,
   departmentName,
+  departmentBalance,
   notificationCount,
   currentUser,
   onProfileOpen,
@@ -44,6 +46,10 @@ const Header: React.FC<HeaderProps> = ({
     : getModuleLabel(activeTab) || currentModule?.label || 'Dashboard';
   const roleLabel = getRoleLabel(currentUser.role);
   const normalizedDepartmentName = departmentName?.trim();
+  const hasDepartmentBalance = typeof departmentBalance === 'number' && Number.isFinite(departmentBalance);
+  const formattedDepartmentBalance = hasDepartmentBalance
+    ? `₹${departmentBalance.toLocaleString('en-IN')}`
+    : '';
   const headerRef = useRef<HTMLElement | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -121,9 +127,13 @@ const Header: React.FC<HeaderProps> = ({
 
           <div className="app-header__actions">
             {normalizedDepartmentName ? (
-              <span className="app-header__department" aria-label={`Department: ${normalizedDepartmentName}`}>
+              <span
+                className="app-header__department"
+                aria-label={`Department: ${normalizedDepartmentName}${formattedDepartmentBalance ? `, Balance: ${formattedDepartmentBalance}` : ''}`}
+              >
                 <span className="app-header__department-label">Department</span>
-                <span className="app-header__department-name">{normalizedDepartmentName}</span>
+                <span className="app-header__department-name">{normalizedDepartmentName} <span className="app-header__department-balance"> {formattedDepartmentBalance}</span></span>
+                
               </span>
             ) : null}
             <button

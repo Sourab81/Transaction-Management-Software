@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { FaMoneyBillWave } from 'react-icons/fa';
 import type { CustomerBalance } from '../../lib/api/customerBalance';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
+import { formatDate } from '../../src/utils/dateFormatter';
+import CustomerName from '../common/CustomerName';
 import DataTable from './DataTable';
 
 interface CustomerOutstandingTableProps {
@@ -64,7 +66,14 @@ const CustomerOutstandingTable: React.FC<CustomerOutstandingTableProps> = ({
             : index + 1,
         },
         { key: 'customerCode', header: 'Customer Code', render: (row) => row.customerCode || row.customerId || '-' },
-        { key: 'customerName', header: 'Customer Name', render: (row) => <span className="data-table__primary">{row.customerName || '-'}</span> },
+          {
+        key: 'customerName',
+        header: 'Customer Name',
+        render: (row) => (
+          <CustomerName name={row.customerName} color={row.color} />
+        ),
+      },
+        { key: 'lastServiceDate', header: 'Last Service Date', render: (row) => formatDate(row.lastTransaction || row.date, '--') },
         { key: 'phone', header: 'Phone', render: (row) => row.phoneNo || '-' },
         {
           key: 'currentBalance',
@@ -87,6 +96,7 @@ const CustomerOutstandingTable: React.FC<CustomerOutstandingTableProps> = ({
             return renderSignedBalance(todayBalance === 0 ? 0 : signedTodayBalance);
           },
         },
+        // { key: 'remark', header: 'Remark', render: (row) => <RemarkCell value={row.remark} /> },
       ]}
       pagination={pagination ? {
         currentPage: pagination.currentPage,

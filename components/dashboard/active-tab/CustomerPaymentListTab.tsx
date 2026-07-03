@@ -1,16 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { FaSearch } from 'react-icons/fa';
+import { getCustomerBalance } from '../../../lib/api/customerBalance';
 import {
   getCustomerPaymentPage,
   searchCustomers,
   type Customer,
   type CustomerPaymentPage,
 } from '../../../lib/api/customerPaymentList';
+import { mapCustomerBalanceResponse } from '../../../lib/mappers/customer-balance-mapper';
 import { getCustomerWorkspacePath } from '../../../lib/workspace-routes';
 import { formatDateTime } from '../../../src/utils/dateFormatter';
+import RemarkCell from '../../common/RemarkCell';
+import CustomerPaymentModal from '../CustomerPaymentModal';
 import DataTable from '../../tables/DataTable';
 import EmptyState from '../../ui/state/EmptyState';
 import type { DashboardTabContext } from './types';
@@ -38,6 +42,20 @@ const formatCustomerSearchLabel = (customer: Customer) => [
 const formatSelectedCustomerLabel = (customer: Customer) => (
   customer.code ? `${customer.name} (${customer.code})` : customer.name
 );
+const formatCurrency = (amount: number) => `₹${amount.toLocaleString('en-IN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})}`;
+const formatPaymentRemark = (remark: string, customerName: string) => {
+  const base = `CustomerPaymentToBank/${customerName}`.replace(/\/+$/, '');
+  const trimmedRemark = (remark || '').trim().replace(/\/+$/, '');
+
+  if (!trimmedRemark || trimmedRemark === '-') return base;
+  if (trimmedRemark.startsWith(base)) return trimmedRemark.replace(/\/+$/, '');
+  if (trimmedRemark.startsWith('CustomerPaymentToBank/')) return trimmedRemark.replace(/\/+$/, '');
+
+  return `${base}/${trimmedRemark}`;
+};
 
 export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabProps) {
   const {
@@ -46,6 +64,10 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
     hasRequestedCustomerPageAccess,
     canViewCustomerRecords,
     renderCustomerRoutePermissionState,
+    selectedCounter,
+    accounts,
+    handleCustomerBalancePayment,
+    reloadCustomerBalance,
   } = ctx;
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -62,6 +84,10 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
   const [ledgerError, setLedgerError] = useState('');
   const [dateFrom, setDateFrom] = useState(getTodayDate);
   const [dateTo, setDateTo] = useState(getTodayDate);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [balanceDetails, setBalanceDetails] = useState<{ currentBalance: number; todayBalance: number } | null>(null);
+  const [isBalanceLoading, setIsBalanceLoading] = useState(false);
+  const [payCustomer, setPayCustomer] = useState<Customer | null>(null);
 
   useEffect(() => {
     const storedLimit = Number(window.localStorage.getItem(PAYMENT_PAGE_SIZE_STORAGE_KEY));
@@ -133,7 +159,38 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
       });
 
     return () => controller.abort();
-  }, [dateFrom, dateTo, isPageSizeReady, limit, page, selectedCustomer]);
+  }, [dateFrom, dateTo, isPageSizeReady, limit, page, reloadToken, selectedCustomer]);
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setBalanceDetails(null);
+      setIsBalanceLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsBalanceLoading(true);
+
+    void getCustomerBalance({ customerId: selectedCustomer.id, pageNo: 1, limit: 1, status: 1 })
+      .then((response) => {
+        if (isCancelled) return;
+        const [balanceRow] = mapCustomerBalanceResponse(response);
+        setBalanceDetails(balanceRow ? {
+          currentBalance: Number(balanceRow.balance ?? balanceRow.currentBalanceStatus ?? 0),
+          todayBalance: Number(balanceRow.todayBalance ?? 0),
+        } : null);
+      })
+      .catch(() => {
+        if (!isCancelled) setBalanceDetails(null);
+      })
+      .finally(() => {
+        if (!isCancelled) setIsBalanceLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [reloadToken, selectedCustomer]);
 
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
@@ -150,6 +207,8 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
     setPage(1);
     setPaymentPage(EMPTY_PAGE);
     setLedgerError('');
+    setBalanceDetails(null);
+    setPayCustomer(null);
   };
   const updateLimit = (nextLimit: number) => {
     const normalizedLimit = PAYMENT_PAGE_SIZE_OPTIONS.includes(nextLimit as (typeof PAYMENT_PAGE_SIZE_OPTIONS)[number])
@@ -163,6 +222,22 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
     setDateFrom('');
     setDateTo('');
     setPage(1);
+  };
+  const fallbackCurrentBalance = useMemo(() => (
+    paymentPage.transactions.length > 0
+      ? paymentPage.transactions[paymentPage.transactions.length - 1]?.balance ?? 0
+      : 0
+  ), [paymentPage.transactions]);
+  const currentBalance = balanceDetails?.currentBalance ?? fallbackCurrentBalance;
+  const todayBalance = balanceDetails?.todayBalance ?? 0;
+  const openPayModal = () => {
+    if (!selectedCustomer) return;
+    setPayCustomer(selectedCustomer);
+  };
+  const refreshPaymentData = () => {
+    setPage(1);
+    setReloadToken((current) => current + 1);
+    reloadCustomerBalance();
   };
 
   return (
@@ -193,6 +268,23 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
       ) : null}
 
       <div className="col-12">
+        {payCustomer ? (
+          <CustomerPaymentModal
+            target={{
+              customerId: payCustomer.id,
+              customerName: payCustomer.name,
+              customerCode: payCustomer.code,
+              currentBalance,
+              todayBalance,
+            }}
+            accounts={accounts}
+            counterId={selectedCounter?.id || null}
+            onClose={() => setPayCustomer(null)}
+            onPayment={handleCustomerBalancePayment}
+            onSuccess={refreshPaymentData}
+          />
+        ) : null}
+
         {!hasRequestedCustomerPageAccess || !canViewCustomerRecords ? (
           renderCustomerRoutePermissionState()
         ) : (
@@ -326,6 +418,16 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
                 emptyLabel="No transactions found"
                 isLoading={isLedgerLoading}
                 error={ledgerError}
+                headerAction={(
+                  <button
+                    type="button"
+                    className="btn-app btn-app-primary"
+                    onClick={openPayModal}
+                    disabled={isBalanceLoading}
+                  >
+                    Pay
+                  </button>
+                )}
                 columns={[
                   {
                     key: 'serial',
@@ -334,18 +436,18 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
                   },
                   { key: 'date', header: 'Date', render: (t) => formatDateTime(t.date) },
                   { key: 'counterBank', header: 'Counter / Bank', render: (t) => t.counterBank },
-                  { key: 'debit', header: 'Debit', render: (t) => t.debit > 0 ? `₹${t.debit.toFixed(2)}` : '0.00' },
-                  { key: 'credit', header: 'Credit', render: (t) => t.credit > 0 ? `₹${t.credit.toFixed(2)}` : '0.00' },
+                  { key: 'debit', header: 'Debit', render: (t) => t.debit > 0 ? formatCurrency(t.debit) : '₹0.00' },
+                  { key: 'credit', header: 'Credit', render: (t) => t.credit > 0 ? formatCurrency(t.credit) : '₹0.00' },
                   {
                     key: 'balance',
                     header: 'Balance',
                     render: (t) => (
                       <span style={{ color: t.balance < 0 ? '#e53e3e' : 'inherit' }}>
-                        {t.balance.toFixed(2)}
+                        {formatCurrency(t.balance)}
                       </span>
                     ),
                   },
-                  { key: 'remark', header: 'Remark', render: (t) => t.remark },
+                  { key: 'remark', header: 'Remark', render: (t) => <RemarkCell value={formatPaymentRemark(t.remark, selectedCustomer.name)} /> },
                   { key: 'addedBy', header: 'Added By', render: (t) => t.addedBy },
                 ]}
                 pagination={{

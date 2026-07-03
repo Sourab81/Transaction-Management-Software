@@ -88,11 +88,11 @@ const readInventoryType = (value: unknown, required: boolean) => {
   );
 };
 
-const readNonNegativeNumber = (value: unknown, label: string, required: boolean) => {
+const readPositiveWholeNumber = (value: unknown, label: string, required: boolean) => {
   if (typeof value === 'undefined' || value === null || value === '') {
     return required
       ? Response.json(
-          { success: false, message: `${label} must be a zero or positive number.` },
+          { success: false, message: `${label} is required and must be a positive whole number.` },
           { status: 400 },
         )
       : undefined;
@@ -104,12 +104,12 @@ const readNonNegativeNumber = (value: unknown, label: string, required: boolean)
       ? Number(value)
       : Number.NaN;
 
-  if (Number.isFinite(numericValue) && numericValue >= 0) {
+  if (Number.isInteger(numericValue) && numericValue > 0) {
     return numericValue;
   }
 
   return Response.json(
-    { success: false, message: `${label} must be a zero or positive number.` },
+    { success: false, message: `${label} must be a positive whole number.` },
     { status: 400 },
   );
 };
@@ -135,52 +135,14 @@ const readOptionalStatus = (value: unknown) => {
   );
 };
 
-const readOptionalId = (value: unknown, label: string) => {
-  if (typeof value === 'undefined' || value === null || value === '') {
-    return undefined;
-  }
-
-  if ((typeof value === 'string' && value.trim()) || typeof value === 'number') {
-    return String(value).trim();
-  }
-
-  return Response.json(
-    { success: false, message: `${label} must be a valid id.` },
-    { status: 400 },
-  );
-};
-
-const addOptionalNumberField = (
-  backendPayload: Record<string, unknown>,
-  backendKey: string,
-  payload: Record<string, unknown>,
-  keys: string[],
-) => {
-  for (const key of keys) {
-    if (typeof payload[key] === 'undefined' || payload[key] === null || payload[key] === '') continue;
-
-    const value = readNonNegativeNumber(payload[key], backendKey, false);
-    if (value instanceof Response) return value;
-    if (typeof value !== 'undefined') backendPayload[backendKey] = value;
-    return undefined;
-  }
-
-  return undefined;
-};
-
 const buildInventoryQuery = (request: Request) => {
   const source = new URL(request.url).searchParams;
   const params = new URLSearchParams();
   const counterId = source.get('counter_id')?.trim();
 
-  if (!counterId) {
-    return Response.json(
-      { success: false, message: 'Please select a department to view inventory.' },
-      { status: 400 },
-    );
+  if (counterId) {
+    params.set('counter_id', counterId);
   }
-
-  params.set('counter_id', counterId);
 
   ['type', 'status', 'search'].forEach((key) => {
     const value = source.get(key);
@@ -195,7 +157,6 @@ const buildInventoryQuery = (request: Request) => {
 
 export async function GET(request: Request) {
   const endpoint = buildInventoryQuery(request);
-  if (endpoint instanceof Response) return endpoint;
 
   try {
     return Response.json(await backendFetch(endpoint));
@@ -256,30 +217,13 @@ export async function POST(request: Request) {
     if (type instanceof Response) return type;
     if (typeof type !== 'undefined') backendPayload.type = type;
 
-    const quantity = readNonNegativeNumber(payload.quantity, 'Quantity', action === 'create');
+    const quantity = readPositiveWholeNumber(
+      payload.quantity,
+      'Quantity',
+      type === 'product',
+    );
     if (quantity instanceof Response) return quantity;
-    if (typeof quantity !== 'undefined') backendPayload.quantity = quantity;
-
-    const openingStock = addOptionalNumberField(backendPayload, 'opening_stock', payload, ['openingStock', 'opening_stock']);
-    if (openingStock instanceof Response) return openingStock;
-
-    const currentStock = addOptionalNumberField(backendPayload, 'current_stock', payload, ['currentStock', 'current_stock']);
-    if (currentStock instanceof Response) return currentStock;
-
-    const lowStockThreshold = addOptionalNumberField(backendPayload, 'low_stock_threshold', payload, ['lowStockThreshold', 'low_stock_threshold']);
-    if (lowStockThreshold instanceof Response) return lowStockThreshold;
-
-    const counterId = action === 'create'
-      ? readOptionalId(payload.counterId ?? payload.counter_id, 'Counter')
-      : readOptionalId(payload.counterId ?? payload.counter_id, 'Counter');
-    if (counterId instanceof Response) return counterId;
-    if (action === 'create' && typeof counterId === 'undefined') {
-      return Response.json(
-        { success: false, message: 'Counter is required.' },
-        { status: 400 },
-      );
-    }
-    if (typeof counterId !== 'undefined') backendPayload.counter_id = counterId;
+    if (type === 'product' && typeof quantity !== 'undefined') backendPayload.quantity = quantity;
 
     const status = readOptionalStatus(payload.status);
     if (status instanceof Response) return status;

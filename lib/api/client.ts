@@ -52,7 +52,7 @@ export const requestAppApi = async <T = unknown>(
   let response: Response;
 
   try {
-    response = await fetch(path, {
+    response = await fetch(path,{
       method,
       headers: method !== 'GET'
         ? {

@@ -6,6 +6,7 @@ export type ModuleUiId =
   | 'transactions'
   | 'services'
   | 'accounts'
+  | 'colors'
   | 'employee'
   | 'departments'
   | 'expense'
@@ -72,6 +73,14 @@ export const moduleUi: Record<ModuleUiId, ModuleUiConfig> = {
     emptyDescription: 'Add a payment account to connect departments and track balances.',
     permissionTitle: 'Account access is restricted',
     permissionDescription: 'Your current permissions do not allow you to open payment accounts.',
+  },
+  colors: {
+    id: 'colors',
+    label: 'Colors',
+    emptyTitle: 'No colors added yet',
+    emptyDescription: 'Add colors to assign consistent labels to customers.',
+    permissionTitle: 'Color access is restricted',
+    permissionDescription: 'Your current permissions do not allow you to open color master records.',
   },
   employee: {
     id: 'employee',

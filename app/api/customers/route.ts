@@ -130,6 +130,8 @@ const buildCustomerMutationPayload = (
   addOptionalField(backendPayload, 'address', payload, ['address']);
   addOptionalField(backendPayload, 'dob', payload, ['dob', 'dateOfBirth', 'date_of_birth']);
   addOptionalField(backendPayload, 'remark', payload, ['remark']);
+  addOptionalField(backendPayload, 'customer_color_id', payload, ['colorId', 'customerColorId', 'customer_color_id']);
+  addOptionalField(backendPayload, 'customer_color', payload, ['color', 'customerColor', 'customer_color', 'customer_colour']);
 
   return backendPayload;
 };
@@ -188,11 +190,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    return Response.json(await backendFetch(endpoint, {
+    console.log('API URL', endpoint);
+    console.log('Update Payload', backendPayload);
+    const response = await backendFetch(endpoint, {
       method: 'POST',
       body: backendPayload,
-    }));
+    });
+    console.log('Response Status:', 200);
+    console.log('Response Data:', response);
+    return Response.json(response);
   } catch (error) {
+    if (error instanceof BackendFetchError) {
+      console.log('Response Status:', error.statusCode ?? 502);
+      console.log('Response Data:', error.body);
+    }
     return errorResponse(error, `Unable to ${action} customer.`);
   }
 }

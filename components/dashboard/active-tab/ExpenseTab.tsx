@@ -17,7 +17,6 @@ import {
   updateExpense,
   type ExpenseFilters,
   type ExpenseMutationPayload,
-  type ExpensePaymentMode,
   type ExpenseRecord,
 } from '../../../lib/api/expenses';
 import { useExpenses } from '../../../lib/hooks/useExpenses';
@@ -26,7 +25,7 @@ import ConfirmActionModal from '../../ui/state/ConfirmActionModal';
 import ExpenseEntryForm from '../../forms/ExpenseEntryForm';
 import ExpensesTable from '../../tables/ExpensesTable';
 import ReusableListTable from '../../common/ReusableListTable';
-import SectionHero from '../SectionHero';
+import RemarkCell from '../../common/RemarkCell';
 import type { DashboardTabContext } from './types';
 import type { SummaryCardProps } from '../SummaryCard';
 
@@ -39,19 +38,15 @@ type ExpenseView = 'add' | 'list' | 'categories';
 interface ExpenseFilterState {
   dateFrom: string;
   dateTo: string;
-  categoryId: string;
+  search: string;
   counterIds: string[];
-  addedById: string;
-  paymentMode: ExpensePaymentMode | 'all';
 }
 
 const emptyFilters: ExpenseFilterState = {
   dateFrom: '',
   dateTo: '',
-  categoryId: '',
+  search: '',
   counterIds: [],
-  addedById: '',
-  paymentMode: 'all',
 };
 
 const getExpenseViewFromPath = (pathname: string): ExpenseView => {
@@ -90,7 +85,6 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
   const {
     accounts,
     counters,
-    employees,
     selectedCounter,
     canManageModule,
     canDeleteModule,
@@ -104,6 +98,7 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
   const [categoriesError, setCategoriesError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseRecord | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<ExpenseRecord | null>(null);
   const [categoryName, setCategoryName] = useState('');
@@ -119,10 +114,8 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
     status: 1,
     ...(appliedFilters.dateFrom ? { dateFrom: appliedFilters.dateFrom } : {}),
     ...(appliedFilters.dateTo ? { dateTo: appliedFilters.dateTo } : {}),
-    ...(appliedFilters.categoryId ? { categoryId: appliedFilters.categoryId } : {}),
     ...(appliedFilters.counterIds.length === 1 ? { counterId: appliedFilters.counterIds[0] } : {}),
-    ...(appliedFilters.addedById ? { staffId: appliedFilters.addedById } : {}),
-    ...(appliedFilters.paymentMode !== 'all' ? { paymentMode: appliedFilters.paymentMode } : {}),
+    ...(appliedFilters.search.trim() ? { search: appliedFilters.search.trim() } : {}),
   }), [appliedFilters]);
   const {
     expenses,
@@ -176,22 +169,16 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
       && (!appliedFilters.dateTo || expenseDate <= appliedFilters.dateTo);
     const matchesDepartment = appliedFilters.counterIds.length === 0
       || appliedFilters.counterIds.includes(String(expense.counterId));
-    const matchesAddedBy = !appliedFilters.addedById
-      || String(expense.addedById || '') === appliedFilters.addedById
-      || String(expense.addedByName || '').toLowerCase() === appliedFilters.addedById.toLowerCase();
+    const query = appliedFilters.search.trim().toLowerCase();
+    const matchesSearch = !query
+      || String(expense.category || expense.title || '').toLowerCase().includes(query)
+      || String(expense.remark || '').toLowerCase().includes(query)
+      || String(expense.paidFrom || '').toLowerCase().includes(query)
+      || String(expense.accountName || expense.bankName || '').toLowerCase().includes(query)
+      || String(expense.counterName || '').toLowerCase().includes(query);
 
-    return matchesDate && matchesDepartment && matchesAddedBy;
+    return matchesDate && matchesDepartment && matchesSearch;
   }), [appliedFilters, expenses]);
-
-  const addedByOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    employees.forEach((employee) => map.set(employee.id, employee.name));
-    expenses.forEach((expense) => {
-      if (expense.addedById && expense.addedByName) map.set(expense.addedById, expense.addedByName);
-      else if (expense.addedByName) map.set(expense.addedByName, expense.addedByName);
-    });
-    return Array.from(map, ([id, name]) => ({ id, name }));
-  }, [employees, expenses]);
 
   const summaryCards = useMemo<SummaryCardProps[]>(() => {
     const today = new Date().toLocaleDateString('en-CA');
@@ -226,7 +213,15 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
     showNotification('success', result.message || 'Expense saved successfully.');
     reloadExpenses();
     refreshBalances();
+    setIsAddExpenseModalOpen(false);
+    setActionError('');
     return true;
+  };
+
+  const closeAddExpenseModal = () => {
+    setIsAddExpenseModalOpen(false);
+    setActionError('');
+    setIsSaving(false);
   };
 
   const closeExpenseModal = () => {
@@ -387,13 +382,6 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
   if (view === 'categories') {
     return (
       <div className="row g-4">
-        <div className="col-12">
-          <SectionHero
-            eyebrow="Expense Types"
-            title="Expense Type Master"
-            description="Create and maintain expense types used while recording expenses."
-          />
-        </div>
         <div className="col-12 col-xl-4">
           <form className="form-section-card expense-type-form" onSubmit={handleSaveCategory}>
             <div className="form-section-title mb-3">{editingCategory ? 'Edit Expense Type' : 'Add Expense Type'}</div>
@@ -453,7 +441,7 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
             columns={[
               { key: 'serial', header: 'S.No', render: (_category, index) => index + 1 },
               { key: 'name', header: 'Expense Type Name', render: (category) => <span className="data-table__primary">{category.name}</span> },
-              { key: 'remark', header: 'Remark', render: (category) => category.remark || '-' },
+              { key: 'remark', header: 'Remark', render: (category) => <RemarkCell value={category.remark} /> },
               {
                 key: 'status',
                 header: 'Status',
@@ -543,6 +531,26 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
 
   return (
     <div className="row g-4">
+      {isAddExpenseModalOpen ? (
+        <ActionModal
+          title="Add Expense"
+          eyebrow="Expense"
+          onClose={closeAddExpenseModal}
+        >
+          <ExpenseEntryForm
+            accounts={accounts}
+            categories={categories}
+            departments={selectedCounter ? [selectedCounter] : []}
+            defaultDepartmentId={selectedCounter?.id || ''}
+            isSubmitting={isSaving}
+            submitError={actionError}
+            submitLabel="Save Expense"
+            onSubmit={handleCreateExpense}
+            onCancel={closeAddExpenseModal}
+          />
+        </ActionModal>
+      ) : null}
+
       {editingExpense ? (
         <ActionModal
           title="Edit Expense"
@@ -553,7 +561,7 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
           <ExpenseEntryForm
             accounts={accounts}
             categories={categories}
-            departments={counters}
+            departments={selectedCounter ? [selectedCounter] : []}
             initialValues={editingExpense}
             defaultDepartmentId={selectedCounter?.id || ''}
             isSubmitting={isSaving}
@@ -584,41 +592,12 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
       ) : null}
 
       <div className="col-12">
-        <SectionHero
-          eyebrow="Expenses"
-          title="Expense Management"
-          description="Record expenses and review expense history with filters, summaries, and pagination."
-          action={{
-            label: 'Refresh',
-            icon: <FaFilter />,
-            onClick: reloadExpenses,
-          }}
-        />
-      </div>
-
-      <div className="col-12">
-        <div className="app-card">
-          <ExpenseEntryForm
-            accounts={accounts}
-            categories={categories}
-            departments={counters}
-            defaultDepartmentId={selectedCounter?.id || ''}
-            isSubmitting={isSaving}
-            submitError={actionError}
-            onSubmit={handleCreateExpense}
-          />
-          {categoriesError ? <p className="text-danger small mb-0 mt-3">{categoriesError}</p> : null}
-        </div>
-      </div>
-
-      {renderSummaryCards(summaryCards)}
-
-      <div className="col-12">
         <div className="form-section-card expense-filter-panel">
           <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
             <div>
               <p className="eyebrow mb-1">Expense List</p>
-              <h3 className="table-panel__title mb-0">Filters</h3>
+              <h3 className="table-panel__title mb-0">Expense List</h3>
+              {categoriesError ? <p className="text-danger small mb-0 mt-2">{categoriesError}</p> : null}
             </div>
             <div className="modal-actions m-0 p-0 border-0">
               <button type="button" className="btn-app btn-app-secondary" onClick={clearFilters}>Clear</button>
@@ -626,6 +605,17 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
             </div>
           </div>
           <div className="row g-3">
+            <div className="col-12 col-md-6 col-xl-3">
+              <label className="form-label" htmlFor="expense-filter-search">Search</label>
+              <input
+                id="expense-filter-search"
+                className="form-control"
+                type="search"
+                value={draftFilters.search}
+                onChange={(event) => setDraftFilters((filters) => ({ ...filters, search: event.target.value }))}
+                placeholder="Search expenses"
+              />
+            </div>
             <div className="col-12 col-md-6 col-xl-3">
               <label className="form-label" htmlFor="expense-filter-from">From Date</label>
               <input
@@ -648,48 +638,7 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
                 onChange={(event) => setDraftFilters((filters) => ({ ...filters, dateTo: event.target.value }))}
               />
             </div>
-            <div className="col-12 col-md-6 col-xl-3">
-              <label className="form-label" htmlFor="expense-filter-category">Expense Type</label>
-              <select
-                id="expense-filter-category"
-                className="form-select"
-                value={draftFilters.categoryId}
-                onChange={(event) => setDraftFilters((filters) => ({ ...filters, categoryId: event.target.value }))}
-              >
-                <option value="">All Expense Types</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-12 col-md-6 col-xl-3">
-              <label className="form-label" htmlFor="expense-filter-added-by">Added By</label>
-              <select
-                id="expense-filter-added-by"
-                className="form-select"
-                value={draftFilters.addedById}
-                onChange={(event) => setDraftFilters((filters) => ({ ...filters, addedById: event.target.value }))}
-              >
-                <option value="">All Users</option>
-                {addedByOptions.map((user) => (
-                  <option key={user.id} value={user.id}>{user.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-12 col-md-6 col-xl-3">
-              <label className="form-label" htmlFor="expense-filter-source">Source Type</label>
-              <select
-                id="expense-filter-source"
-                className="form-select"
-                value={draftFilters.paymentMode}
-                onChange={(event) => setDraftFilters((filters) => ({ ...filters, paymentMode: event.target.value as ExpensePaymentMode | 'all' }))}
-              >
-                <option value="all">All Sources</option>
-                <option value="account">Account</option>
-                <option value="department">Department</option>
-              </select>
-            </div>
-            <div className="col-12 col-xl-9">
+            <div className="col-12 col-xl-3">
               <span className="form-label d-block">Department Filter</span>
               <div className="expense-multiselect">
                 {counters.map((counter) => (
@@ -719,6 +668,18 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
             onPageChange: setExpensePage,
             onLimitChange: setExpenseLimit,
           }}
+          headerAction={canManageExpenses ? (
+            <button
+              type="button"
+              className="btn-app btn-app-primary"
+              onClick={() => {
+                setActionError('');
+                setIsAddExpenseModalOpen(true);
+              }}
+            >
+              + Add Expense
+            </button>
+          ) : undefined}
           onEdit={canManageExpenses ? setEditingExpense : undefined}
           onDelete={canDeleteExpenses ? (expenseId) => {
             const expense = filteredExpenses.find((entry) => entry.id === expenseId);
@@ -726,6 +687,8 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
           } : undefined}
         />
       </div>
+
+      {renderSummaryCards(summaryCards)}
     </div>
   );
 }

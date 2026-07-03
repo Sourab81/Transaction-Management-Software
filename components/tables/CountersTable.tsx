@@ -1,5 +1,6 @@
 import React from 'react';
 import DataTable from './DataTable';
+import RemarkCell from '../common/RemarkCell';
 
 interface Counter {
   id: string;
@@ -26,8 +27,7 @@ const CountersTable: React.FC<CountersTableProps> = ({ counters }) => (
       { key: 'counter', header: 'Counter', render: (counter) => <span className="data-table__primary">{counter.name}</span> },
       { key: 'code', header: 'Code', render: (counter) => counter.code },
       { key: 'opening', header: 'Opening Balance', render: (counter) => `Rs. ${counter.openingBalance.toLocaleString('en-IN')}` },
-      { key: 'current', header: 'Current Balance', render: (counter) => `Rs. ${counter.currentBalance.toLocaleString('en-IN')}` },
-      {
+      { key: 'current', header: 'Current Balance', render: (counter) => `Rs. ${counter.currentBalance.toLocaleString('en-IN')}` },      {
         key: 'status',
         header: 'Status',
         render: (counter) => (

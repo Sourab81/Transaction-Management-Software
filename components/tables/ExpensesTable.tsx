@@ -2,6 +2,7 @@ import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { ExpenseRecord } from '../../lib/api/expenses';
 import { formatDateTime } from '../../src/utils/dateFormatter';
+import RemarkCell from '../common/RemarkCell';
 import DataTable from './DataTable';
 import type { DataTablePagination } from './DataTable';
 
@@ -12,17 +13,28 @@ interface ExpensesTableProps {
   onEdit?: (expense: ExpenseRecord) => void;
   onDelete?: (expenseId: string) => void;
   pagination?: DataTablePagination;
+  headerAction?: React.ReactNode;
 }
 
 const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
 
 const getPaidFrom = (expense: ExpenseRecord) => (
-  expense.paymentMode === 'account'
-    ? expense.accountName || expense.bankName || expense.accountId || '-'
-    : expense.counterName || 'Department'
+  expense.paidFrom
+  || expense.accountName
+  || expense.bankName
+  || expense.counterName
+  || '-'
 );
 
-const ExpensesTable: React.FC<ExpensesTableProps> = ({ expenses, isLoading = false, error = '', onEdit, onDelete, pagination }) => {
+const ExpensesTable: React.FC<ExpensesTableProps> = ({
+  expenses,
+  isLoading = false,
+  error = '',
+  onEdit,
+  onDelete,
+  pagination,
+  headerAction,
+}) => {
   const hasActions = Boolean(onEdit || onDelete);
 
   return (
@@ -33,6 +45,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({ expenses, isLoading = fal
       title="Expense List"
       copy="Expense history with category, department, payment source, and balance impact."
       emptyLabel="No expense records found."
+      headerAction={headerAction}
       isLoading={isLoading}
       pagination={pagination}
       columns={[
@@ -48,7 +61,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({ expenses, isLoading = fal
             ? expense.accountName || expense.bankName || expense.accountId || '-'
             : '-',
         },
-        { key: 'remark', header: 'Remark', render: (expense) => expense.remark || '-' },
+        { key: 'remark', header: 'Remark', render: (expense) => <RemarkCell value={expense.remark} /> },
         { key: 'addedBy', header: 'Added By', render: (expense) => expense.addedByName || '-' },
       ]}
       className="expense-list-table"

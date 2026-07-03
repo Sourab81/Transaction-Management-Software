@@ -6,6 +6,7 @@ export interface CustomerBalance {
   customerId: number | string;
   customerCode?: string;
   customerName?: string;
+  colorId?: string | null;
   phoneNo: string;
   lastTransaction: string;
   date?: string;
@@ -18,6 +19,7 @@ export interface CustomerBalance {
   remark?: string;
   addedByName?: string;
   currentBalanceStatus: number | string;
+  color?: string | null;
   status: number | string;
 }
 
@@ -35,6 +37,7 @@ export interface PayCustomerBalancePayload {
   paymentMode: 'cash' | 'account';
   accountId?: number | string | null;
   counterId?: number | string | null;
+  paymentDate?: string;
   remark?: string | null;
 }
 

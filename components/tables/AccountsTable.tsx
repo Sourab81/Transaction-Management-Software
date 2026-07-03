@@ -2,6 +2,7 @@ import React from 'react';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import type { Account } from '../../lib/store';
 import { formatDateTime } from '../../src/utils/dateFormatter';
+import RemarkCell from '../common/RemarkCell';
 import DataTable from './DataTable';
 
 interface AccountsTableProps {
@@ -33,6 +34,7 @@ const AccountsTable: React.FC<AccountsTableProps> = ({ accounts, isLoading = fal
         { key: 'branch', header: 'Branch', render: (account) => account.branch || '-' },
         { key: 'opening', header: 'Opening Balance', render: (account) => formatMoney(account.openingBalance) },
         { key: 'current', header: 'Current Balance', render: (account) => formatMoney(account.currentBalance) },
+        { key: 'remark', header: 'Remark', render: (account) => <RemarkCell value={account.remark} /> },
         { key: 'addedBy', header: 'Added By', render: (account) => account.addedByName || '-' },
         {
           key: 'status',

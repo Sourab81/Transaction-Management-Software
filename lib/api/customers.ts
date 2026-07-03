@@ -10,6 +10,7 @@ export interface Customer {
   email?: string | null;
   address?: string | null;
   remark?: string | null;
+  color?: string | null;
   status: number;
   addedDate?: string;
   updatedDate?: string;
@@ -30,6 +31,8 @@ export interface CreateCustomerPayload {
   email?: string | null;
   address?: string | null;
   remark?: string | null;
+  colorId?: string | null;
+  color?: string | null;
 }
 
 export interface UpdateCustomerPayload extends Partial<CreateCustomerPayload> {
@@ -112,10 +115,28 @@ export const createCustomer = (payload: CreateCustomerPayload) =>
 
 export const updateCustomer = (payload: UpdateCustomerPayload) =>
   handleCustomerMutation(
-    () => requestAppApiMutation('/api/customers', {
-      action: 'update',
-      ...payload,
-    }),
+    () => {
+      const apiUrl = '/api/customers';
+      const requestPayload = {
+        action: 'update',
+        ...payload,
+      };
+      console.log('API URL', apiUrl);
+      console.log('Update Payload', requestPayload);
+      return requestAppApiMutation(apiUrl, requestPayload)
+        .then((data) => {
+          console.log('Response Status:', 200);
+          console.log('Response Data:', data);
+          return data;
+        })
+        .catch((error) => {
+          if (error instanceof AppApiError) {
+            console.log('Response Status:', error.statusCode);
+            console.log('Response Data:', error.body);
+          }
+          throw error;
+        });
+    },
     'Customer updated successfully.',
   );
 

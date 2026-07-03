@@ -54,18 +54,20 @@ const readRequiredString = (
 };
 
 const buildMutationPayload = (payload: Record<string, unknown>, includeId = false) => {
-  const name = readRequiredString(payload, ['name', 'categoryName', 'category_name'], 'Category name');
+  const name = readRequiredString(payload, ['name', 'expenseTypeName', 'expense_type_name', 'categoryName', 'category_name'], 'Expense type name');
   if (name instanceof Response) return name;
 
   const backendPayload: Record<string, unknown> = {
     name,
+    expense_type_name: name,
     category_name: name,
   };
 
   if (includeId) {
-    const id = readRequiredString(payload, ['id', 'categoryId', 'category_id'], 'Category');
+    const id = readRequiredString(payload, ['id', 'expenseTypeId', 'expense_type_id', 'categoryId', 'category_id'], 'Expense type');
     if (id instanceof Response) return id;
     backendPayload.id = id;
+    backendPayload.expense_type_id = id;
     backendPayload.category_id = id;
   }
 
@@ -83,11 +85,8 @@ const buildMutationPayload = (payload: Record<string, unknown>, includeId = fals
 
 export async function GET() {
   try {
-    // Token is httpOnly, so category backend calls must happen from this route.
-    return Response.json(await backendFetch('getExpenseCategories', {
-      method: 'POST',
-      body: {},
-    }));
+    // Compatibility route. The UI now uses /api/expense-types; keep this endpoint working for stale clients.
+    return Response.json(await backendFetch('expense-types?status=1&page_no=1&limit=500', { method: 'GET' }));
   } catch (error) {
     return errorResponse(error, 'Unable to load expense categories.');
   }
@@ -101,9 +100,9 @@ export async function POST(request: Request) {
 
   const action = typeof payload.action === 'string' ? payload.action : 'create';
   const endpointByAction: Record<string, string> = {
-    create: 'createExpenseCategory',
-    update: 'updateExpenseCategory',
-    delete: 'deleteExpenseCategory',
+    create: 'createExpenseType',
+    update: 'updateExpenseType',
+    delete: 'changeExpenseTypeStatus',
   };
   const endpoint = endpointByAction[action];
 
@@ -116,8 +115,8 @@ export async function POST(request: Request) {
     : action === 'update'
       ? buildMutationPayload(payload, true)
       : (() => {
-          const id = readRequiredString(payload, ['id', 'categoryId', 'category_id'], 'Category');
-          return id instanceof Response ? id : { id, category_id: id };
+          const id = readRequiredString(payload, ['id', 'expenseTypeId', 'expense_type_id', 'categoryId', 'category_id'], 'Expense type');
+          return id instanceof Response ? id : { id, expense_type_id: id, status: 0 };
         })();
 
   if (backendPayload instanceof Response) return backendPayload;

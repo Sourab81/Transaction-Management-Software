@@ -24,11 +24,8 @@ export interface CreateInventoryPayload {
   name: string;
   type: InventoryItemType;
   quantity?: number;
-  openingStock?: number;
-  currentStock?: number;
-  lowStockThreshold?: number;
   remark?: string | null;
-  counterId: number | string;
+  status?: 0 | 1;
 }
 
 export interface UpdateInventoryPayload {
@@ -36,17 +33,13 @@ export interface UpdateInventoryPayload {
   name?: string;
   type?: InventoryItemType;
   quantity?: number;
-  openingStock?: number;
-  currentStock?: number;
-  lowStockThreshold?: number;
   remark?: string | null;
-  counterId?: number | string | null;
   status?: 0 | 1;
 }
 
 export interface InventoryFilters {
   type?: InventoryItemType;
-  counterId: number | string;
+  counterId?: number | string;
   status?: 0 | 1;
   search?: string;
 }
@@ -59,10 +52,6 @@ export interface InventoryMutationResult {
 
 const appendInventoryFilters = (filters: InventoryFilters) => {
   const params = new URLSearchParams();
-
-  if (!String(filters.counterId).trim()) {
-    throw new AppApiError('Please select a department to view inventory.', 400, null);
-  }
 
   if (filters.type) params.set('type', filters.type);
   if (typeof filters.counterId !== 'undefined' && filters.counterId !== null && String(filters.counterId).trim()) {
@@ -125,12 +114,9 @@ export const createInventory = (payload: CreateInventoryPayload) =>
       action: 'create',
       name: payload.name,
       type: payload.type,
-      quantity: payload.quantity ?? 0,
-      openingStock: payload.openingStock ?? payload.quantity ?? 0,
-      currentStock: payload.currentStock ?? payload.quantity ?? 0,
-      lowStockThreshold: payload.lowStockThreshold ?? 0,
+      ...(typeof payload.quantity !== 'undefined' ? { quantity: payload.quantity } : {}),
       remark: payload.remark ?? null,
-      counterId: payload.counterId,
+      ...(typeof payload.status !== 'undefined' ? { status: payload.status } : {}),
     }),
     'Inventory item created successfully.',
   );
@@ -143,11 +129,7 @@ export const updateInventory = (payload: UpdateInventoryPayload) =>
       ...(typeof payload.name !== 'undefined' ? { name: payload.name } : {}),
       ...(typeof payload.type !== 'undefined' ? { type: payload.type } : {}),
       ...(typeof payload.quantity !== 'undefined' ? { quantity: payload.quantity } : {}),
-      ...(typeof payload.openingStock !== 'undefined' ? { openingStock: payload.openingStock } : {}),
-      ...(typeof payload.currentStock !== 'undefined' ? { currentStock: payload.currentStock } : {}),
-      ...(typeof payload.lowStockThreshold !== 'undefined' ? { lowStockThreshold: payload.lowStockThreshold } : {}),
       ...(typeof payload.remark !== 'undefined' ? { remark: payload.remark } : {}),
-      ...(typeof payload.counterId !== 'undefined' ? { counterId: payload.counterId } : {}),
       ...(typeof payload.status !== 'undefined' ? { status: payload.status } : {}),
     }),
     'Inventory item updated successfully.',

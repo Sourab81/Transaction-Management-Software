@@ -136,10 +136,10 @@ export function useInventory(
   const counterId = filters?.counterId ? String(filters.counterId) : '';
   const requestKey = `${counterId}:${typeof filters?.status === 'undefined' ? '' : filters.status}`;
   const { data, isLoading, error, hasLoaded, reload } = useApiCollection({
-    enabled: enabled && Boolean(counterId),
+    enabled,
     initialData: initialData?.map(mapServiceToInventory),
     requestKey,
-    request: () => getInventory({ ...filters, counterId }),
+    request: () => getInventory({ ...filters, ...(counterId ? { counterId } : {}) }),
     mapResponse: mapInventoryResponse,
   });
 

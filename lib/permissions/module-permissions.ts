@@ -24,6 +24,10 @@ export const modulePermissionMap = {
     'accounts_cash_deposit',
     'Accounts_department_transfer',
   ],
+  colors: [
+    'Customers_list',
+    'Customers_add',
+  ],
   employee: employeeModulePermissions,
   employees: employeeModulePermissions,
   reports: [

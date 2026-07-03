@@ -20,8 +20,16 @@ interface ExpenseEntryFormProps {
   onCancel?: () => void;
 }
 
-const getTodayDate = () => new Date().toLocaleDateString('en-CA');
-const formatMoney = (amount: number | undefined) => `₹${(amount ?? 0).toLocaleString('en-IN')}`;
+type PaidFromValue = `department:${string}` | `account:${string}` | '';
+
+const formatMoney = (amount: number | undefined) => `â‚¹${(amount ?? 0).toLocaleString('en-IN')}`;
+
+const parsePaidFromValue = (value: PaidFromValue): { type: ExpensePaymentMode; id: string } | null => {
+  if (!value) return null;
+  const [type, id] = value.split(':') as [ExpensePaymentMode, string];
+  if ((type !== 'department' && type !== 'account') || !id) return null;
+  return { type, id };
+};
 
 const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   accounts,
@@ -35,19 +43,26 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   onSubmit,
   onCancel,
 }) => {
-  const initialSourceType: ExpensePaymentMode = initialValues?.paymentMode || 'department';
+  const currentDepartment = useMemo(() => (
+    departments.find((department) => department.id === defaultDepartmentId)
+    || departments.find((department) => department.id === initialValues?.counterId)
+    || null
+  ), [defaultDepartmentId, departments, initialValues?.counterId]);
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => account.status === 'Active'),
+    [accounts],
+  );
+  const initialPaidFromValue: PaidFromValue = initialValues?.paymentMode === 'account' && initialValues.accountId
+    ? `account:${initialValues.accountId}`
+    : currentDepartment
+      ? `department:${currentDepartment.id}`
+      : '';
   const initialCategoryId = initialValues?.categoryId || '';
   const [categoryId, setCategoryId] = useState(initialCategoryId);
   const [category, setCategory] = useState(initialValues?.category || '');
-  const [sourceType, setSourceType] = useState<ExpensePaymentMode>(initialSourceType);
-  const [sourceId, setSourceId] = useState(
-    initialSourceType === 'account'
-      ? initialValues?.accountId || ''
-      : initialValues?.counterId || defaultDepartmentId,
-  );
+  const [paidFromValue, setPaidFromValue] = useState<PaidFromValue>(initialPaidFromValue);
   const [amount, setAmount] = useState(initialValues ? String(initialValues.amount) : '');
   const [remark, setRemark] = useState(initialValues?.remark || '');
-  const [expenseDate, setExpenseDate] = useState(initialValues?.date ? initialValues.date.slice(0, 10) : getTodayDate());
   const [validationError, setValidationError] = useState('');
   const [pendingPayload, setPendingPayload] = useState<ExpenseMutationPayload | null>(null);
 
@@ -55,81 +70,66 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
     () => categories.find((entry) => entry.id === categoryId) || null,
     [categoryId, categories],
   );
-  const selectedAccount = useMemo(
-    () => accounts.find((account) => account.id === sourceId) || null,
-    [sourceId, accounts],
-  );
-  const selectedDepartment = useMemo(
-    () => departments.find((department) => department.id === sourceId) || null,
-    [sourceId, departments],
-  );
-  const balanceSource = sourceType === 'account' ? selectedAccount : selectedDepartment;
-  const sourceLabel = sourceType === 'account'
+  const selectedPaidFrom = parsePaidFromValue(paidFromValue);
+  const selectedAccount = selectedPaidFrom?.type === 'account'
+    ? activeAccounts.find((account) => account.id === selectedPaidFrom.id) || null
+    : null;
+  const selectedDepartment = selectedPaidFrom?.type === 'department'
+    ? currentDepartment
+    : null;
+  const balanceSource = selectedAccount || selectedDepartment;
+  const paidFromLabel = selectedPaidFrom?.type === 'account'
     ? selectedAccount
-      ? `${selectedAccount.bankName} Account`
+      ? `Account - ${selectedAccount.bankName}`
       : 'Account'
     : selectedDepartment
-      ? selectedDepartment.name
+      ? `Department - ${selectedDepartment.name}`
       : 'Department';
 
   const resetForm = () => {
     setCategoryId('');
     setCategory('');
-    setSourceType('department');
-    setSourceId(defaultDepartmentId);
+    setPaidFromValue(currentDepartment ? `department:${currentDepartment.id}` : '');
     setAmount('');
     setRemark('');
-    setExpenseDate(getTodayDate());
     setValidationError('');
     setPendingPayload(null);
-  };
-
-  const handleSourceTypeChange = (nextSourceType: ExpensePaymentMode) => {
-    setSourceType(nextSourceType);
-    setSourceId(nextSourceType === 'department' ? defaultDepartmentId : '');
-    setValidationError('');
   };
 
   const buildPayload = () => {
     const parsedAmount = parseNonNegativeNumber(amount);
     const resolvedCategory = selectedCategory?.name || category.trim();
+    const paidFrom = parsePaidFromValue(paidFromValue);
+    const currentDepartmentId = currentDepartment?.id || defaultDepartmentId;
 
     if (!resolvedCategory) {
       return 'Expense Type is required.';
     }
-    if (sourceType !== 'account' && sourceType !== 'department') {
-      return 'Source Type is required.';
+    if (!paidFrom) {
+      return 'Paid From is required.';
     }
-    if (!sourceId) {
-      return sourceType === 'account' ? 'Account is required.' : 'Department is required.';
+    if (paidFrom.type === 'department' && !currentDepartmentId) {
+      return 'Current department is required.';
+    }
+    if (paidFrom.type === 'account' && !paidFrom.id) {
+      return 'Account is required.';
     }
     if (parsedAmount === null || parsedAmount <= 0) {
       return 'Amount must be greater than 0.';
-    }
-    if (!expenseDate) {
-      return 'Expense date is required.';
-    }
-
-    const counterId = sourceType === 'department'
-      ? sourceId
-      : defaultDepartmentId || departments[0]?.id || '';
-
-    if (!counterId) {
-      return 'Department is required.';
     }
 
     return {
       ...(initialValues ? { id: initialValues.id } : {}),
       title: resolvedCategory,
+      expenseTypeId: categoryId || undefined,
       categoryId: categoryId || undefined,
       category: resolvedCategory,
       amount: parsedAmount,
-      paymentMode: sourceType,
-      accountId: sourceType === 'account' ? sourceId : null,
-      counterId,
+      paidFromType: paidFrom.type,
+      departmentId: currentDepartmentId,
+      counterId: currentDepartmentId,
+      accountId: paidFrom.type === 'account' ? paidFrom.id : null,
       remark: remark.trim() || null,
-      date: expenseDate,
-      expenseDate,
     } satisfies ExpenseMutationPayload;
   };
 
@@ -198,80 +198,32 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
           </div>
 
           <div className="col-12 col-md-6">
-            <label className="form-label">Source Type *</label>
-            <div className="expense-source-toggle">
-              <label>
-                <input
-                  type="radio"
-                  name="expense-source-type"
-                  checked={sourceType === 'account'}
-                  onChange={() => handleSourceTypeChange('account')}
-                />
-                Account
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="expense-source-type"
-                  checked={sourceType === 'department'}
-                  onChange={() => handleSourceTypeChange('department')}
-                />
-                Department
-              </label>
-            </div>
+            <label className="form-label" htmlFor="expense-paid-from">Paid From *</label>
+            <select
+              id="expense-paid-from"
+              className="form-select"
+              value={paidFromValue}
+              onChange={(event) => {
+                setPaidFromValue(event.target.value as PaidFromValue);
+                setValidationError('');
+              }}
+              required
+            >
+              <option value="">Select Paid From</option>
+              {currentDepartment ? (
+                <option value={`department:${currentDepartment.id}`}>
+                  Department - {currentDepartment.name} 
+                </option>
+              ) : null}
+              {activeAccounts.map((account) => (
+                <option key={account.id} value={`account:${account.id}`}>
+                  Account - {account.bankName}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="col-12 col-md-6">
-            {sourceType === 'account' ? (
-              <>
-                <label className="form-label" htmlFor="expense-account">Account *</label>
-                <select
-                  id="expense-account"
-                  className="form-select"
-                  value={sourceId}
-                  onChange={(event) => {
-                    setSourceId(event.target.value);
-                    setValidationError('');
-                  }}
-                  required
-                >
-                  <option value="">Select Account</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.bankName} ({formatMoney(account.currentBalance)})
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : (
-              <>
-                <label className="form-label" htmlFor="expense-department">Department *</label>
-                <select
-                  id="expense-department"
-                  className="form-select"
-                  value={sourceId}
-                  onChange={(event) => {
-                    setSourceId(event.target.value);
-                    setValidationError('');
-                  }}
-                  required
-                >
-                  <option value="">Select Department</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name} ({formatMoney(department.currentBalance)})
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
-            <p className="expense-balance-hint">
-              Available Balance:
-              <strong>{formatMoney(typeof balanceSource?.currentBalance === 'number' ? balanceSource.currentBalance : 0)}</strong>
-            </p>
-          </div>
-
-          <div className="col-12 col-md-3">
+          <div className="col-12 col-md-4">
             <label className="form-label" htmlFor="expense-amount">Amount *</label>
             <input
               id="expense-amount"
@@ -288,22 +240,7 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
             />
           </div>
 
-          <div className="col-12 col-md-3">
-            <label className="form-label" htmlFor="expense-date">Expense Date *</label>
-            <input
-              id="expense-date"
-              className="form-control"
-              type="date"
-              value={expenseDate}
-              onChange={(event) => {
-                setExpenseDate(event.target.value);
-                setValidationError('');
-              }}
-              required
-            />
-          </div>
-
-          <div className="col-12">
+          <div className="col-12 col-md-8">
             <label className="form-label" htmlFor="expense-remark">Remark</label>
             <textarea
               id="expense-remark"
@@ -344,7 +281,7 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
         >
           <div className="expense-confirm-summary">
             <div><span>Expense Type</span><strong>{pendingPayload.category}</strong></div>
-            <div><span>Source</span><strong>{sourceLabel}</strong></div>
+            <div><span>Paid From</span><strong>{paidFromLabel}</strong></div>
             <div><span>Amount</span><strong>{formatMoney(pendingPayload.amount)}</strong></div>
           </div>
         </ConfirmActionModal>

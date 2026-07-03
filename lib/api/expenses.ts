@@ -8,11 +8,14 @@ export interface ExpenseRecord {
   expenseId?: string;
   expenseCode?: string;
   title: string;
+  expenseTypeId?: string;
   categoryId?: string;
   category?: string;
   counterId: string;
   counterName?: string;
   paymentMode: ExpensePaymentMode;
+  paidFrom?: string;
+  paidFromType?: ExpensePaymentMode;
   accountId?: string | null;
   accountName?: string;
   bankName?: string;
@@ -32,7 +35,6 @@ export interface ExpenseFilters {
   accountId?: number | string;
   staffId?: number | string;
   categoryId?: number | string;
-  paymentMode?: ExpensePaymentMode | 'all';
   dateFrom?: string;
   dateTo?: string;
   search?: string;
@@ -41,15 +43,15 @@ export interface ExpenseFilters {
 export interface ExpenseMutationPayload {
   id?: number | string;
   title?: string;
+  expenseTypeId?: number | string;
   categoryId?: number | string;
   category: string;
   amount: number;
-  paymentMode: ExpensePaymentMode;
+  paidFromType: ExpensePaymentMode;
   accountId?: number | string | null;
-  counterId: number | string;
+  departmentId?: number | string | null;
+  counterId?: number | string | null;
   remark?: string | null;
-  date?: string;
-  expenseDate?: string;
 }
 
 export interface ExpenseMutationResult {
@@ -104,7 +106,6 @@ export const getExpenses = (filters: ExpenseFilters = {}) =>
     ...(filters.accountId ? { accountId: filters.accountId } : {}),
     ...(filters.staffId ? { staffId: filters.staffId } : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    ...(filters.paymentMode && filters.paymentMode !== 'all' ? { paymentMode: filters.paymentMode } : {}),
     ...(filters.dateFrom ? { dateFrom: filters.dateFrom } : {}),
     ...(filters.dateTo ? { dateTo: filters.dateTo } : {}),
     ...(filters.search ? { search: filters.search } : {}),

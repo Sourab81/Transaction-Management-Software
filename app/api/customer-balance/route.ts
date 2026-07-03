@@ -77,12 +77,12 @@ const readRequiredNumber = (
         ? Number(value)
         : Number.NaN;
 
-    if (Number.isFinite(numericValue) && numericValue >= 0) {
+    if (Number.isFinite(numericValue) && numericValue !== 0) {
       return numericValue;
     }
   }
 
-  return Response.json({ success: false, message: `${label} must be a zero or positive number.` }, { status: 400 });
+  return Response.json({ success: false, message: `${label} cannot be 0.` }, { status: 400 });
 };
 
 const buildListPayload = (payload: Record<string, unknown>) => {
@@ -118,6 +118,7 @@ const buildPayPayload = (payload: Record<string, unknown>) => {
 
   addOptionalField(backendPayload, 'account_id', payload, ['accountId', 'account_id']);
   addOptionalField(backendPayload, 'counter_id', payload, ['counterId', 'counter_id']);
+  addOptionalField(backendPayload, 'payment_date', payload, ['paymentDate', 'payment_date', 'date']);
   addOptionalField(backendPayload, 'remark', payload, ['remark']);
 
   return backendPayload;

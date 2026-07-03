@@ -3,9 +3,9 @@ import { canUseBusinessFeature } from './feature-access';
 import { canAccessModuleForSession } from './session-access';
 import type { BusinessFeatureAction, SessionAccessContext } from './types';
 
-const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'transactions', 'history', 'reports']);
-const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'expense', 'reports', 'transactions']);
-const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'expense', 'reports']);
+const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'colors', 'transactions', 'history', 'reports']);
+const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'expense', 'reports', 'transactions']);
+const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'expense', 'reports']);
 const adminManageableModules = new Set(['customers', 'reports', 'role', 'additions']);
 const adminDeletableModules = new Set(['customers', 'history', 'reports', 'role', 'additions']);
 
@@ -25,6 +25,7 @@ const canViewBusinessRecords = (context: SessionAccessContext, moduleId: string)
       ]);
     case 'services':
     case 'accounts':
+    case 'colors':
     case 'departments':
     case 'reports':
     case 'expense':
@@ -57,15 +58,11 @@ export const canPerformModuleActionForSession = (
       : adminManageableModules.has(moduleId);
   }
 
-  if (context.role === 'Customer') {
-    if (businessManageableModules.has(moduleId) || businessDeletableModules.has(moduleId)) {
-      if (action === 'delete' && !businessDeletableModules.has(moduleId)) return false;
-      if (action !== 'delete' && !businessManageableModules.has(moduleId)) return false;
-
-      return canUseBusinessFeature(context.permissions, moduleId, action);
-    }
-
-    return false;
+    if (context.role === 'Customer') {
+    // Business owners (mapped to Customer role) always have full manage access
+    // to their own workspace modules — no permission gate needed
+    if (action === 'delete') return businessDeletableModules.has(moduleId);
+    return businessManageableModules.has(moduleId);
   }
 
   if (context.role === 'Employee') {
