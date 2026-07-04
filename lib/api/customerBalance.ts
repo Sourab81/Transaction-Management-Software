@@ -1,4 +1,6 @@
-import { AppApiError, requestAppApiMutation } from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface CustomerBalance {
@@ -72,7 +74,7 @@ const handleMutation = async (
   try {
     return normalizeMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -84,20 +86,23 @@ const handleMutation = async (
 };
 
 export const getCustomerBalance = (filters: CustomerBalanceFilters = {}) =>
-  requestAppApiMutation('/api/customer-balance', {
-    action: 'list',
-    pageNo: filters.pageNo ?? 1,
+  directBackendPost('getCustomerBalance', {
+    page_no: filters.pageNo ?? 1,
     limit: filters.limit ?? 10,
     status: filters.status ?? 1,
-    ...(typeof filters.customerId !== 'undefined' ? { customerId: filters.customerId } : {}),
+    ...(typeof filters.customerId !== 'undefined' ? { customer_id: filters.customerId } : {}),
   });
 
 export const payCustomerBalance = (payload: PayCustomerBalancePayload) =>
   handleMutation(
-    () => requestAppApiMutation('/api/customer-balance', {
-      action: 'pay',
-      ...payload,
-      paymentAmount: payload.paymentAmount ?? payload.amount,
+    () => directBackendPost('payCustomerBalance', {
+      customer_id: payload.customerId,
+      payment_amount: payload.paymentAmount ?? payload.amount,
+      payment_mode: payload.paymentMode,
+      ...(payload.accountId ? { account_id: payload.accountId } : {}),
+      ...(payload.counterId ? { counter_id: payload.counterId } : {}),
+      ...(payload.paymentDate ? { payment_date: payload.paymentDate } : {}),
+      ...(payload.remark ? { remark: payload.remark } : {}),
     }),
     'Customer balance payment completed.',
   );

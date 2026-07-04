@@ -68,7 +68,7 @@ const LoginScreen = () => {
 
     try {
       setIsSubmitting(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}login`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/login`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',

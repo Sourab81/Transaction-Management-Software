@@ -24,6 +24,8 @@ import {
   getSessionUserClientCookie,
   setSessionUserClientCookie,
 } from './session-user-cookie';
+import { storeAuthToken, clearAuthToken } from './api/direct-backend';
+import { extractAccessToken } from './mappers/session-user-mapper';
 
 export interface AuthUser {
   id: string;
@@ -293,6 +295,12 @@ export const completeApiLogin = (
   const normalizedEmail = normalizeEmail(email);
   const sessionUser = resolveSessionUserFromApiLogin(normalizedEmail, body);
 
+  // Store the raw JWT so directBackendFetch can attach it as Authorization header.
+  const accessToken = extractAccessToken(body);
+  if (accessToken) {
+    storeAuthToken(accessToken);
+  }
+
   updateStoredUser(sessionUser);
 
   return sessionUser;
@@ -374,6 +382,7 @@ export const logoutUser = () => {
       .filter((key) => key.startsWith('enest:selected-counter:'))
       .forEach((key) => localStorage.removeItem(key));
   }
+  clearAuthToken();
   updateStoredUser(null);
   void clearServerAuthSession();
 };

@@ -1,4 +1,6 @@
-import { AppApiError, requestAppApi, requestAppApiMutation } from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost, directBackendGet } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export type InventoryItemType = 'service' | 'product';
@@ -60,8 +62,7 @@ const appendInventoryFilters = (filters: InventoryFilters) => {
   if (typeof filters.status !== 'undefined') params.set('status', String(filters.status));
   if (filters.search?.trim()) params.set('search', filters.search.trim());
 
-  const query = params.toString();
-  return query ? `/api/inventory?${query}` : '/api/inventory';
+  return params.toString();
 };
 
 const normalizeInventoryMutationResult = (
@@ -94,7 +95,7 @@ const handleInventoryMutation = async (
   try {
     return normalizeInventoryMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeInventoryMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -105,13 +106,15 @@ const handleInventoryMutation = async (
   }
 };
 
-export const getInventory = (filters: InventoryFilters) =>
-  requestAppApi(appendInventoryFilters(filters));
+export const getInventory = (filters: InventoryFilters) => {
+  const query = appendInventoryFilters(filters);
+  const endpoint = query ? `getInventory?${query}` : 'getInventory';
+  return directBackendGet(endpoint);
+};
 
 export const createInventory = (payload: CreateInventoryPayload) =>
   handleInventoryMutation(
-    () => requestAppApiMutation('/api/inventory', {
-      action: 'create',
+    () => directBackendPost('createInventory', {
       name: payload.name,
       type: payload.type,
       ...(typeof payload.quantity !== 'undefined' ? { quantity: payload.quantity } : {}),
@@ -123,8 +126,7 @@ export const createInventory = (payload: CreateInventoryPayload) =>
 
 export const updateInventory = (payload: UpdateInventoryPayload) =>
   handleInventoryMutation(
-    () => requestAppApiMutation('/api/inventory', {
-      action: 'update',
+    () => directBackendPost('updateInventory', {
       id: payload.id,
       ...(typeof payload.name !== 'undefined' ? { name: payload.name } : {}),
       ...(typeof payload.type !== 'undefined' ? { type: payload.type } : {}),
@@ -137,9 +139,6 @@ export const updateInventory = (payload: UpdateInventoryPayload) =>
 
 export const deleteInventory = (id: number | string) =>
   handleInventoryMutation(
-    () => requestAppApiMutation('/api/inventory', {
-      action: 'delete',
-      id,
-    }),
+    () => directBackendPost('deleteInventory', { id }),
     'Inventory item deleted successfully.',
   );

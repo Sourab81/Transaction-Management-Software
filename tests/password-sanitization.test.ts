@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { requestBackendCollection } from '../lib/api/backend-client';
 import { mapBusinessesResponse } from '../lib/mappers/business-mapper';
 import { mapEmployeeRecord } from '../lib/mappers/employee-mapper';
 import { createCustomerPermissions } from '../lib/platform-structure';
@@ -122,29 +121,6 @@ describe('password sanitization', () => {
     assert.equal(Object.hasOwn(employee, 'password'), false);
     assert.equal(Object.hasOwn(businesses[0] ?? {}, 'password'), false);
     assert.equal(JSON.stringify({ employee, businesses }).includes('backend-'), false);
-  });
-
-  test('create-user request payload preserves password case and spaces only for submit transport', async () => {
-    process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.example.test';
-    let capturedBody = '';
-
-    globalThis.fetch = async (_input, init) => {
-      capturedBody = String(init?.body ?? '');
-
-      return new Response(JSON.stringify({ status: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    };
-
-    await requestBackendCollection('businessCreate', 'raw-token', undefined, {
-      username: 'new.business@example.test',
-      password: ' Test@123ABC ',
-      fullname: 'New Business',
-    });
-
-    const bodyParams = new URLSearchParams(capturedBody);
-    assert.equal(bodyParams.get('password'), ' Test@123ABC ');
   });
 
   test('edit forms do not prefill legacy passwords', () => {

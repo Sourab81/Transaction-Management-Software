@@ -1,3 +1,5 @@
+'use client';
+
 import {
   isRecord,
   readJoinedMessage,
@@ -7,6 +9,7 @@ import {
   hasUserIdentityConflict,
   type UserIdentityConflictResult,
 } from '../mappers/user-identity-conflict';
+import { DirectBackendError, directBackendPost } from './direct-backend';
 
 interface FetchBusinessDirectoryPageInput {
   page?: number;
@@ -51,24 +54,6 @@ interface CreateBusinessUserResult {
   error: string;
 }
 
-interface BusinessUsersApiRequestOptions {
-  method?: 'GET' | 'POST';
-  query?: Record<string, string | number | undefined>;
-  body?: unknown;
-}
-
-class BusinessUsersApiError extends Error {
-  readonly statusCode: number | null;
-  readonly body: unknown;
-
-  constructor(message: string, statusCode: number | null, body: unknown) {
-    super(message);
-    this.name = 'BusinessUsersApiError';
-    this.statusCode = statusCode;
-    this.body = body;
-  }
-}
-
 const readBackendErrorMessage = (payload: unknown, fallback: string) => {
   if (typeof payload === 'string' && payload.trim()) {
     return payload.trim();
@@ -81,75 +66,15 @@ const readBackendErrorMessage = (payload: unknown, fallback: string) => {
   return fallback;
 };
 
-const buildQueryString = (query: BusinessUsersApiRequestOptions['query']) => {
-  if (!query) {
-    return '';
-  }
-
-  const params = new URLSearchParams();
-
-  Object.entries(query).forEach(([key, value]) => {
-    if (typeof value !== 'undefined') {
-      params.set(key, String(value));
-    }
-  });
-
-  const queryString = params.toString();
-  return queryString ? `?${queryString}` : '';
-};
-
-const parseLocalApiResponse = async (response: Response): Promise<unknown> => {
-  const rawBody = await response.text();
-
-  if (!rawBody.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch {
-    return rawBody;
-  }
-};
-
-const requestBusinessUsersApi = async <T>({
-  method = 'GET',
-  query,
-  body,
-}: BusinessUsersApiRequestOptions = {}): Promise<T> => {
-  // The backend auth token is httpOnly, so browser code must not call the
-  // backend directly. This local route runs server-side and uses backendFetch.
-  const response = await fetch('/api/business-users' + buildQueryString(query), {
-    method,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: method === 'POST' && typeof body !== 'undefined'
-      ? JSON.stringify(body)
-      : undefined,
-    cache: 'no-store',
-  });
-  const payload = await parseLocalApiResponse(response);
-
-  if (!response.ok) {
-    throw new BusinessUsersApiError(
-      readBackendErrorMessage(payload, 'The business users request failed.'),
-      response.status,
-      payload,
-    );
-  }
-
-  return payload as T;
-};
-
 export async function fetchBusinessDirectoryPage({
   page = 1,
   limit = 10,
 }: FetchBusinessDirectoryPageInput): Promise<FetchBusinessDirectoryPageResult> {
   try {
-    const payload = await requestBusinessUsersApi({
-      query: { page, limit },
+    const payload = await directBackendPost('getUsers', {
+      page_no: String(page),
+      limit: String(limit),
+      role: '2', // Role 2 is backend Business user
     });
 
     return {
@@ -159,7 +84,7 @@ export async function fetchBusinessDirectoryPage({
       error: '',
     };
   } catch (error) {
-    if (error instanceof BusinessUsersApiError) {
+    if (error instanceof DirectBackendError) {
       return {
         ok: false,
         statusCode: error.statusCode ?? 502,
@@ -185,8 +110,10 @@ export async function checkUserIdentityAvailability({
   const emptyConflict = { email: false, phone: false };
 
   try {
-    const payload = await requestBusinessUsersApi({
-      query: { page: 1, limit: 1000 },
+    const payload = await directBackendPost('getUsers', {
+      page_no: '1',
+      limit: '1000',
+      role: '2',
     });
     const conflict = findUserIdentityConflict(payload, { email, phone, excludedUserId });
 
@@ -197,7 +124,7 @@ export async function checkUserIdentityAvailability({
       error: hasUserIdentityConflict(conflict) ? 'A user already exists with the same email or phone number.' : '',
     };
   } catch (error) {
-    if (error instanceof BusinessUsersApiError) {
+    if (error instanceof DirectBackendError) {
       return {
         ok: false,
         statusCode: error.statusCode ?? 502,
@@ -219,9 +146,15 @@ export async function createBusinessUser(
   input: CreateBusinessUserInput,
 ): Promise<CreateBusinessUserResult> {
   try {
-    const payload = await requestBusinessUsersApi({
-      method: 'POST',
-      body: { action: 'create', ...input },
+    const payload = await directBackendPost('createUserByAdmin', {
+      username: input.username,
+      ...(input.password ? { password: input.password } : {}),
+      fullname: input.fullname,
+      role: input.role,
+      email_id: input.email_id,
+      contact_no: input.contact_no,
+      permission: input.permission,
+      privileges: input.privileges,
     });
 
     return {
@@ -231,7 +164,7 @@ export async function createBusinessUser(
       error: '',
     };
   } catch (error) {
-    if (error instanceof BusinessUsersApiError) {
+    if (error instanceof DirectBackendError) {
       return {
         ok: false,
         statusCode: error.statusCode ?? 502,

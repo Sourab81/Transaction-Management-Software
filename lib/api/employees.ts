@@ -1,5 +1,7 @@
+'use client';
+
 import type { CustomerPermissions } from '../platform-structure';
-import { AppApiError, requestAppApiMutation } from './client';
+import { DirectBackendError, directBackendPost } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 import { buildEmployeePermissionsPayload } from '../mappers/employee-permission-payload';
 
@@ -84,7 +86,7 @@ const handleEmployeeMutation = async (
   try {
     return normalizeEmployeeMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeEmployeeMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -127,7 +129,7 @@ const buildEmployeePayload = (
     nickname: payload.nickName,
     contact_no: payload.mobile,
     email_id: payload.email,
-    permissions,
+    permissions: JSON.stringify(permissions),
   };
 
   addOptionalEmployeeField(employeePayload, 'password', payload.password);
@@ -149,9 +151,8 @@ const buildEmployeePayload = (
 };
 
 export const getEmployees = (filters: EmployeeFilters = {}) =>
-  requestAppApiMutation('/api/employees', {
-    action: 'list',
-    pageNo: filters.pageNo ?? 1,
+  directBackendPost('getEmployees', {
+    page_no: filters.pageNo ?? 1,
     limit: filters.limit ?? 100,
     status: filters.status ?? 1,
     ...(filters.search?.trim() ? { search: filters.search.trim() } : {}),
@@ -159,17 +160,12 @@ export const getEmployees = (filters: EmployeeFilters = {}) =>
 
 export const createEmployee = async (formPayload: EmployeeMutationPayload) => {
   const employeePayload = buildEmployeePayload(formPayload);
-  const payload = {
-    action: 'create',
-    ...employeePayload,
-  };
 
   console.log('Submitting employee');
   console.log(employeePayload);
-  console.log(payload);
 
   const result = await handleEmployeeMutation(
-    () => requestAppApiMutation('/api/employees', payload),
+    () => directBackendPost('createEmployee', employeePayload),
     'Employee created successfully.',
   );
 
@@ -179,9 +175,9 @@ export const createEmployee = async (formPayload: EmployeeMutationPayload) => {
 
 export const updateEmployee = (payload: EmployeeMutationPayload & { id: number | string }) =>
   handleEmployeeMutation(
-    () => requestAppApiMutation('/api/employees', {
-      action: 'update',
+    () => directBackendPost('updateEmployee', {
       id: payload.id,
+      employee_id: payload.id,
       ...buildEmployeePayload(payload, { includeActiveStatus: true }),
     }),
     'Employee updated successfully.',
@@ -189,9 +185,6 @@ export const updateEmployee = (payload: EmployeeMutationPayload & { id: number |
 
 export const deleteEmployee = (id: number | string) =>
   handleEmployeeMutation(
-    () => requestAppApiMutation('/api/employees', {
-      action: 'delete',
-      id,
-    }),
+    () => directBackendPost('deleteEmployee', { id, employee_id: id }),
     'Employee deleted successfully.',
   );

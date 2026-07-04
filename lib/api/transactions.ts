@@ -1,4 +1,6 @@
-import { AppApiError, requestAppApi, requestAppApiMutation } from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface Transaction {
@@ -130,7 +132,7 @@ const handleTransactionMutation = async (
   try {
     return normalizeTransactionMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeTransactionMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -145,66 +147,88 @@ export interface TransactionRequestOptions {
   signal?: AbortSignal;
 }
 
-export const buildTransactionsListPath = (filters: TransactionFilters = {}) => {
-  const params = new URLSearchParams();
-  const search = filters.search?.trim();
+const buildTransactionListBody = (filters: TransactionFilters = {}) => {
+  const body: Record<string, unknown> = {
+    page_no: filters.pageNo ?? 1,
+    limit: filters.limit ?? 10,
+    status: filters.status ?? 1,
+  };
 
-  if (search) params.set('search', search);
-  params.set('pageNo', String(filters.pageNo ?? 1));
-  params.set('limit', String(filters.limit ?? 10));
-  params.set('status', String(filters.status ?? 1));
-  if (typeof filters.transactionId !== 'undefined') params.set('transactionId', String(filters.transactionId));
-  if (typeof filters.customerId !== 'undefined') params.set('customerId', String(filters.customerId));
-  if (typeof filters.counterId !== 'undefined') params.set('counterId', String(filters.counterId));
-  if (typeof filters.date !== 'undefined') params.set('date', filters.date);
-  if (typeof filters.dateFrom !== 'undefined') params.set('dateFrom', filters.dateFrom);
-  if (typeof filters.dateTo !== 'undefined') params.set('dateTo', filters.dateTo);
+  if (filters.search?.trim()) body.search = filters.search.trim();
+  if (typeof filters.transactionId !== 'undefined') body.transaction_id = filters.transactionId;
+  if (typeof filters.customerId !== 'undefined') body.customer_id = filters.customerId;
+  if (typeof filters.counterId !== 'undefined') body.counter_id = filters.counterId;
+  if (typeof filters.date !== 'undefined') body.date = filters.date;
+  if (typeof filters.dateFrom !== 'undefined') body.date_from = filters.dateFrom;
+  if (typeof filters.dateTo !== 'undefined') body.date_to = filters.dateTo;
 
-  return `/api/transactions?${params.toString()}`;
+  return body;
 };
+
+const mapChildRows = (rows: TransactionChild[]) =>
+  rows.map((row) => ({
+    form_name: row.formName,
+    no_of_transaction: row.noOfTransaction,
+    inventory_id: row.inventoryId,
+    transaction_account: row.transactionAccount,
+    amount: row.amount,
+    service_charge: row.serviceCharge ?? 0,
+    bank_charge: row.bankCharge ?? 0,
+    other_charge: row.otherCharge ?? 0,
+    total_amount: row.totalAmount,
+    ...(row.id ? { id: row.id, transaction_child_id: row.id } : {}),
+    ...(row.remark ? { remark: row.remark } : {}),
+  }));
 
 export const getTransactions = (
   filters: TransactionFilters = {},
   options: TransactionRequestOptions = {},
-) => requestAppApi(buildTransactionsListPath(filters), {
-  signal: options.signal,
-});
+) =>
+  directBackendPost('getTransactions', buildTransactionListBody(filters), options.signal);
 
 export const getTransactionById = (id: string | number) =>
-  requestAppApi(`/api/transactions/${encodeURIComponent(String(id))}`);
+  directBackendPost('getTransactions', { transaction_id: id, page_no: 1, limit: 1, status: 1 });
 
 export const createTransaction = (payload: CreateTransactionPayload) =>
   handleTransactionMutation(
-    () => requestAppApiMutation('/api/transactions', {
-      action: 'create',
-      ...payload,
+    () => directBackendPost('createTransaction', {
+      customer_id: payload.customerId,
+      counter_id: payload.counterId,
+      rows: JSON.stringify(mapChildRows(payload.rows)),
+      ...(payload.date ? { date: payload.date } : {}),
     }),
     'Transaction created successfully.',
   );
 
 export const updateTransaction = (payload: UpdateTransactionPayload) =>
   handleTransactionMutation(
-    () => requestAppApiMutation('/api/transactions', {
-      action: 'update',
-      ...payload,
+    () => directBackendPost('updateTransaction', {
+      transaction_id: payload.transactionId,
+      ...(payload.customerId ? { customer_id: payload.customerId } : {}),
+      ...(payload.counterId ? { counter_id: payload.counterId } : {}),
+      ...(payload.rows ? { rows: JSON.stringify(mapChildRows(payload.rows)) } : {}),
+      ...(payload.removedRowIds ? { removed_row_ids: JSON.stringify(payload.removedRowIds) } : {}),
+      ...(typeof payload.status !== 'undefined' ? { status: payload.status } : {}),
     }),
     'Transaction updated successfully.',
   );
 
 export const deleteTransaction = (transactionId: number | string) =>
   handleTransactionMutation(
-    () => requestAppApiMutation('/api/transactions', {
-      action: 'delete',
-      transactionId,
-    }),
+    () => directBackendPost('deleteTransaction', { transaction_id: transactionId }),
     'Transaction deleted successfully.',
   );
 
 export const payTransaction = (payload: PayTransactionPayload) =>
   handleTransactionMutation(
-    () => requestAppApiMutation('/api/transactions', {
-      action: 'pay',
-      ...payload,
+    () => directBackendPost('payTransaction', {
+      transaction_id: payload.transactionId,
+      customer_id: payload.customerId,
+      online_amount: payload.onlineAmount,
+      cash_amount: payload.cashAmount,
+      ...(payload.counterId ? { counter_id: payload.counterId } : {}),
+      ...(payload.accountId ? { account_id: payload.accountId } : {}),
+      ...(payload.remark ? { remark: payload.remark } : {}),
     }),
     'Transaction payment saved successfully.',
   );

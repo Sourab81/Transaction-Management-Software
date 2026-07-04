@@ -3,8 +3,8 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { CustomerBalance } from '../api/customerBalance';
 import { getCustomerOutstanding } from '../api/customerOutstanding';
+import { DirectBackendError } from '../api/direct-backend';
 import { mapCustomerBalanceResponse } from '../mappers/customer-balance-mapper';
-import { AppApiError } from '../api/client';
 import { isRecord, readNumberValue, readRecordValue } from '../mappers/legacy-record';
 
 interface CustomerOutstandingPagination {
@@ -93,7 +93,7 @@ export function useCustomerOutstanding(
       } catch (requestError) {
         if (isCancelled) return;
 
-        if (requestError instanceof AppApiError && requestError.statusCode === 501) {
+        if (requestError instanceof DirectBackendError && requestError.statusCode === 501) {
           setRows([]);
           setPagination(null);
           setError('');

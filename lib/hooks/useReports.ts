@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReportItem } from '../store';
-import { requestAppApi } from '../api/client';
+import { directBackendGet } from '../api/direct-backend';
 import { mapReportsResponse } from '../mappers/report-mapper';
 import { useApiCollection } from './useApiCollection';
 
@@ -16,17 +16,24 @@ export function useReports(
   enabled: boolean,
   initialData?: ReportItem[],
 ): UseReportsResult {
+  const endpoint = process.env.NEXT_PUBLIC_API_REPORTS_PATH?.trim();
+
   const { data, isLoading, error, reload } = useApiCollection({
-    enabled,
+    enabled: enabled && !!endpoint,
     initialData,
-    request: () => requestAppApi('/api/reports'),
+    request: () => {
+      if (!endpoint) {
+        throw new Error('Backend endpoint is not configured for reports.');
+      }
+      return directBackendGet(endpoint);
+    },
     mapResponse: mapReportsResponse,
   });
 
   return {
     reports: data,
     isLoading,
-    error,
+    error: !endpoint && enabled ? 'Reports path not configured.' : error,
     reload,
   };
 }

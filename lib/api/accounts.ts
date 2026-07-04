@@ -1,10 +1,8 @@
+'use client';
+
 import type { Account } from '../store';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
-import {
-  AppApiError,
-  requestAppApi,
-  requestAppApiMutation,
-} from './client';
+import { DirectBackendError, directBackendPost, directBackendGet } from './direct-backend';
 
 export interface AccountMutationInput {
   accountHolder: string;
@@ -37,7 +35,7 @@ const isNoDataFoundBody = (body: unknown) =>
 
 const ensureSuccessPayload = (payload: unknown, fallbackMessage: string) => {
   if (isRecord(payload) && (payload.status === false || payload.success === false)) {
-    throw new AppApiError(
+    throw new DirectBackendError(
       readAccountsApiErrorMessage(payload, fallbackMessage),
       400,
       payload,
@@ -48,7 +46,6 @@ const ensureSuccessPayload = (payload: unknown, fallbackMessage: string) => {
 };
 
 const buildCreateAccountPayload = (input: AccountMutationInput) => ({
-  action: 'create',
   acc_holder: input.accountHolder,
   bank_name: input.bankName,
   acc_no: input.accountNumber,
@@ -61,11 +58,10 @@ const buildCreateAccountPayload = (input: AccountMutationInput) => ({
 
 export const getAccountsResponse = async () => {
   try {
-    // Frontend calls this local route; the server route reads the httpOnly token.
-    const payload = await requestAppApi('/api/accounts');
+    const payload = await directBackendGet('getAccounts');
     return isNoDataFoundBody(payload) ? [] : payload;
   } catch (error) {
-    if (error instanceof AppApiError && isNoDataFoundBody(error.body)) {
+    if (error instanceof DirectBackendError && isNoDataFoundBody(error.body)) {
       return [];
     }
 
@@ -74,15 +70,11 @@ export const getAccountsResponse = async () => {
 };
 
 export const createAccount = async (input: AccountMutationInput) => {
-  const payload = await requestAppApiMutation('/api/accounts', buildCreateAccountPayload(input));
+  const payload = await directBackendPost('createAccount', buildCreateAccountPayload(input));
   return ensureSuccessPayload(payload, 'Unable to create account.');
 };
 
 export const deleteAccount = async (id: string) => {
-  const payload = await requestAppApiMutation('/api/accounts', {
-    action: 'delete',
-    id,
-  });
-
+  const payload = await directBackendPost('deleteAccount', { id });
   return ensureSuccessPayload(payload, 'Unable to delete account.');
 };

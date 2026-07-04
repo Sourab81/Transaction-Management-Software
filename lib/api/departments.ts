@@ -1,3 +1,5 @@
+'use client';
+
 import type { Counter } from '../store';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 import {
@@ -6,15 +8,7 @@ import {
   type DepartmentRecord,
 } from '../mappers/department.mapper';
 import { mapCountersResponse } from '../mappers/counter-mapper';
-import {
-  BackendApiConfigurationError,
-  requestBackendCollection,
-} from './backend-client';
-import {
-  AppApiError,
-  requestAppApi,
-  requestAppApiMutation,
-} from './client';
+import { DirectBackendError, directBackendPost, directBackendGet } from './direct-backend';
 
 export class DepartmentsApiError extends Error {
   readonly statusCode: number | null;
@@ -61,12 +55,12 @@ const isNoDataFoundBody = (body: unknown) =>
 
 export const getDepartmentsResponse = async () => {
   try {
-    // Frontend calls this local route; Departments are called "Counters" in the backend.
-    const payload = await requestAppApi('/api/departments');
+    // Departments are called "Counters" in the backend.
+    const payload = await directBackendGet('getCounters');
 
     return isNoDataFoundBody(payload) ? [] : payload;
   } catch (error) {
-    if (error instanceof AppApiError && isNoDataFoundBody(error.body)) {
+    if (error instanceof DirectBackendError && isNoDataFoundBody(error.body)) {
       return [];
     }
 
@@ -127,16 +121,15 @@ export const createDepartmentResponse = async (
   input: CreateDepartmentInput,
 ): Promise<CreateDepartmentResult> => {
   try {
-    const payload = await requestAppApiMutation('/api/departments', {
-      action: 'create',
+    const payload = await directBackendPost('createCounter', {
       name: input.name,
-      remark: input.remark,
-      openingBalance: input.openingBalance,
+      opening_balance: input.openingBalance,
+      remark: input.remark ?? '',
     });
 
     return normalizeCreateDepartmentPayload(payload, 'Department created successfully.');
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeCreateDepartmentPayload(error.body, error.message || 'Unable to create department.');
     }
 
@@ -160,13 +153,25 @@ export const getDepartmentsWithToken = async (
     );
   }
 
-  let response: Awaited<ReturnType<typeof requestBackendCollection>>;
-
+  // Since we now call the backend directly, we can use directBackendGet.
+  // The token passed here is the same one stored in localStorage.
   try {
-    response = await requestBackendCollection('departments', normalizedToken);
+    const response = await directBackendGet('getCounters');
+    if (isNoDataFoundBody(response)) return [];
+    return mapCountersResponse(response);
   } catch (error) {
-    if (error instanceof BackendApiConfigurationError) {
-      throw new DepartmentsApiError(error.message, error.statusCode, null);
+    if (error instanceof DirectBackendError) {
+      if (isNoDataFoundBody(error.body)) return [];
+      throw new DepartmentsApiError(
+        readDepartmentsApiErrorMessage(
+          error.body,
+          error.statusCode === 401 || error.statusCode === 403
+            ? 'Your session is not authorized to load departments.'
+            : 'Unable to load departments right now.',
+        ),
+        error.statusCode,
+        error.body,
+      );
     }
 
     throw new DepartmentsApiError(
@@ -175,27 +180,4 @@ export const getDepartmentsWithToken = async (
       null,
     );
   }
-
-  if (response.statusCode >= 400) {
-    if (isNoDataFoundBody(response.body)) {
-      return [];
-    }
-
-    throw new DepartmentsApiError(
-      readDepartmentsApiErrorMessage(
-        response.body,
-        response.statusCode === 401 || response.statusCode === 403
-          ? 'Your session is not authorized to load departments.'
-          : 'Unable to load departments right now.',
-      ),
-      response.statusCode,
-      response.body,
-    );
-  }
-
-  if (isNoDataFoundBody(response.body)) {
-    return [];
-  }
-
-  return mapCountersResponse(response.body);
 };

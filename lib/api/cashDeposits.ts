@@ -1,8 +1,6 @@
-import {
-  AppApiError,
-  requestAppApi,
-  requestAppApiMutation,
-} from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost, directBackendGet } from './direct-backend';
 import {
   extractCollectionItems,
   isRecord,
@@ -53,8 +51,7 @@ const appendCashDepositFilters = (filters: CashDepositFilters = {}) => {
   if (filters.pageNo) params.set('page_no', String(filters.pageNo));
   if (filters.limit) params.set('limit', String(filters.limit));
 
-  const query = params.toString();
-  return query ? `/api/cash-deposits?${query}` : '/api/cash-deposits';
+  return params.toString();
 };
 
 export const mapCashDepositRecord = (record: Record<string, unknown>): CashDepositRecord | null => {
@@ -113,22 +110,25 @@ const normalizeMutationResult = (
   };
 };
 
-export const getCashDeposits = (filters: CashDepositFilters = {}) =>
-  requestAppApi(appendCashDepositFilters(filters));
+export const getCashDeposits = (filters: CashDepositFilters = {}) => {
+  const query = appendCashDepositFilters(filters);
+  const endpoint = query ? `cashDeposits?${query}` : 'cashDeposits';
+  return directBackendGet(endpoint);
+};
 
 export const createCashDeposit = async (payload: CreateCashDepositPayload) => {
   try {
     return normalizeMutationResult(
-      await requestAppApiMutation('/api/cash-deposits', {
-        accountId: payload.accountId,
+      await directBackendPost('cashDeposit', {
+        account_id: payload.accountId,
         amount: payload.amount,
         remark: payload.remark ?? null,
-        ...(payload.departmentId ? { departmentId: payload.departmentId } : {}),
+        ...(payload.departmentId ? { department_id: payload.departmentId, counter_id: payload.departmentId } : {}),
       }),
       'Cash deposit saved successfully.',
     );
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeMutationResult(error.body, error.message || 'Unable to save cash deposit.');
     }
 

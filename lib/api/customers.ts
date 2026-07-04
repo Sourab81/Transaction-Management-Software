@@ -1,4 +1,6 @@
-import { AppApiError, requestAppApi, requestAppApiMutation } from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost, directBackendGet } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface Customer {
@@ -45,19 +47,6 @@ export interface CustomerMutationResult {
   customer?: unknown;
 }
 
-const appendCustomerFilters = (filters: CustomerFilters = {}) => {
-  const params = new URLSearchParams();
-
-  if (typeof filters.pageNo !== 'undefined') params.set('pageNo', String(filters.pageNo));
-  if (typeof filters.page !== 'undefined') params.set('page', String(filters.page));
-  if (typeof filters.limit !== 'undefined') params.set('limit', String(filters.limit));
-  if (filters.search?.trim()) params.set('search', filters.search.trim());
-  if (typeof filters.status !== 'undefined') params.set('status', String(filters.status));
-
-  const query = params.toString();
-  return query ? `/api/customers?${query}` : '/api/customers';
-};
-
 const normalizeCustomerMutationResult = (
   payload: unknown,
   fallbackMessage: string,
@@ -90,7 +79,7 @@ const handleCustomerMutation = async (
   try {
     return normalizeCustomerMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeCustomerMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -101,50 +90,48 @@ const handleCustomerMutation = async (
   }
 };
 
-export const getCustomers = (filters?: CustomerFilters) =>
-  requestAppApi(appendCustomerFilters(filters));
+export const getCustomers = (filters: CustomerFilters = {}) =>
+  directBackendPost('getCustomers', {
+    page_no: filters.pageNo ?? filters.page ?? 1,
+    limit: filters.limit ?? 10,
+    status: filters.status ?? 1,
+    ...(filters.search?.trim() ? { search: filters.search.trim() } : {}),
+  });
 
 export const createCustomer = (payload: CreateCustomerPayload) =>
   handleCustomerMutation(
-    () => requestAppApiMutation('/api/customers', {
-      action: 'create',
-      ...payload,
+    () => directBackendPost('createCustomer', {
+      customer_name: payload.customerName,
+      mobile_no: payload.mobileNo,
+      ...(payload.dob ? { dob: payload.dob } : {}),
+      ...(payload.email ? { email: payload.email } : {}),
+      ...(payload.address ? { address: payload.address } : {}),
+      ...(payload.remark ? { remark: payload.remark } : {}),
+      ...(payload.colorId ? { customer_color_id: payload.colorId } : {}),
+      ...(payload.color ? { customer_color: payload.color } : {}),
     }),
     'Customer created successfully.',
   );
 
 export const updateCustomer = (payload: UpdateCustomerPayload) =>
   handleCustomerMutation(
-    () => {
-      const apiUrl = '/api/customers';
-      const requestPayload = {
-        action: 'update',
-        ...payload,
-      };
-      console.log('API URL', apiUrl);
-      console.log('Update Payload', requestPayload);
-      return requestAppApiMutation(apiUrl, requestPayload)
-        .then((data) => {
-          console.log('Response Status:', 200);
-          console.log('Response Data:', data);
-          return data;
-        })
-        .catch((error) => {
-          if (error instanceof AppApiError) {
-            console.log('Response Status:', error.statusCode);
-            console.log('Response Data:', error.body);
-          }
-          throw error;
-        });
-    },
+    () => directBackendPost('updateCustomer', {
+      id: payload.id,
+      customer_id: payload.id,
+      ...(payload.customerName ? { customer_name: payload.customerName } : {}),
+      ...(payload.mobileNo ? { mobile_no: payload.mobileNo } : {}),
+      ...(payload.dob !== undefined ? { dob: payload.dob } : {}),
+      ...(payload.email !== undefined ? { email: payload.email } : {}),
+      ...(payload.address !== undefined ? { address: payload.address } : {}),
+      ...(payload.remark !== undefined ? { remark: payload.remark } : {}),
+      ...(payload.colorId !== undefined ? { customer_color_id: payload.colorId } : {}),
+      ...(payload.color !== undefined ? { customer_color: payload.color } : {}),
+    }),
     'Customer updated successfully.',
   );
 
 export const deleteCustomer = (id: number | string) =>
   handleCustomerMutation(
-    () => requestAppApiMutation('/api/customers', {
-      action: 'delete',
-      id,
-    }),
+    () => directBackendPost('deleteCustomer', { id, customer_id: id }),
     'Customer deleted successfully.',
   );

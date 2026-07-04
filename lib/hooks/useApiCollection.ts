@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useEffectEvent, useState } from 'react';
-import { AppApiError } from '../api/client';
+import { DirectBackendError } from '../api/direct-backend';
 
 interface UseApiCollectionOptions<T> {
   enabled: boolean;
@@ -71,7 +71,7 @@ export function useApiCollection<T>({
           return;
         }
 
-        if (requestError instanceof AppApiError && requestError.statusCode === 501) {
+        if (requestError instanceof DirectBackendError && requestError.statusCode === 501) {
           setData([]);
           setError('');
           setHasLoaded(true);

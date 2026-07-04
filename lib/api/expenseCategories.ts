@@ -1,4 +1,6 @@
-import { AppApiError, readApiErrorMessage } from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost, directBackendGet } from './direct-backend';
 import {
   extractCollectionItems,
   isRecord,
@@ -74,7 +76,7 @@ const handleCategoryMutation = async (
   try {
     return normalizeCategoryMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeCategoryMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -85,54 +87,12 @@ const handleCategoryMutation = async (
   }
 };
 
-const parseResponseBody = async (response: Response) => {
-  const rawBody = await response.text();
-
-  if (!rawBody.trim()) return null;
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch {
-    return rawBody;
-  }
-};
-
-const requestExpenseTypeApi = async (
-  apiUrl: string,
-  payload?: Record<string, unknown>,
-) => {
-  console.log('Expense Type Payload:', payload ?? null);
-  console.log('Request URL:', apiUrl);
-
-  const response = await fetch(apiUrl, {
-    method: payload ? 'POST' : 'GET',
-    headers: payload
-      ? {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        }
-      : undefined,
-    body: payload ? JSON.stringify(payload) : undefined,
-    cache: 'no-store',
-  });
-  const data = await parseResponseBody(response);
-
-  console.log('Response Status:', response.status);
-  console.log('Response Data:', data);
-
-  if (!response.ok) {
-    throw new AppApiError(readApiErrorMessage(data, 'The expense type request failed.'), response.status, data);
-  }
-
-  return data;
-};
-
-export const getExpenseCategories = async () => requestExpenseTypeApi('/api/expense-types');
+export const getExpenseCategories = async () => directBackendGet('expense-types?status=1&page_no=1&limit=500');
 
 export const createExpenseCategory = (payload: { name: string; remark?: string | null; status?: number | string }) =>
   handleCategoryMutation(
-    () => requestExpenseTypeApi('/api/expense-types', {
-      action: 'create',
+    () => directBackendPost('createExpenseType', {
+      expense_type_name: payload.name,
       name: payload.name,
       remark: payload.remark ?? null,
       status: payload.status ?? 1,
@@ -142,18 +102,23 @@ export const createExpenseCategory = (payload: { name: string; remark?: string |
 
 export const updateExpenseCategory = (payload: { id: string | number; name: string; remark?: string | null; status?: number | string }) =>
   handleCategoryMutation(
-    () => requestExpenseTypeApi('/api/expense-types', {
-      action: 'update',
-      ...payload,
+    () => directBackendPost('updateExpenseType', {
+      id: payload.id,
+      expense_type_id: payload.id,
+      expense_type_name: payload.name,
+      name: payload.name,
+      remark: payload.remark ?? null,
+      status: payload.status ?? 1,
     }),
     'Expense category updated successfully.',
   );
 
 export const deleteExpenseCategory = (id: string | number) =>
   handleCategoryMutation(
-    () => requestExpenseTypeApi('/api/expense-types', {
-      action: 'delete',
+    () => directBackendPost('changeExpenseTypeStatus', {
       id,
+      expense_type_id: id,
+      status: 0,
     }),
     'Expense category deleted successfully.',
   );

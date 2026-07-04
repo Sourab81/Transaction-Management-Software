@@ -1,6 +1,6 @@
 'use client';
 
-import { requestAppApi } from '../api/client';
+import { directBackendGet } from '../api/direct-backend';
 import { useApiResource } from './useApiResource';
 
 export interface StatCards {
@@ -86,7 +86,7 @@ const mapDashboardStats = (payload: unknown): DashboardStats | null => {
 export function useDashboardStats(enabled: boolean) {
   const { data, isLoading, error, reload } = useApiResource({
     enabled,
-    request: () => requestAppApi('/api/userapi/dashboardStats'),
+    request: () => directBackendGet('userapi/dashboardStats'),
     mapResponse: mapDashboardStats,
   });
 

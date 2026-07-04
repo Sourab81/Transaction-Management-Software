@@ -1,6 +1,6 @@
 'use client';
 
-import { AppApiError, requestAppApi } from './client';
+import { DirectBackendError, directBackendPost, directBackendGet, directBackendFetch } from './direct-backend';
 import {
   mapCustomerColorResponse,
   mapCustomerColorsResponse,
@@ -29,25 +29,25 @@ const normalizeHexCode = (hexCode: string) => {
 };
 
 const normalizeErrorMessage = (error: unknown, fallbackMessage: string) => {
-  if (error instanceof AppApiError) return error.message || fallbackMessage;
+  if (error instanceof DirectBackendError) return error.message || fallbackMessage;
   return error instanceof Error ? error.message : fallbackMessage;
 };
 
 export const getCustomerColors = async () => (
-  mapCustomerColorsResponse(await requestAppApi('/api/customer-colors'))
+  mapCustomerColorsResponse(await directBackendGet('customer-colors'))
 );
 
 export const saveCustomerColor = async (payload: CustomerColorPayload, id?: string) => {
   const normalizedPayload = {
     name: payload.name.trim(),
-    hexCode: normalizeHexCode(payload.hexCode),
+    color_code: normalizeHexCode(payload.hexCode),
     remark: payload.remark?.trim() || null,
-    status: payload.status,
+    status: payload.status === 'Inactive' ? 0 : 1,
   };
 
   try {
-    const response = await requestAppApi(
-      id ? `/api/customer-colors/${encodeURIComponent(id)}` : '/api/customer-colors',
+    const response = await directBackendFetch(
+      id ? `customer-colors/${encodeURIComponent(id)}` : 'customer-colors',
       {
         method: id ? 'PUT' : 'POST',
         body: normalizedPayload,

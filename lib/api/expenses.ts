@@ -1,4 +1,6 @@
-import { AppApiError, requestAppApi, requestAppApiMutation } from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export type ExpensePaymentMode = 'department' | 'account';
@@ -85,7 +87,7 @@ const handleExpenseMutation = async (
   try {
     return normalizeMutationResult(await request(), fallbackMessage);
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return normalizeMutationResult(error.body, error.message || fallbackMessage);
     }
 
@@ -96,38 +98,70 @@ const handleExpenseMutation = async (
   }
 };
 
+const buildBackendPayload = (payload: ExpenseMutationPayload, id?: number | string) => {
+  const category = payload.category;
+  const title = payload.title || category;
+  const paidFromType = payload.paidFromType.toLowerCase();
+
+  const body: Record<string, unknown> = {
+    title,
+    expense_title: title,
+    category,
+    amount: payload.amount,
+    paid_from_type: paidFromType,
+    department_id: payload.departmentId ?? payload.counterId ?? null,
+  };
+
+  if (paidFromType === 'account') {
+    body.account_id = payload.accountId ?? null;
+  }
+
+  if (id) {
+    body.id = id;
+    body.expense_id = id;
+  }
+
+  if (payload.expenseTypeId) {
+    body.expense_type_id = payload.expenseTypeId;
+  }
+  if (payload.categoryId) {
+    body.category_id = payload.categoryId;
+  }
+  if (payload.remark) {
+    body.remark = payload.remark;
+  }
+
+  return body;
+};
+
 export const getExpenses = (filters: ExpenseFilters = {}) =>
-  requestAppApiMutation('/api/expenses', {
-    action: 'list',
-    pageNo: filters.pageNo ?? 1,
+  directBackendPost('getExpenses', {
+    page_no: filters.pageNo ?? 1,
     limit: filters.limit ?? 10,
     status: filters.status ?? 1,
-    ...(filters.counterId ? { counterId: filters.counterId } : {}),
-    ...(filters.accountId ? { accountId: filters.accountId } : {}),
-    ...(filters.staffId ? { staffId: filters.staffId } : {}),
-    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    ...(filters.dateFrom ? { dateFrom: filters.dateFrom } : {}),
-    ...(filters.dateTo ? { dateTo: filters.dateTo } : {}),
+    ...(filters.counterId ? { counter_id: filters.counterId } : {}),
+    ...(filters.accountId ? { account_id: filters.accountId } : {}),
+    ...(filters.staffId ? { staff_id: filters.staffId } : {}),
+    ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
+    ...(filters.dateFrom ? { date_from: filters.dateFrom } : {}),
+    ...(filters.dateTo ? { date_to: filters.dateTo } : {}),
     ...(filters.search ? { search: filters.search } : {}),
   });
 
 export const createExpense = (payload: ExpenseMutationPayload) =>
   handleExpenseMutation(
-    () => requestAppApiMutation('/api/expenses', {
-      action: 'create',
-      ...payload,
-    }),
+    () => directBackendPost('createExpense', buildBackendPayload(payload)),
     'Expense saved successfully.',
   );
 
 export const updateExpense = (payload: ExpenseMutationPayload & { id: number | string }) =>
   handleExpenseMutation(
-    () => requestAppApi(`/api/expenses/${payload.id}`, { method: 'PUT', body: { ...payload } }),
+    () => directBackendPost('updateExpense', buildBackendPayload(payload, payload.id)),
     'Expense updated successfully.',
   );
 
 export const deleteExpense = (expenseId: number | string) =>
   handleExpenseMutation(
-    () => requestAppApi(`/api/expenses/${expenseId}`, { method: 'DELETE' }),
+    () => directBackendPost('deleteExpense', { id: expenseId, expense_id: expenseId }),
     'Expense deleted successfully.',
   );

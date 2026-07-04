@@ -1,4 +1,6 @@
-import { requestAppApiMutation } from './client';
+'use client';
+
+import { directBackendPost } from './direct-backend';
 
 export interface CustomerPayment {
   id: number | string;
@@ -32,11 +34,10 @@ export interface CustomerPaymentFilters {
 }
 
 export const getCustomerPayments = (filters: CustomerPaymentFilters = {}) =>
-  requestAppApiMutation('/api/customer-payments', {
-    action: 'list',
-    pageNo: filters.pageNo ?? 1,
+  directBackendPost('getCustomerPayments', {
+    page_no: filters.pageNo ?? 1,
     limit: filters.limit ?? 10,
     status: filters.status ?? 1,
-    ...(typeof filters.customerId !== 'undefined' ? { customerId: filters.customerId } : {}),
-    ...(typeof filters.counterId !== 'undefined' ? { counterId: filters.counterId } : {}),
+    ...(typeof filters.customerId !== 'undefined' ? { customer_id: filters.customerId } : {}),
+    ...(typeof filters.counterId !== 'undefined' ? { counter_id: filters.counterId } : {}),
   });

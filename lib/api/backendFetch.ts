@@ -146,6 +146,10 @@ export async function backendFetch<T>(
     throw new BackendFetchError('No auth token cookie is available for the backend request.', 401, null);
   }
 
+  const authorizationHeader = token.toLowerCase().startsWith('bearer ')
+    ? token
+    : `Bearer ${token}`;
+
   const method = options.method ?? 'GET';
   const bodyFormat = options.bodyFormat ?? 'json';
   let response: Response;
@@ -155,7 +159,7 @@ export async function backendFetch<T>(
       method,
       headers: {
         Accept: 'application/json',
-        Authorization: token,
+        Authorization: authorizationHeader,
         'Content-Type': bodyFormat === 'form'
           ? 'application/x-www-form-urlencoded;charset=UTF-8'
           : 'application/json',

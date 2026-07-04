@@ -1,8 +1,6 @@
-import {
-  AppApiError,
-  requestAppApi,
-  requestAppApiMutation,
-} from './client';
+'use client';
+
+import { DirectBackendError, directBackendPost } from './direct-backend';
 import {
   isRecord,
   readJoinedMessage,
@@ -38,10 +36,9 @@ const readBackendErrorMessage = (payload: unknown, fallback: string) => {
   return fallback;
 };
 
-const runRoleMutation = async (body: Record<string, unknown>): Promise<RoleTemplateActionResult> => {
+const runRoleMutation = async (endpoint: string, body: Record<string, unknown>): Promise<RoleTemplateActionResult> => {
   try {
-    // Frontend calls the local role route; backend auth is handled server-side.
-    const payload = await requestAppApiMutation('/api/roles', body);
+    const payload = await directBackendPost(endpoint, body);
 
     return {
       ok: true,
@@ -50,7 +47,7 @@ const runRoleMutation = async (body: Record<string, unknown>): Promise<RoleTempl
       error: '',
     };
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return {
         ok: false,
         statusCode: error.statusCode ?? 502,
@@ -70,8 +67,7 @@ const runRoleMutation = async (body: Record<string, unknown>): Promise<RoleTempl
 
 export const fetchRoleTemplates = async () => {
   try {
-    // Roles list is loaded only when the Roles page or user form asks for it.
-    const payload = await requestAppApi('/api/roles');
+    const payload = await directBackendPost('getRoles', {});
 
     return {
       ok: true,
@@ -80,7 +76,7 @@ export const fetchRoleTemplates = async () => {
       error: '',
     };
   } catch (error) {
-    if (error instanceof AppApiError) {
+    if (error instanceof DirectBackendError) {
       return {
         ok: false,
         statusCode: error.statusCode ?? 502,
@@ -103,9 +99,7 @@ export const createRoleTemplate = async ({
   privileges,
   backendPrivileges,
 }: SaveRoleTemplateInput) => {
-  // Create role runs only after the create role form is submitted.
-  return runRoleMutation({
-    action: 'create',
+  return runRoleMutation('createRoleByAdmin', {
     role_name: roleName,
     privileges: JSON.stringify(buildRoleTemplatePrivilegesPayload(privileges, backendPrivileges)),
   });
@@ -126,9 +120,7 @@ export const updateRoleTemplate = async ({
     };
   }
 
-  // Update role runs only after the edit role form is submitted.
-  return runRoleMutation({
-    action: 'update',
+  return runRoleMutation('updateRoleByAdmin', {
     id,
     role_name: roleName,
     privileges: JSON.stringify(buildRoleTemplatePrivilegesPayload(privileges, backendPrivileges)),
@@ -136,6 +128,5 @@ export const updateRoleTemplate = async ({
 };
 
 export const deleteRoleTemplate = async (id: string) => {
-  // Delete role runs only after the delete confirmation action.
-  return runRoleMutation({ action: 'delete', id });
+  return runRoleMutation('deleteRoleByAdmin', { id });
 };

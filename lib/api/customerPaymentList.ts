@@ -1,4 +1,6 @@
-import { requestAppApi } from './client';
+'use client';
+
+import { directBackendGet } from './direct-backend';
 import { isRecord, readNumberValue, readStringValue } from '../mappers/legacy-record';
 
 export interface Customer {
@@ -121,9 +123,13 @@ const mapTransaction = (
 };
 
 export const searchCustomers = async (query: string, signal?: AbortSignal) => {
-  const response = await requestAppApi<CustomerSearchApiResponse>(
-    `/api/userapi/customerSearch?q=${encodeURIComponent(query)}`,
-    { signal },
+  if (query.length < 2) {
+    return [];
+  }
+
+  const response = await directBackendGet<CustomerSearchApiResponse>(
+    `userapi/customerSearch?q=${encodeURIComponent(query)}`,
+    signal,
   );
   const records = response.data ?? response.customers ?? [];
 
@@ -150,9 +156,9 @@ export const getCustomerPaymentPage = async (
   if (dateFrom) params.set('from_date', dateFrom);
   if (dateTo) params.set('to_date', dateTo);
 
-  const response = await requestAppApi<CustomerPaymentListApiResponse>(
-    `/api/userapi/customerPaymentList?${params.toString()}`,
-    { signal },
+  const response = await directBackendGet<CustomerPaymentListApiResponse>(
+    `userapi/customerPaymentList?${params.toString()}`,
+    signal,
   );
   const records = response.data ?? response.transactions ?? [];
   const transactions = records.reduce<CustomerPaymentTransaction[]>((items, record, index) => {

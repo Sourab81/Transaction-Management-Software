@@ -8,7 +8,7 @@ import {
   readBackendPagination,
   type BackendPagination,
 } from '../api/pagination';
-import { AppApiError } from '../api/client';
+import { DirectBackendError } from '../api/direct-backend';
 import { mapCustomersResponse } from '../mappers/customer-mapper';
 import { usePersistentPageSize } from './usePersistentPageSize';
 
@@ -92,7 +92,7 @@ export function useCustomers(
       } catch (requestError) {
         if (isCancelled) return;
 
-        if (requestError instanceof AppApiError && requestError.statusCode === 501) {
+        if (requestError instanceof DirectBackendError && requestError.statusCode === 501) {
           setCustomers([]);
           setPagination(createFallbackPagination(0, page, requestFilters.limit));
           setError('');
