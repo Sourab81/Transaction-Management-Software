@@ -1,6 +1,6 @@
 'use client';
 
-import { DirectBackendError, directBackendPost } from './direct-backend';
+import { DirectBackendError, directBackendPost, directBackendPostJson } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface Transaction {
@@ -177,7 +177,7 @@ const mapChildRows = (rows: TransactionChild[]) =>
     other_charge: row.otherCharge ?? 0,
     total_amount: row.totalAmount,
     ...(row.id ? { id: row.id, transaction_child_id: row.id } : {}),
-    ...(row.remark ? { remark: row.remark } : {}),
+    remark: row.remark ?? null,
   }));
 
 export const getTransactions = (
@@ -187,14 +187,13 @@ export const getTransactions = (
   directBackendPost('getTransactions', buildTransactionListBody(filters), options.signal);
 
 export const getTransactionById = (id: string | number) =>
-  directBackendPost('getTransactions', { transaction_id: id, page_no: 1, limit: 1, status: 1 });
-
+  directBackendPost('getTransaction', { transaction_id: id, include_children: 1 });
 export const createTransaction = (payload: CreateTransactionPayload) =>
   handleTransactionMutation(
-    () => directBackendPost('createTransaction', {
+    () => directBackendPostJson('createTransaction', {
       customer_id: payload.customerId,
       counter_id: payload.counterId,
-      rows: JSON.stringify(mapChildRows(payload.rows)),
+      rows: mapChildRows(payload.rows),
       ...(payload.date ? { date: payload.date } : {}),
     }),
     'Transaction created successfully.',
@@ -202,12 +201,12 @@ export const createTransaction = (payload: CreateTransactionPayload) =>
 
 export const updateTransaction = (payload: UpdateTransactionPayload) =>
   handleTransactionMutation(
-    () => directBackendPost('updateTransaction', {
+    () => directBackendPostJson('updateTransaction', {
       transaction_id: payload.transactionId,
       ...(payload.customerId ? { customer_id: payload.customerId } : {}),
       ...(payload.counterId ? { counter_id: payload.counterId } : {}),
-      ...(payload.rows ? { rows: JSON.stringify(mapChildRows(payload.rows)) } : {}),
-      ...(payload.removedRowIds ? { removed_row_ids: JSON.stringify(payload.removedRowIds) } : {}),
+      ...(payload.rows ? { rows: mapChildRows(payload.rows) } : {}),
+      ...(payload.removedRowIds ? { removed_row_ids: payload.removedRowIds } : {}),
       ...(typeof payload.status !== 'undefined' ? { status: payload.status } : {}),
     }),
     'Transaction updated successfully.',

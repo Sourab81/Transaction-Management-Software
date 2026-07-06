@@ -1103,6 +1103,10 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       ...(currentPayload ? [currentPayload] : []),
       ...savedRows,
     ];
+    if (rowsToSubmit.length === 0) {
+      setValidationError('Please add at least one transaction row before saving.');
+      return;
+    }
     const missingRemarkRowIndex = rowsToSubmit.findIndex((row) => !row.remark.trim());
     if (missingRemarkRowIndex >= 0) {
       setValidationError('Remark is required.');

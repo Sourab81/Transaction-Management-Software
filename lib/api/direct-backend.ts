@@ -127,10 +127,12 @@ const isBackendFailure = (body: unknown): boolean => {
 // ---------------------------------------------------------------------------
 
 export interface DirectBackendOptions {
-  /** HTTP method – defaults to 'POST' for mutations, 'GET' for reads. */
+  /** HTTP method � defaults to 'POST' for mutations, 'GET' for reads. */
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   /** Body fields serialized as form-encoded (PHP expects this format). */
   body?: Record<string, unknown>;
+  /** When true, sends body as JSON (Content-Type: application/json) instead of form-encoded. */
+  jsonBody?: boolean;
   /** AbortSignal for cancellable requests. */
   signal?: AbortSignal;
 }
@@ -154,21 +156,27 @@ export const directBackendFetch = async <T = unknown>(
   const token = getStoredAuthToken();
   const method = options.method ?? 'POST';
 
-  // Build form-encoded body for POST/PUT (PHP reads $_POST this way)
+  // Build request body - either JSON or form-encoded
   let bodyString: string | undefined;
+  let contentType: string | undefined;
   if ((method === 'POST' || method === 'PUT') && options.body) {
-    const form = new URLSearchParams();
-    Object.entries(options.body).forEach(([key, value]) => {
-      if (typeof value !== 'undefined' && value !== null) {
-        // Arrays and objects need to be JSON-stringified for PHP to unpack
-        if (typeof value === 'object') {
-          form.set(key, JSON.stringify(value));
-        } else {
-          form.set(key, String(value));
+    if (options.jsonBody) {
+      bodyString = JSON.stringify(options.body);
+      contentType = 'application/json;charset=UTF-8';
+    } else {
+      const form = new URLSearchParams();
+      Object.entries(options.body).forEach(([key, value]) => {
+        if (typeof value !== 'undefined' && value !== null) {
+          if (typeof value === 'object') {
+            form.set(key, JSON.stringify(value));
+          } else {
+            form.set(key, String(value));
+          }
         }
-      }
-    });
-    bodyString = form.toString();
+      });
+      bodyString = form.toString();
+      contentType = 'application/x-www-form-urlencoded;charset=UTF-8';
+    }
   }
 
   let response: Response;
@@ -179,9 +187,7 @@ export const directBackendFetch = async <T = unknown>(
       headers: {
         Accept: 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(bodyString !== undefined
-          ? { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }
-          : {}),
+        ...(contentType ? { 'Content-Type': contentType } : {}),
       },
       body: bodyString,
       cache: 'no-store',
@@ -224,6 +230,14 @@ export const directBackendPost = <T = unknown>(
   signal?: AbortSignal,
 ): Promise<T> =>
   directBackendFetch<T>(endpoint, { method: 'POST', body, signal });
+
+/** POST to a backend endpoint with a JSON body. */
+export const directBackendPostJson = <T = unknown>(
+  endpoint: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> =>
+  directBackendFetch<T>(endpoint, { method: 'POST', body, jsonBody: true, signal });
 
 /** GET a backend endpoint (no body). */
 export const directBackendGet = <T = unknown>(
