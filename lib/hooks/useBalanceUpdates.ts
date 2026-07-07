@@ -7,17 +7,15 @@ import {
   type BackendPagination,
 } from '../api/pagination';
 import {
-  getCashDeposits,
-  mapCashDepositsResponse,
-  mapCashDepositSummary,
-  type CashDepositRecord,
-  type CashDepositSummary,
-} from '../api/cashDeposits';
+  getBalanceUpdates,
+  mapBalanceUpdatesResponse,
+  type BalanceUpdateMode,
+  type BalanceUpdateRecord,
+} from '../api/balanceUpdates';
 import { usePersistentPageSize } from './usePersistentPageSize';
 
-interface UseCashDepositsResult {
-  deposits: CashDepositRecord[];
-  summary: CashDepositSummary;
+interface UseBalanceUpdatesResult {
+  updates: BalanceUpdateRecord[];
   pagination: BackendPagination;
   isLoading: boolean;
   error: string;
@@ -26,27 +24,22 @@ interface UseCashDepositsResult {
   reload: () => void;
 }
 
-const emptySummary: CashDepositSummary = {
-  todayDeposits: 0,
-  todayTotalAmount: 0,
-};
-
-export function useCashDeposits(
+export function useBalanceUpdates(
   enabled: boolean,
+  mode: BalanceUpdateMode,
   dateFrom: string,
   dateTo: string,
-): UseCashDepositsResult {
+): UseBalanceUpdatesResult {
   const [page, setPage] = useState(1);
-  const [deposits, setDeposits] = useState<CashDepositRecord[]>([]);
-  const [summary, setSummary] = useState<CashDepositSummary>(emptySummary);
+  const [updates, setUpdates] = useState<BalanceUpdateRecord[]>([]);
   const [pagination, setPagination] = useState<BackendPagination>(() => createFallbackPagination(0));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
-  const key = `${dateFrom}|${dateTo}`;
+  const key = `${dateFrom}|${dateTo}|${mode}`;
   const previousKey = useRef(key);
-  const { pageSize: limit, setPageSize, isPageSizeReady } = usePersistentPageSize('cash_deposits_page_size');
-  const runGetCashDeposits = useEffectEvent(getCashDeposits);
+  const { pageSize: limit, setPageSize, isPageSizeReady } = usePersistentPageSize('balance_updates_page_size');
+  const runGetBalanceUpdates = useEffectEvent(getBalanceUpdates);
 
   useEffect(() => {
     if (!enabled || !isPageSizeReady) return;
@@ -63,20 +56,18 @@ export function useCashDeposits(
     setIsLoading(true);
     setError('');
 
-    void runGetCashDeposits({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, pageNo: page, limit })
+    void runGetBalanceUpdates({ mode, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, pageNo: page, limit })
       .then((payload) => {
         if (cancelled) return;
-        const rows = mapCashDepositsResponse(payload);
-        setDeposits(rows);
-        setSummary(mapCashDepositSummary(payload));
+        const rows = mapBalanceUpdatesResponse(payload);
+        setUpdates(rows);
         setPagination(readBackendPagination(payload, rows.length, page, limit));
       })
       .catch((requestError: unknown) => {
         if (cancelled) return;
-        setDeposits([]);
-        setSummary(emptySummary);
+        setUpdates([]);
         setPagination(createFallbackPagination(0, page, limit));
-        setError(requestError instanceof Error ? requestError.message : 'Unable to load cash deposits.');
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load balance updates.');
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -88,8 +79,7 @@ export function useCashDeposits(
   }, [key, enabled, isPageSizeReady, limit, page, reloadToken]);
 
   return useMemo(() => ({
-    deposits,
-    summary,
+    updates,
     pagination,
     isLoading,
     error,
@@ -99,5 +89,5 @@ export function useCashDeposits(
       setPage(1);
     },
     reload: () => setReloadToken((current) => current + 1),
-  }), [deposits, error, isLoading, pagination, setPageSize, summary]);
+  }), [error, isLoading, pagination, setPageSize, updates]);
 }

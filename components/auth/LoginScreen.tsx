@@ -86,7 +86,7 @@ const LoginScreen = () => {
         throw new Error(readLoginErrorMessage(body));
       }
 
-      const user = completeApiLogin(normalizedEmail, body);
+      const user = await completeApiLogin(normalizedEmail, body);
       setError('');
       setStatus(`Verified. Permissions loaded. Opening the ${getRoleLabel(user.role).toLowerCase()} workspace.`);
       router.replace(getDefaultWorkspacePath(user.role));

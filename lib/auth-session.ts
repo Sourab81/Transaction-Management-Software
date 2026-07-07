@@ -288,17 +288,29 @@ export const loginWithApiCredentials = async (
   return sessionUser;
 };
 
-export const completeApiLogin = (
+export const completeApiLogin = async (
   email: string,
   body: LoginApiResponseBody | null,
-): SessionUser => {
+): Promise<SessionUser> => {
   const normalizedEmail = normalizeEmail(email);
   const sessionUser = resolveSessionUserFromApiLogin(normalizedEmail, body);
 
-  // Store the raw JWT so directBackendFetch can attach it as Authorization header.
+  // Store the raw JWT in-memory so directBackendFetch can attach it as Authorization header.
   const accessToken = extractAccessToken(body);
   if (accessToken) {
     storeAuthToken(accessToken);
+
+    // Also persist as httpOnly cookie on the server for page-refresh recovery.
+    try {
+      await fetch('/api/auth/set-cookie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: accessToken }),
+        cache: 'no-store',
+      });
+    } catch {
+      // Non-critical — in-memory token still works for this session.
+    }
   }
 
   updateStoredUser(sessionUser);
@@ -385,4 +397,11 @@ export const logoutUser = () => {
   clearAuthToken();
   updateStoredUser(null);
   void clearServerAuthSession();
+
+  // Clear httpOnly cookie on the server.
+  try {
+    fetch('/api/auth/clear-cookie', { method: 'POST', cache: 'no-store', keepalive: true });
+  } catch {
+    // Ignore
+  }
 };

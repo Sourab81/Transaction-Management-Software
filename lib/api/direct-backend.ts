@@ -8,30 +8,53 @@
 // via $this->authorization_token->validateToken() which reads the
 // "Authorization: Bearer <token>" header.
 //
+// Token is stored in a module-level variable (in-memory, not persisted).
+// On login, the server also sets an httpOnly cookie for persistence.
+// On page refresh, AuthProvider calls restoreAuthToken() to read the cookie
+// and repopulate the in-memory variable.
+//
 // Token lifecycle:
 //   storeAuthToken(token)  → called by completeApiLogin after direct login
 //   getStoredAuthToken()   → called by directBackendFetch before every request
 //   clearAuthToken()       → called by logoutUser on sign-out
+//   restoreAuthToken()     → called by AuthProvider on page load (reads httpOnly cookie)
+//   restoreAuthToken()     → called by AuthProvider on page load (reads httpOnly cookie)
 // ---------------------------------------------------------------------------
 
-const AUTH_TOKEN_STORAGE_KEY = 'enest-auth-token';
+let storedToken: string | null = null;
 
 /** Persist the raw JWT that the backend returned on login. */
 export const storeAuthToken = (token: string): void => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  storedToken = token;
 };
 
 /** Read the stored JWT.  Returns null when not signed in. */
 export const getStoredAuthToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  return storedToken;
 };
 
 /** Remove the JWT on logout. */
 export const clearAuthToken = (): void => {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  storedToken = null;
+};
+
+/**
+ * Restore the JWT from the httpOnly cookie on page load.
+ * Called once by AuthProvider when the app mounts.
+ */
+export const restoreAuthToken = async (): Promise<string | null> => {
+  try {
+    const res = await fetch('/api/auth/restore-token', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.token && typeof data.token === 'string') {
+      storedToken = data.token;
+      return data.token;
+    }
+  } catch {
+    // Restore failed — not signed in
+  }
+  return null;
 };
 
 // ---------------------------------------------------------------------------

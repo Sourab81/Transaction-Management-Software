@@ -3893,6 +3893,34 @@ input[type="password"],
   padding: 0.75rem 1rem;
 }
 
+.customer-payment-list-search__selected-tag {
+  align-items: center;
+  background-color: var(--surface-solid);
+  border: 1px solid rgba(20, 32, 51, 0.1);
+  border-radius: 14px;
+  cursor: pointer;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem 0.75rem 2.35rem;
+  width: 100%;
+}
+
+.customer-payment-list-search__selected-tag:hover {
+  border-color: rgba(20, 32, 51, 0.2);
+}
+
+.customer-payment-list-search__selected-remove {
+  color: var(--foreground-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  margin-left: auto;
+}
+
+.customer-payment-list-search__selected-remove:hover {
+  color: var(--foreground);
+}
+
 .customer-outstanding-search__dropdown {
   background: var(--surface-solid);
   border: 1px solid rgba(20, 32, 51, 0.1);

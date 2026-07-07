@@ -26,7 +26,8 @@ export interface CashDepositSummary {
 }
 
 export interface CashDepositFilters {
-  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   pageNo?: number;
   limit?: number;
 }
@@ -47,7 +48,8 @@ export interface CashDepositMutationResult {
 const appendCashDepositFilters = (filters: CashDepositFilters = {}) => {
   const params = new URLSearchParams();
 
-  if (filters.date) params.set('date', filters.date);
+  if (filters.dateFrom) params.set('from_date', filters.dateFrom);
+  if (filters.dateTo) params.set('to_date', filters.dateTo);
   if (filters.pageNo) params.set('page_no', String(filters.pageNo));
   if (filters.limit) params.set('limit', String(filters.limit));
 

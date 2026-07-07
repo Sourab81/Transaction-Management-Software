@@ -8,6 +8,7 @@ export interface Customer {
   name: string;
   code: string;
   phone: string;
+  color?: string | null;
 }
 
 export interface CustomerPaymentTransaction {
@@ -33,6 +34,11 @@ interface CustomerSearchRecord {
   phone?: string | number;
   phone_no?: string | number;
   mobile_no?: string | number;
+  color?: string;
+  color_code?: string;
+  colorCode?: string;
+  customer_color?: string;
+  customerColor?: string;
 }
 
 interface CustomerPaymentRecord {
@@ -100,6 +106,7 @@ const mapCustomer = (record: CustomerSearchRecord): Customer | null => {
     name,
     code: readStringValue(record, ['customer_code', 'customerCode']) || '',
     phone: readStringValue(record, ['phone', 'phone_no', 'mobile_no', 'mobileNo']) || '',
+    color: readStringValue(record, ['color_code', 'colorCode', 'color', 'customer_color', 'customerColor']) || null,
   };
 };
 

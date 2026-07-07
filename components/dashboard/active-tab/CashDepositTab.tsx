@@ -43,7 +43,8 @@ export default function CashDepositTab({ ctx }: CashDepositTabProps) {
     reloadAccounts,
     reloadDepartments,
   } = ctx;
-  const [date, setDate] = useState(getTodayDateValue);
+  const [dateFrom, setDateFrom] = useState(getTodayDateValue);
+  const [dateTo, setDateTo] = useState(getTodayDateValue);
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [accountId, setAccountId] = useState('');
   const [amount, setAmount] = useState('');
@@ -58,7 +59,7 @@ export default function CashDepositTab({ ctx }: CashDepositTabProps) {
     setPage,
     setLimit,
     reload,
-  } = useCashDeposits(true, date);
+  } = useCashDeposits(true, dateFrom, dateTo);
 
   const activeAccounts = useMemo(
     () => accounts.filter((account) => account.status === 'Active'),
@@ -153,28 +154,29 @@ export default function CashDepositTab({ ctx }: CashDepositTabProps) {
   return (
     <div className="row g-4">
       <div className="col-12">
-        <SectionHero
-          eyebrow="Accounts"
-          title="Cash Deposit"
-          description="Deposit departmental cash into bank accounts."
-        />
-      </div>
-
-      <div className="col-12">
         <div className="form-section-card">
           <div className="d-flex flex-wrap align-items-end justify-content-between gap-3">
             <div>
               <p className="eyebrow mb-1">Filter</p>
-              <h3 className="table-panel__title mb-0">Deposit Date</h3>
+              <h3 className="table-panel__title mb-0">Cash Deposit</h3>
             </div>
             <div className="d-flex flex-wrap align-items-end gap-3">
               <label className="table-toolbar__field">
-                <span>Date</span>
+                <span>From</span>
                 <input
                   type="date"
                   className="form-control"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+              </label>
+              <label className="table-toolbar__field">
+                <span>To</span>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
                 />
               </label>
             </div>

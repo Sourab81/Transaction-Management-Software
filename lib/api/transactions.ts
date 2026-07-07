@@ -1,6 +1,6 @@
 'use client';
 
-import { DirectBackendError, directBackendPost, directBackendPostJson } from './direct-backend';
+import { DirectBackendError, directBackendGet, directBackendPost, directBackendPostJson } from './direct-backend';
 import { isRecord, readJoinedMessage } from '../mappers/legacy-record';
 
 export interface Transaction {
@@ -187,7 +187,7 @@ export const getTransactions = (
   directBackendPost('getTransactions', buildTransactionListBody(filters), options.signal);
 
 export const getTransactionById = (id: string | number) =>
-  directBackendPost('getTransaction', { transaction_id: id, include_children: 1 });
+  directBackendGet(`transactions/${id}`);
 export const createTransaction = (payload: CreateTransactionPayload) =>
   handleTransactionMutation(
     () => directBackendPostJson('createTransaction', {

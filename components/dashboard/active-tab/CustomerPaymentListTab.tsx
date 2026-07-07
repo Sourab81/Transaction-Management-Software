@@ -15,6 +15,7 @@ import { getCustomerWorkspacePath } from '../../../lib/workspace-routes';
 import { formatDateTime } from '../../../src/utils/dateFormatter';
 import RemarkCell from '../../common/RemarkCell';
 import CustomerPaymentModal from '../CustomerPaymentModal';
+import CustomerName from '../../common/CustomerName';
 import DataTable from '../../tables/DataTable';
 import EmptyState from '../../ui/state/EmptyState';
 import type { DashboardTabContext } from './types';
@@ -194,7 +195,7 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
 
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
-    setQuery(formatSelectedCustomerLabel(customer));
+    setQuery('');
     setCustomers([]);
     setIsDropdownOpen(false);
     setPage(1);
@@ -306,20 +307,30 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
               <div className="customer-payment-list-search__controls">
                 <div className="customer-outstanding-search customer-payment-list-search__search-field">
                   <FaSearch className="customer-payment-list-search__search-icon" aria-hidden="true" />
-                  <input
-                    className="form-control customer-outstanding-search__input customer-payment-list-search__input"
-                    type="search"
-                    autoComplete="off"
-                    placeholder="Type at least 3 characters"
-                    value={query}
-                    onChange={(event) => {
-                      setQuery(event.target.value);
-                      setSelectedCustomer(null);
-                    }}
-                    onFocus={() => {
-                      if (customers.length > 0 || hasSearched) setIsDropdownOpen(true);
-                    }}
-                  />
+                  {selectedCustomer ? (
+                    <div
+                      className="customer-payment-list-search__selected-tag"
+                      onClick={() => { setSelectedCustomer(null); setQuery(''); }}
+                    >
+                      <CustomerName name={formatSelectedCustomerLabel(selectedCustomer)} color={selectedCustomer.color} className="data-table__primary" />
+                      <span className="customer-payment-list-search__selected-remove">&times;</span>
+                    </div>
+                  ) : (
+                    <input
+                      className="form-control customer-outstanding-search__input customer-payment-list-search__input"
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Type at least 3 characters"
+                      value={query}
+                      onChange={(event) => {
+                        setQuery(event.target.value);
+                        setSelectedCustomer(null);
+                      }}
+                      onFocus={() => {
+                        if (customers.length > 0 || hasSearched) setIsDropdownOpen(true);
+                      }}
+                    />
+                  )}
 
                   {isDropdownOpen && query.trim().length >= 3 && !selectedCustomer ? (
                     <div className="customer-outstanding-search__dropdown" role="listbox">
@@ -339,7 +350,7 @@ export default function CustomerPaymentListTab({ ctx }: CustomerPaymentListTabPr
                             onClick={() => selectCustomer(customer)}
                             role="option"
                           >
-                            <span className="data-table__primary">{formatCustomerSearchLabel(customer)}</span>
+                            <CustomerName name={formatCustomerSearchLabel(customer)} color={customer.color} className="data-table__primary" />
                           </button>
                         ))
                       ) : hasSearched ? (
