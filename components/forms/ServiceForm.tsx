@@ -48,8 +48,11 @@ interface TransactionFormPayload {
   transactionAccountType: 'other' | 'bank';
   unitAmount: number;
   amount: number;
+  unitServiceCharge: number;
   serviceCharge: number;
+  unitBankCharge: number;
   bankCharge: number;
+  unitOtherCharge: number;
   otherCharge: number;
   totalAmount: number;
   remark: string;
@@ -134,19 +137,22 @@ const normalizeTransactionAccountId = (value: string | null | undefined, fallbac
 const transactionChildToDraftRow = (
   row: TransactionChildRow,
   fallbackAccountId: string,
-): TransactionDraftRow => ({
-  childId: row.id,
-  formName: row.formName || '',
-  transactionNo: String(row.noOfTransaction || 1),
-  serviceProduct: row.inventoryName || '',
-  inventoryItemId: row.inventoryId || '',
-  transactionAccountId: normalizeTransactionAccountId(row.transactionAccount, fallbackAccountId),
-  amount: String((row.amount ?? 0) / Math.max(row.noOfTransaction || 1, 1)),
-  serviceCharge: String(row.serviceCharge ?? 0),
-  bankCharge: String(row.bankCharge ?? 0),
-  otherCharge: String(row.otherCharge ?? 0),
-  remark: row.remark || '',
-});
+): TransactionDraftRow => {
+  const qty = Math.max(row.noOfTransaction || 1, 1);
+  return {
+    childId: row.id,
+    formName: row.formName || '',
+    transactionNo: String(row.noOfTransaction || 1),
+    serviceProduct: row.inventoryName || '',
+    inventoryItemId: row.inventoryId || '',
+    transactionAccountId: normalizeTransactionAccountId(row.transactionAccount, fallbackAccountId),
+    amount: String((row.amount ?? 0) / qty),
+    serviceCharge: String((row.serviceCharge ?? 0) / qty),
+    bankCharge: String((row.bankCharge ?? 0) / qty),
+    otherCharge: String((row.otherCharge ?? 0) / qty),
+    remark: row.remark || '',
+  };
+};
 
 const getTransactionDraftRows = (
   transaction: Transaction | null | undefined,
@@ -157,6 +163,7 @@ const getTransactionDraftRows = (
     return transaction.rows.map((row) => transactionChildToDraftRow(row, fallbackAccountId));
   }
 
+  const qty = Math.max(transaction.noOfTransaction || 1, 1);
   return [{
     childId: undefined,
     formName: transaction.formName || '',
@@ -167,10 +174,10 @@ const getTransactionDraftRows = (
       transaction.transactionAccountId || transaction.accountId,
       fallbackAccountId,
     ),
-    amount: String((transaction.transactionAmount ?? transaction.amount ?? 0) / Math.max(transaction.noOfTransaction || 1, 1)),
-    serviceCharge: String(transaction.serviceCharge ?? 0),
-    bankCharge: String(transaction.bankCharge ?? 0),
-    otherCharge: String(transaction.otherCharge ?? 0),
+    amount: String((transaction.transactionAmount ?? transaction.amount ?? 0) / qty),
+    serviceCharge: String((transaction.serviceCharge ?? 0) / qty),
+    bankCharge: String((transaction.bankCharge ?? 0) / qty),
+    otherCharge: String((transaction.otherCharge ?? 0) / qty),
     remark: transaction.remark || transaction.note || '',
   } satisfies TransactionDraftRow];
 };
@@ -180,12 +187,12 @@ const savedRowToDraftRow = (row: SavedTransactionRow): TransactionDraftRow => ({
   formName: row.formName,
   transactionNo: String(row.noOfTransaction),
   serviceProduct: row.serviceProduct,
-  inventoryItemId: row.inventoryId,
-  transactionAccountId: row.transactionAccountType === 'other' ? 'other' : row.transactionAccountId || '',
+  inventoryItemId: row.inventoryItemId || '',
+  transactionAccountId: row.transactionAccountId || 'other',
   amount: String(row.unitAmount),
-  serviceCharge: String(row.serviceCharge),
-  bankCharge: String(row.bankCharge),
-  otherCharge: String(row.otherCharge),
+  serviceCharge: String(row.unitServiceCharge),
+  bankCharge: String(row.unitBankCharge),
+  otherCharge: String(row.unitOtherCharge),
   remark: row.remark,
 });
 
@@ -661,7 +668,13 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   const [savedRows, setSavedRows] = useState<SavedTransactionRow[]>(() => editDraftRows.slice(1).map((row, index) => {
     const noOfTransaction = toSafeAmount(row.transactionNo) || 1;
     const unitAmount = toSafeAmount(row.amount);
+    const unitServiceCharge = toSafeAmount(row.serviceCharge);
+    const unitBankCharge = toSafeAmount(row.bankCharge);
+    const unitOtherCharge = toSafeAmount(row.otherCharge);
     const amount = noOfTransaction * unitAmount;
+    const serviceCharge = noOfTransaction * unitServiceCharge;
+    const bankCharge = noOfTransaction * unitBankCharge;
+    const otherCharge = noOfTransaction * unitOtherCharge;
 
     return {
       childId: row.childId,
@@ -677,10 +690,13 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       transactionAccountType: row.transactionAccountId === 'other' ? 'other' : 'bank',
       unitAmount,
       amount,
-      serviceCharge: toSafeAmount(row.serviceCharge),
-      bankCharge: toSafeAmount(row.bankCharge),
-      otherCharge: toSafeAmount(row.otherCharge),
-      totalAmount: amount + toSafeAmount(row.serviceCharge) + toSafeAmount(row.bankCharge) + toSafeAmount(row.otherCharge),
+      unitServiceCharge,
+      serviceCharge,
+      unitBankCharge,
+      bankCharge,
+      unitOtherCharge,
+      otherCharge,
+      totalAmount: amount + serviceCharge + bankCharge + otherCharge,
       remark: row.remark,
     };
   }));
@@ -703,6 +719,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
   );
   const [validationError, setValidationError] = useState('');
   const [isCustomerPanelHighlighted, setIsCustomerPanelHighlighted] = useState(false);
+  const [formResetCount, setFormResetCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaveConfirmationOpen, setIsSaveConfirmationOpen] = useState(false);
   const [hasUserChanges, setHasUserChanges] = useState(false);
@@ -737,21 +754,20 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     otherCharge: toSafeAmount(currentRow.otherCharge),
   }), [currentRow.amount, currentRow.bankCharge, currentRow.otherCharge, currentRow.serviceCharge, currentRow.transactionNo]);
 
-  const currentTotal = useMemo(() => (
-    (currentAmounts.noOfTransaction * currentAmounts.amount)
-    + currentAmounts.serviceCharge
-    + currentAmounts.bankCharge
-    + currentAmounts.otherCharge
-  ), [currentAmounts]);
+  const currentTotal = useMemo(() => {
+    const qty = currentAmounts.noOfTransaction || 1;
+    return qty * (currentAmounts.amount + currentAmounts.serviceCharge + currentAmounts.bankCharge + currentAmounts.otherCharge);
+  }, [currentAmounts]);
 
   const totals = useMemo(() => {
+    const qty = currentAmounts.noOfTransaction || 1;
     const currentBase = isCurrentRowEmpty(currentRow)
       ? { amount: 0, serviceCharge: 0, bankCharge: 0, otherCharge: 0, totalAmount: 0 }
       : {
-          amount: currentAmounts.noOfTransaction * currentAmounts.amount,
-          serviceCharge: currentAmounts.serviceCharge,
-          bankCharge: currentAmounts.bankCharge,
-          otherCharge: currentAmounts.otherCharge,
+          amount: qty * currentAmounts.amount,
+          serviceCharge: qty * currentAmounts.serviceCharge,
+          bankCharge: qty * currentAmounts.bankCharge,
+          otherCharge: qty * currentAmounts.otherCharge,
           totalAmount: currentTotal,
         };
 
@@ -955,11 +971,14 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       return null;
     }
 
-    const amount = toSafeAmount(row.amount);
-    const serviceCharge = toSafeAmount(row.serviceCharge);
-    const bankCharge = toSafeAmount(row.bankCharge);
-    const otherCharge = toSafeAmount(row.otherCharge);
-    const transactionAmount = noOfTransaction * amount;
+    const unitAmount = toSafeAmount(row.amount);
+    const unitServiceCharge = toSafeAmount(row.serviceCharge);
+    const unitBankCharge = toSafeAmount(row.bankCharge);
+    const unitOtherCharge = toSafeAmount(row.otherCharge);
+    const amount = noOfTransaction * unitAmount;
+    const serviceCharge = noOfTransaction * unitServiceCharge;
+    const bankCharge = noOfTransaction * unitBankCharge;
+    const otherCharge = noOfTransaction * unitOtherCharge;
     const selectedService = inventoryItems.find((service) => service.id === row.inventoryItemId);
     if (!selectedService) {
       setValidationError('Please select an active service/product from the selected department.');
@@ -982,12 +1001,15 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       transactionAccount: transactionAccountType === 'other' ? 'other' : row.transactionAccountId,
       transactionAccountId: transactionAccountType === 'other' ? null : row.transactionAccountId,
       transactionAccountType,
-      unitAmount: amount,
-      amount: transactionAmount,
+      unitAmount,
+      amount,
+      unitServiceCharge,
       serviceCharge,
+      unitBankCharge,
       bankCharge,
+      unitOtherCharge,
       otherCharge,
-      totalAmount: transactionAmount + serviceCharge + bankCharge + otherCharge,
+      totalAmount: amount + serviceCharge + bankCharge + otherCharge,
       remark: row.remark.trim(),
     };
   };
@@ -1001,6 +1023,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
     setSavedRows([]);
     setSelectedCustomerId('');
     setSelectedCustomerSnapshot(null);
+    setFormResetCount((c) => c + 1);
     newCustomerDraftRef.current = createEmptyCustomerDraft();
     setHasCompleteNewCustomerDraft(false);
     setIsCustomerPanelHighlighted(false);
@@ -1053,13 +1076,23 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       if (row.id !== rowId) return row;
 
       const nextRow = { ...row, ...values };
+      const noOfTransaction = nextRow.noOfTransaction || 1;
       const unitAmount = nextRow.unitAmount;
-      const amount = nextRow.noOfTransaction * unitAmount;
+      const unitServiceCharge = nextRow.unitServiceCharge;
+      const unitBankCharge = nextRow.unitBankCharge;
+      const unitOtherCharge = nextRow.unitOtherCharge;
+      const amount = noOfTransaction * unitAmount;
+      const serviceCharge = noOfTransaction * unitServiceCharge;
+      const bankCharge = noOfTransaction * unitBankCharge;
+      const otherCharge = noOfTransaction * unitOtherCharge;
 
       return {
         ...nextRow,
         amount,
-        totalAmount: amount + nextRow.serviceCharge + nextRow.bankCharge + nextRow.otherCharge,
+        serviceCharge,
+        bankCharge,
+        otherCharge,
+        totalAmount: amount + serviceCharge + bankCharge + otherCharge,
       };
     }));
     setValidationError('');
@@ -1141,13 +1174,15 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       return;
     }
 
+    const pendingNewCustomerDraft = newCustomerDraftRef.current;
     setIsSubmitting(true);
+    resetForm();
     try {
       let transactionCustomerId = selectedCustomerId;
       let customerWasCreated = false;
 
       if (!transactionCustomerId) {
-        const newCustomerDraft = newCustomerDraftRef.current;
+        const newCustomerDraft = pendingNewCustomerDraft;
         const customerName = newCustomerDraft.customerName.trim();
         const mobileNo = newCustomerDraft.mobileNo.trim();
 
@@ -1182,8 +1217,6 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
         transactionCustomerId = createdCustomer.id;
         customerWasCreated = true;
-        setSelectedCustomerId(createdCustomer.id);
-        setSelectedCustomerSnapshot(createdCustomer);
         newCustomerDraftRef.current = createEmptyCustomerDraft();
         setHasCompleteNewCustomerDraft(false);
         setIsCustomerPanelHighlighted(false);
@@ -1258,7 +1291,6 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
       if (isEditMode) {
         window.location.assign('/transactions/list');
       } else {
-        resetForm();
         router.refresh();
       }
     } catch (error) {
@@ -1295,6 +1327,7 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
 
         <div ref={customerPanelRef}>
           <CustomerSearchPanel
+            key={formResetCount}
             inputRef={customerSearchInputRef}
             isEditMode={isEditMode}
             isHighlighted={isCustomerPanelHighlighted}
@@ -1637,8 +1670,8 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         className="form-control"
                         min="0"
                         type="number"
-                        value={row.serviceCharge}
-                        onChange={(event) => updateSavedRow(row.id, { serviceCharge: toSafeAmount(event.target.value) })}
+                        value={row.unitServiceCharge}
+                        onChange={(event) => updateSavedRow(row.id, { unitServiceCharge: toSafeAmount(event.target.value) })}
                       />
                     </td>
                     <td data-label="Bank Chg.">
@@ -1647,8 +1680,8 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         className="form-control"
                         min="0"
                         type="number"
-                        value={row.bankCharge}
-                        onChange={(event) => updateSavedRow(row.id, { bankCharge: toSafeAmount(event.target.value) })}
+                        value={row.unitBankCharge}
+                        onChange={(event) => updateSavedRow(row.id, { unitBankCharge: toSafeAmount(event.target.value) })}
                       />
                     </td>
                     <td data-label="Other Chg.">
@@ -1657,8 +1690,8 @@ const ServiceForm: React.FC<ServiceFormProps> = ({
                         className="form-control"
                         min="0"
                         type="number"
-                        value={row.otherCharge}
-                        onChange={(event) => updateSavedRow(row.id, { otherCharge: toSafeAmount(event.target.value) })}
+                        value={row.unitOtherCharge}
+                        onChange={(event) => updateSavedRow(row.id, { unitOtherCharge: toSafeAmount(event.target.value) })}
                       />
                     </td>
                     <td data-label="Total">{row.totalAmount}</td>

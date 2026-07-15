@@ -24,6 +24,7 @@ export interface CustomerFilters {
   limit?: number;
   search?: string;
   status?: number;
+  categoryId?: string;
 }
 
 export interface CreateCustomerPayload {
@@ -35,6 +36,7 @@ export interface CreateCustomerPayload {
   remark?: string | null;
   colorId?: string | null;
   color?: string | null;
+  categoryIds?: string[];
 }
 
 export interface UpdateCustomerPayload extends Partial<CreateCustomerPayload> {
@@ -96,6 +98,7 @@ export const getCustomers = (filters: CustomerFilters = {}) =>
     limit: filters.limit ?? 10,
     status: filters.status ?? 1,
     ...(filters.search?.trim() ? { search: filters.search.trim() } : {}),
+    ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
   });
 
 export const createCustomer = (payload: CreateCustomerPayload) =>
@@ -109,6 +112,7 @@ export const createCustomer = (payload: CreateCustomerPayload) =>
       ...(payload.remark ? { remark: payload.remark } : {}),
       ...(payload.colorId ? { customer_color_id: payload.colorId } : {}),
       ...(payload.color ? { customer_color: payload.color } : {}),
+      ...(payload.categoryIds !== undefined ? { category_ids: payload.categoryIds } : {}),
     }),
     'Customer created successfully.',
   );
@@ -126,6 +130,7 @@ export const updateCustomer = (payload: UpdateCustomerPayload) =>
       ...(payload.remark !== undefined ? { remark: payload.remark } : {}),
       ...(payload.colorId !== undefined ? { customer_color_id: payload.colorId } : {}),
       ...(payload.color !== undefined ? { customer_color: payload.color } : {}),
+      ...(payload.categoryIds !== undefined ? { category_ids: payload.categoryIds } : {}),
     }),
     'Customer updated successfully.',
   );

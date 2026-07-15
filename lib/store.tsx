@@ -60,6 +60,7 @@ export interface BusinessCustomer {
   remark?: string | null;
   colorId?: string | null;
   color?: string | null;
+  categoryIds?: string[];
   status?: 'Active' | 'Inactive';
   joinedDate?: string;
   updatedDate?: string;

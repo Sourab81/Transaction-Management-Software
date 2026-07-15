@@ -150,12 +150,14 @@ const isBackendFailure = (body: unknown): boolean => {
 // ---------------------------------------------------------------------------
 
 export interface DirectBackendOptions {
-  /** HTTP method � defaults to 'POST' for mutations, 'GET' for reads. */
+  /** HTTP method – defaults to 'POST' for mutations, 'GET' for reads. */
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   /** Body fields serialized as form-encoded (PHP expects this format). */
   body?: Record<string, unknown>;
   /** When true, sends body as JSON (Content-Type: application/json) instead of form-encoded. */
   jsonBody?: boolean;
+  /** Pre-built body string. When set, takes precedence over `body` and is sent as-is. */
+  rawBody?: string;
   /** AbortSignal for cancellable requests. */
   signal?: AbortSignal;
 }
@@ -179,10 +181,13 @@ export const directBackendFetch = async <T = unknown>(
   const token = getStoredAuthToken();
   const method = options.method ?? 'POST';
 
-  // Build request body - either JSON or form-encoded
+  // Build request body - rawBody, JSON, or form-encoded
   let bodyString: string | undefined;
   let contentType: string | undefined;
-  if ((method === 'POST' || method === 'PUT') && options.body) {
+  if (options.rawBody !== undefined) {
+    bodyString = options.rawBody;
+    contentType = 'application/x-www-form-urlencoded;charset=UTF-8';
+  } else if ((method === 'POST' || method === 'PUT') && options.body) {
     if (options.jsonBody) {
       bodyString = JSON.stringify(options.body);
       contentType = 'application/json;charset=UTF-8';
@@ -261,6 +266,14 @@ export const directBackendPostJson = <T = unknown>(
   signal?: AbortSignal,
 ): Promise<T> =>
   directBackendFetch<T>(endpoint, { method: 'POST', body, jsonBody: true, signal });
+
+/** POST to a backend endpoint with a pre-built raw body string. */
+export const directBackendPostRaw = <T = unknown>(
+  endpoint: string,
+  rawBody: string,
+  signal?: AbortSignal,
+): Promise<T> =>
+  directBackendFetch<T>(endpoint, { method: 'POST', rawBody, signal });
 
 /** GET a backend endpoint (no body). */
 export const directBackendGet = <T = unknown>(

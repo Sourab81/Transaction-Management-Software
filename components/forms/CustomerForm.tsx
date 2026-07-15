@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { BusinessCustomer } from '../../lib/store';
 import { useCustomerColors } from '../../lib/hooks/useCustomerColors';
+import { useCustomerCategories } from '../../lib/hooks/useCustomerCategories';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 
-export type CustomerFormValues = Omit<BusinessCustomer, 'id'>;
+export type CustomerFormValues = Omit<BusinessCustomer, 'id'> & { categoryIds?: string[] };
 
 interface CustomerFormProps {
   initialValues?: BusinessCustomer;
@@ -22,6 +23,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
   onSubmit,
 }) => {
   const { activeColors } = useCustomerColors();
+  const { activeCategories } = useCustomerCategories();
   const [customerName, setCustomerName] = useState(initialValues?.customerName || initialValues?.name || '');
   const [mobileNo, setMobileNo] = useState(initialValues?.mobileNo || initialValues?.phone || '');
   const [email, setEmail] = useState(initialValues?.email || '');
@@ -29,6 +31,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
   const [dob, setDob] = useState(initialValues?.dob || '');
   const [remark, setRemark] = useState(initialValues?.remark || '');
   const [colorId, setColorId] = useState(initialValues?.colorId || '');
+  const [categoryIds, setCategoryIds] = useState<string[]>(initialValues?.categoryIds || []);
   const [validationError, setValidationError] = useState('');
   const hasUserSelectedColor = useRef(false);
   const selectedColor = useMemo(() => (
@@ -72,6 +75,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
       joinedDate: initialValues?.joinedDate || new Date().toISOString().split('T')[0],
       addedDate: initialValues?.addedDate,
       updatedDate: initialValues?.updatedDate,
+      categoryIds,
     });
   };
 
@@ -193,6 +197,39 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
             <span className="page-muted small ms-2">Preview</span>
           </div>
         ) : null}
+      </div>
+
+      <div className="form-section-card mb-4">
+        <div className="form-section-title">Customer Categories</div>
+        <p className="page-muted small mb-3">
+          Assign one or more categories to group this customer.
+        </p>
+        {activeCategories.length === 0 ? (
+          <p className="page-muted small">No categories available. Add categories in Customer Category Master first.</p>
+        ) : (
+          <div className="row g-2">
+            {activeCategories.map((cat) => {
+              const isChecked = categoryIds.includes(cat.id);
+              return (
+                <div key={cat.id} className="col-12 col-md-6">
+                  <label className="form-check-label d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={isChecked}
+                      onChange={() => {
+                        setCategoryIds((prev) =>
+                          isChecked ? prev.filter((id) => id !== cat.id) : [...prev, cat.id]
+                        );
+                      }}
+                    />
+                    {cat.name}
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="modal-actions">

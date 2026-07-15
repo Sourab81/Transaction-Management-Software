@@ -42,9 +42,15 @@ interface ExpenseFilterState {
   counterIds: string[];
 }
 
+const getTodayDateValue = () => {
+  const date = new Date();
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return offsetDate.toISOString().slice(0, 10);
+};
+
 const emptyFilters: ExpenseFilterState = {
-  dateFrom: '',
-  dateTo: '',
+  dateFrom: getTodayDateValue(),
+  dateTo: getTodayDateValue(),
   search: '',
   counterIds: [],
 };
@@ -109,6 +115,7 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
   const [deletingCategory, setDeletingCategory] = useState<ExpenseCategory | null>(null);
   const [draftFilters, setDraftFilters] = useState<ExpenseFilterState>(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState<ExpenseFilterState>(emptyFilters);
+  const [isDepartmentFilterOpen, setIsDepartmentFilterOpen] = useState(false);
 
   const expenseFilters = useMemo<ExpenseFilters>(() => ({
     status: 1,
@@ -368,6 +375,7 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
   const clearFilters = () => {
     setDraftFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
+    setIsDepartmentFilterOpen(false);
   };
 
   const toggleDepartmentFilter = (counterId: string) => {
@@ -378,6 +386,10 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
         : [...filters.counterIds, counterId],
     }));
   };
+
+  const selectedDepartmentFilterLabel = draftFilters.counterIds.length > 0
+    ? `${draftFilters.counterIds.length} selected`
+    : 'All Departments';
 
   if (view === 'categories') {
     return (
@@ -640,17 +652,29 @@ export default function ExpenseTab({ ctx }: ExpenseTabProps) {
             </div>
             <div className="col-12 col-xl-3">
               <span className="form-label d-block">Department Filter</span>
-              <div className="expense-multiselect">
-                {counters.map((counter) => (
-                  <label key={counter.id} className="expense-multiselect__option">
-                    <input
-                      type="checkbox"
-                      checked={draftFilters.counterIds.includes(counter.id)}
-                      onChange={() => toggleDepartmentFilter(counter.id)}
-                    />
-                    <span>{counter.code ? `${counter.code} / ${counter.name}` : counter.name}</span>
-                  </label>
-                ))}
+              <div className="table-filter-dropdown expense-department-dropdown">
+                <button
+                  type="button"
+                  className="form-select table-filter-dropdown__button"
+                  aria-expanded={isDepartmentFilterOpen}
+                  onClick={() => setIsDepartmentFilterOpen((current) => !current)}
+                >
+                  <span>{selectedDepartmentFilterLabel}</span>
+                </button>
+                {isDepartmentFilterOpen ? (
+                  <div className="expense-multiselect table-filter-dropdown__menu">
+                    {counters.map((counter) => (
+                      <label key={counter.id} className="expense-multiselect__option">
+                        <input
+                          type="checkbox"
+                          checked={draftFilters.counterIds.includes(counter.id)}
+                          onChange={() => toggleDepartmentFilter(counter.id)}
+                        />
+                        <span>{counter.code ? `${counter.code} / ${counter.name}` : counter.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

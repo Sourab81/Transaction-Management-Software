@@ -581,13 +581,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isAccountsTab = activeTab === 'accounts';
   const isTransactionEditModalOpen = activeModal === 'edit-transaction';
   // Accounts/services stay page-scoped and load on transactions only because the form needs dropdowns.
-  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'expense' || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && (customerPageView === 'outstanding' || customerPageView === 'payments')));
+  const shouldLoadAccountsApi = shouldLoadWorkspaceApi && (isAccountsTab || activeTab === 'expense' || activeTab === 'reports' || isAddTransactionPage || isTransactionsListPage || Boolean(payingTransaction) || isTransactionEditModalOpen || (activeTab === 'customers' && (customerPageView === 'outstanding' || customerPageView === 'payments')));
   // Departments are shared shell data because the header selector scopes
   // transactions, services, and search on every workspace page.
   const shouldLoadDepartmentsApi = shouldLoadWorkspaceApi;
   const shouldLoadCustomersApi = shouldLoadWorkspaceApi
     && activeTab === 'customers';
-  const shouldLoadEmployeesApi = shouldLoadWorkspaceApi
+  const shouldLoadEmployeesApi = shouldLoadWorkspaceApi || currentRole === 'Employee'
   // Inventory page owns inventory API loading and does not preload other modules.
   const shouldLoadServicesApi = shouldLoadWorkspaceApi
     && (activeTab === 'services' || isAddTransactionPage || isTransactionEditModalOpen);
@@ -905,8 +905,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const sessionPermissions = useMemo(() => {
     if (currentRole === 'Employee') {
       return intersectCustomerPermissions(
-        currentBusiness?.permissions ?? currentUser.permissions ?? buildDefaultCustomerPermissions(),
-        currentEmployee?.permissions ?? currentUser.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
+        currentUser.permissions ?? currentEmployee?.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
+        currentUser.permissions ?? currentEmployee?.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
       );
     }
 
@@ -1776,6 +1776,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     return Object.values(businessWorkspacesById).some((tenantWorkspace) =>
       tenantWorkspace.employees.some((employee) =>
         normalizeEmail(employee.email) === normalizedEmail && employee.id !== excludedEmployeeId
+      )
+    );
+  };
+
+  const isEmployeePhoneTaken = (phone: string, excludedEmployeeId?: string) => {
+    const normalizedPhone = phone.trim();
+    if (!normalizedPhone) return false;
+
+    return Object.values(businessWorkspacesById).some((tenantWorkspace) =>
+      tenantWorkspace.employees.some((employee) =>
+        (employee.phone === normalizedPhone || employee.mobile === normalizedPhone) && employee.id !== excludedEmployeeId
       )
     );
   };
@@ -3300,6 +3311,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           dob: values.dob || null,
           colorId: values.colorId || null,
           color: values.color || null,
+          categoryIds: values.categoryIds,
         };
         console.log('Update Payload', payload);
         const result = await updateCustomer(payload);
@@ -3326,6 +3338,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           dob: values.dob || null,
           colorId: values.colorId || null,
           color: values.color || null,
+          categoryIds: values.categoryIds,
         });
 
         if (!result.success) {
@@ -3353,6 +3366,11 @@ const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
+    if (isEmployeePhoneTaken(values.mobile || values.phone || '', editingEmployee?.id)) {
+      addNotification('error', 'That employee phone number is already assigned to another employee.');
+      return;
+    }
+
     if (editingEmployee) {
       const stateValues = toEmployeeStateValues(values);
       if (shouldLoadWorkspaceApi) {
@@ -3374,6 +3392,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         setIsEmployeeSubmitting(false);
 
         if (!result.success) {
+          console.log('[EmployeeUpdate] Backend error:', result.message);
           addNotification('error', result.message || 'Unable to update employee.');
           return;
         }
@@ -3404,6 +3423,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         setIsEmployeeSubmitting(false);
 
         if (!result.success) {
+          console.log('[EmployeeCreate] Backend error:', result.message);
           addNotification('error', result.message || 'Unable to create employee.');
           return;
         }
@@ -4758,19 +4778,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             title="Unable to load transactions"
             description={transactionsError}
             action={{ label: 'Retry', onClick: reloadTransactions }}
-          />
-        );
-      }
-    }
-
-    if (activeTab === 'reports') {
-      if (!isReportsLoading && reportsError && reports.length === 0) {
-        return (
-          <ErrorState
-            eyebrow="Reports Unavailable"
-            title="Unable to load reports"
-            description={reportsError}
-            action={{ label: 'Retry', onClick: reloadReports }}
           />
         );
       }

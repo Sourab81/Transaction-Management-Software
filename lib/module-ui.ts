@@ -7,6 +7,7 @@ export type ModuleUiId =
   | 'services'
   | 'accounts'
   | 'colors'
+  | 'customer-categories'
   | 'employee'
   | 'departments'
   | 'expense'
@@ -81,6 +82,14 @@ export const moduleUi: Record<ModuleUiId, ModuleUiConfig> = {
     emptyDescription: 'Add colors to assign consistent labels to customers.',
     permissionTitle: 'Color access is restricted',
     permissionDescription: 'Your current permissions do not allow you to open color master records.',
+  },
+  'customer-categories': {
+    id: 'customer-categories',
+    label: 'Customer Categories',
+    emptyTitle: 'No categories added yet',
+    emptyDescription: 'Add categories to group customers for better organization.',
+    permissionTitle: 'Category access is restricted',
+    permissionDescription: 'Your current permissions do not allow you to open customer category records.',
   },
   employee: {
     id: 'employee',

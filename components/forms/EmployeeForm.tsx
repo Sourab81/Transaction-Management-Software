@@ -130,6 +130,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setValidationError('Please enter a valid email address.');
+      return;
+    }
+
     if (!initialValues && !password.trim()) {
       setValidationError('Password is required when creating an employee.');
       return;

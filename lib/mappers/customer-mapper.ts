@@ -3,6 +3,7 @@ import {
   extractCollectionItems,
   isRecord,
   normalizeActiveStatus,
+  readArrayValue,
   readNumberValue,
   readStringValue,
   type UnknownRecord,
@@ -28,6 +29,8 @@ export const mapCustomerRecord = (record: UnknownRecord): BusinessCustomer | nul
   const phone = readStringValue(record, ['mobileNo', 'mobile_no', 'phone', 'mobile', 'customer_phone', 'phone_number']) || 'Not added';
   const addedDate = readStringValue(record, ['addedDate', 'added_date', 'joined_date', 'joinedDate', 'created_at', 'createdAt', 'date']) || undefined;
 
+  const rawCategoryIds = readArrayValue(record, ['category_ids', 'categoryIds']);
+
   return {
     id,
     customerCode: readStringValue(record, ['customerCode', 'customer_code', 'code', 'customer_id_code']) || undefined,
@@ -45,6 +48,7 @@ export const mapCustomerRecord = (record: UnknownRecord): BusinessCustomer | nul
     joinedDate: addedDate,
     addedDate,
     updatedDate: readStringValue(record, ['updatedDate', 'updated_date', 'updated_at', 'updatedAt']) || undefined,
+    categoryIds: rawCategoryIds ? rawCategoryIds.map(String) : undefined,
   };
 };
 

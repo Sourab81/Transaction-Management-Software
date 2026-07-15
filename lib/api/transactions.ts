@@ -231,3 +231,24 @@ export const payTransaction = (payload: PayTransactionPayload) =>
     }),
     'Transaction payment saved successfully.',
   );
+
+export interface TransactionReportFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  counterIds?: (string | number)[];
+  staffIds?: (string | number)[];
+  customerSearch?: string;
+  pageNo?: number;
+  limit?: number;
+}
+
+export const getTransactionReport = (filters: TransactionReportFilters = {}) =>
+  directBackendPostJson('getTransactionReport', {
+    date_from: filters.dateFrom,
+    date_to: filters.dateTo,
+    counter_ids: filters.counterIds,
+    staff_ids: filters.staffIds,
+    customer_search: filters.customerSearch,
+    page_no: filters.pageNo ?? 1,
+    limit: filters.limit ?? 50,
+  });

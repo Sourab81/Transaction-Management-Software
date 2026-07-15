@@ -28,6 +28,10 @@ export const modulePermissionMap = {
     'Customers_list',
     'Customers_add',
   ],
+  'customer-categories': [
+    'Customers_list',
+    'Customers_add',
+  ],
   employee: employeeModulePermissions,
   employees: employeeModulePermissions,
   reports: [

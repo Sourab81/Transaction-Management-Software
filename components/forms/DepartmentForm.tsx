@@ -92,10 +92,7 @@ const DepartmentForm: React.FC<DepartmentFormProps> = ({
               placeholder="0"
               type="number"
               value={openingBalance}
-              onChange={(event) => {
-                setOpeningBalance(event.target.value);
-                setValidationError('');
-              }}
+              disabled
               required
             />
           </div>

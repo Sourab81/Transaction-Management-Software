@@ -129,8 +129,11 @@ const buildEmployeePayload = (
     nickname: payload.nickName,
     contact_no: payload.mobile,
     email_id: payload.email,
-    permissions: JSON.stringify(permissions),
   };
+
+  for (const [key, value] of Object.entries(permissions)) {
+    employeePayload[`permissions[${key}]`] = value;
+  }
 
   addOptionalEmployeeField(employeePayload, 'password', payload.password);
   addOptionalEmployeeField(
@@ -143,7 +146,7 @@ const buildEmployeePayload = (
   addOptionalEmployeeField(employeePayload, 'remark', payload.remark);
 
   const status = normalizeEmployeeStatus(payload.status);
-  if (status === 0 || (options.includeActiveStatus && typeof status !== 'undefined')) {
+  if (typeof status !== 'undefined') {
     employeePayload.status = status;
   }
 
@@ -166,7 +169,7 @@ export const createEmployee = async (formPayload: EmployeeMutationPayload) => {
 
   const result = await handleEmployeeMutation(
     () => directBackendPost('createEmployee', employeePayload),
-    'Employee created successfully.',
+    'Unable to create employee.',
   );
 
   console.log('Employee create response', result);

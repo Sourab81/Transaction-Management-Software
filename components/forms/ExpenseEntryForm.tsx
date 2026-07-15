@@ -22,7 +22,7 @@ interface ExpenseEntryFormProps {
 
 type PaidFromValue = `department:${string}` | `account:${string}` | '';
 
-const formatMoney = (amount: number | undefined) => `â‚¹${(amount ?? 0).toLocaleString('en-IN')}`;
+const formatMoney = (amount: number | undefined) => `${(amount ?? 0).toLocaleString('en-IN')}`;
 
 const parsePaidFromValue = (value: PaidFromValue): { type: ExpensePaymentMode; id: string } | null => {
   if (!value) return null;

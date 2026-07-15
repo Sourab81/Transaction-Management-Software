@@ -9,7 +9,7 @@ import {
 import type { CustomerPermissions, SessionAccessContext } from './types';
 
 export const adminAccessibleModules = new Set(['dashboard', 'customers', 'reminder', 'history', 'reports', 'role', 'profile', 'additions']);
-export const permissionBackedModules = new Set(['customers', 'employee', 'services', 'accounts', 'colors', 'departments', 'reports', 'expense', 'transactions', 'reminder']);
+export const permissionBackedModules = new Set(['customers', 'employee', 'services', 'accounts', 'colors', 'customer-categories', 'departments', 'reports', 'expense', 'transactions', 'reminder']);
 
 const businessHasModulePermission = (permissions: CustomerPermissions | null | undefined, moduleId: string) => {
   return hasAnyModulePermission(permissions, moduleId);

@@ -30,6 +30,8 @@ export interface CustomerBalanceFilters {
   limit?: number;
   status?: number;
   customerId?: number | string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface PayCustomerBalancePayload {

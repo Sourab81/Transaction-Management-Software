@@ -3666,7 +3666,7 @@ input[type="password"],
   gap: 0.6rem;
   justify-content: space-between;
   text-align: left;
-  width: 100%;
+  width: 15rem;
 }
 
 .table-filter-dropdown__menu {
@@ -6181,28 +6181,33 @@ body,
 .expense-multiselect {
   background: #ffffff;
   border: 0.0625rem solid var(--border-light);
-  border-radius: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  max-height: 8.5rem;
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 12rem;
   overflow: auto;
-  padding: 0.65rem;
+  padding: 0.55rem;
 }
 
 .expense-multiselect__option {
   align-items: center;
-  background: var(--bg-surface-alt);
-  border: 0.0625rem solid var(--border-soft);
-  border-radius: 999rem;
-  color: var(--text-secondary);
+  border-radius: 0.55rem;
+  color: var(--foreground);
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 600;
   gap: 0.4rem;
   margin: 0;
-  padding: 0.45rem 0.7rem;
+  padding: 0.5rem 0.55rem;
+}
+
+.expense-multiselect__option:hover {
+  background: var(--bg-surface-alt);
+}
+
+.expense-multiselect__option input {
+  flex-shrink: 0;
 }
 
 .status-toggle-pill {

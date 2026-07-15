@@ -34,6 +34,9 @@ export const canUseBusinessFeature = (
     case 'colors':
       if (action === 'view') return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
       return isPermissionEnabled(permissions, 'customers_add') || isPermissionEnabled(permissions, 'customers_list');
+    case 'customer-categories':
+      if (action === 'view') return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
+      return isPermissionEnabled(permissions, 'customers_add') || isPermissionEnabled(permissions, 'customers_list');
     case 'departments':
       if (action === 'view') return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
       return isPermissionEnabled(permissions, 'master_department_manage');

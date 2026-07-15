@@ -1,6 +1,6 @@
 'use client';
 
-import { DirectBackendError, directBackendGet, directBackendPost } from './direct-backend';
+import { DirectBackendError, directBackendGet, directBackendPost, directBackendPostRaw } from './direct-backend';
 import {
   extractCollectionItems,
   isRecord,
@@ -116,6 +116,52 @@ const normalizeMutationResult = (
 export const getBalanceUpdates = (filters: BalanceUpdateFilters) => {
   const query = appendBalanceUpdateFilters(filters);
   return directBackendGet(`balanceUpdates?${query}`);
+};
+
+export interface BatchUpdateItem {
+  entityId: string;
+  statementBalance: number;
+  remark: string;
+}
+
+export interface CreateBalanceUpdateBatchPayload {
+  mode: BalanceUpdateMode;
+  updates: BatchUpdateItem[];
+}
+
+export const createBalanceUpdatesBatch = async (payload: CreateBalanceUpdateBatchPayload) => {
+  try {
+    const parts: string[] = [];
+    parts.push(`mode=${encodeURIComponent(payload.mode)}`);
+    payload.updates.forEach((update, index) => {
+      parts.push(`updates[${index}][entity_id]=${encodeURIComponent(update.entityId)}`);
+      parts.push(`updates[${index}][statement_balance]=${encodeURIComponent(String(update.statementBalance))}`);
+      if (update.remark) {
+        parts.push(`updates[${index}][remark]=${encodeURIComponent(update.remark)}`);
+      }
+    });
+    const raw = await directBackendPostRaw('balanceUpdateBatch', parts.join('&'));
+    console.log('[BalanceUpdate] RAW BACKEND RESPONSE:', JSON.stringify(raw, null, 2));
+    console.log('[BalanceUpdate] isRecord:', typeof raw === 'object' && raw !== null && !Array.isArray(raw));
+    if (typeof raw === 'object' && raw !== null) {
+      console.log('[BalanceUpdate] success field:', (raw as Record<string, unknown>).success);
+      console.log('[BalanceUpdate] status field:', (raw as Record<string, unknown>).status);
+      console.log('[BalanceUpdate] message field:', (raw as Record<string, unknown>).message);
+    }
+    return normalizeMutationResult(raw, 'Balance updates saved successfully.');
+  } catch (error) {
+    console.log('[BalanceUpdate] CATCH ERROR:', error instanceof Error ? error.message : error);
+    if (error instanceof DirectBackendError) {
+      console.log('[BalanceUpdate] StatusCode:', error.statusCode);
+      console.log('[BalanceUpdate] Error body:', error.body);
+      return normalizeMutationResult(error.body, error.message || 'Unable to save balance updates.');
+    }
+
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unable to save balance updates.',
+    };
+  }
 };
 
 export const createBalanceUpdate = async (payload: CreateBalanceUpdatePayload) => {

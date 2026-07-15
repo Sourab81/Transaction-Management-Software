@@ -24,7 +24,7 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-const MASTER_MODULE_IDS = ['departments', 'services', 'accounts', 'colors'];
+const MASTER_MODULE_IDS = ['departments', 'services', 'accounts', 'colors', 'customer-categories'];
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isCollapsed = false, onClose }) => {
   const visibleModules = getSidebarModulesForSession(accessContext);
@@ -83,9 +83,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
                   ? 'Inventory'
                   : displayItem.id === 'accounts'
                     ? 'Account'
-                    : displayItem.id === 'colors'
-                      ? 'Colors'
-                    : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
+                : displayItem.id === 'colors'
+                  ? 'Colors'
+                : displayItem.id === 'customer-categories'
+                  ? 'Customer Categories'
+                : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
               return (
                 <Link
                   key={displayItem.id}

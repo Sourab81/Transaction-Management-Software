@@ -3,9 +3,9 @@ import { canUseBusinessFeature } from './feature-access';
 import { canAccessModuleForSession } from './session-access';
 import type { BusinessFeatureAction, SessionAccessContext } from './types';
 
-const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'colors', 'transactions', 'history', 'reports']);
-const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'expense', 'reports', 'transactions']);
-const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'expense', 'reports']);
+const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'colors', 'customer-categories', 'transactions', 'history', 'reports']);
+const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports', 'transactions']);
+const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports']);
 const adminManageableModules = new Set(['customers', 'reports', 'role', 'additions']);
 const adminDeletableModules = new Set(['customers', 'history', 'reports', 'role', 'additions']);
 
@@ -26,6 +26,7 @@ const canViewBusinessRecords = (context: SessionAccessContext, moduleId: string)
     case 'services':
     case 'accounts':
     case 'colors':
+    case 'customer-categories':
     case 'departments':
     case 'reports':
     case 'expense':
