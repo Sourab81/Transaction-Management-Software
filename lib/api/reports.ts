@@ -143,7 +143,7 @@ export const getLedgerReport = async (filters: LedgerReportFilters): Promise<Led
     status: true,
     message: response.message,
     data: {
-      entities: ((response.data?.entities || []) as Record<string, unknown>[]).map(mapLedgerEntity),
+      entities: ((response.data?.entities || []) as unknown as Record<string, unknown>[]).map(mapLedgerEntity),
       records,
       summary,
       pagination,
