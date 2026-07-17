@@ -22,13 +22,14 @@ interface BusinessOnboardingProps {
   canAccessServices: boolean;
   onLogout: () => void;
   onSaveBusinessName: (name: string) => void;
-  onSaveDepartment: (values: { name: string; remark?: string }) => void | Promise<void>;
+  onSaveDepartment: (values: { name: string; remark?: string; openingBalance?: number }) => void | Promise<void>;
   onAdvanceDepartments: () => void;
   onSaveAccount: (values: {
     accountHolder: string;
     bankName: string;
     accountNumber: string;
     ifsc: string;
+    openingBalance?: number;
   }) => void;
   onAdvanceAccounts: () => void;
   onSaveService: (values: {
@@ -85,11 +86,13 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const [businessName, setBusinessName] = useState(business.name);
   const [departmentName, setDepartmentName] = useState('');
   const [departmentRemark, setDepartmentRemark] = useState('');
+  const [departmentOpeningBalance, setDepartmentOpeningBalance] = useState('');
   const [showDepartmentForm, setShowDepartmentForm] = useState(configuredDepartments.length === 0);
   const [accountHolder, setAccountHolder] = useState(business.name);
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [ifsc, setIfsc] = useState('');
+  const [accountOpeningBalance, setAccountOpeningBalance] = useState('');
   const [showAccountForm, setShowAccountForm] = useState(configuredAccounts.length === 0);
   const [serviceName, setServiceName] = useState('');
   const [serviceDepartmentId, setServiceDepartmentId] = useState(availableDepartments[0]?.id || '');
@@ -107,6 +110,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
   const resetDepartmentForm = () => {
     setDepartmentName('');
     setDepartmentRemark('');
+    setDepartmentOpeningBalance('');
     setShowDepartmentForm(canAddMoreDepartments || configuredDepartments.length === 0);
   };
 
@@ -115,6 +119,7 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
     setBankName('');
     setAccountNumber('');
     setIfsc('');
+    setAccountOpeningBalance('');
     setShowAccountForm(canAddMoreAccounts || configuredAccounts.length === 0);
   };
 
@@ -152,11 +157,13 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
     onSaveDepartment({
       name: departmentName.trim(),
       remark: departmentRemark.trim() || undefined,
+      openingBalance: departmentOpeningBalance ? parseFloat(departmentOpeningBalance) : 0,
     });
 
     if (canAddMoreDepartments) {
       setDepartmentName('');
       setDepartmentRemark('');
+      setDepartmentOpeningBalance('');
       setShowDepartmentForm(false);
       return;
     }
@@ -178,11 +185,13 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
       bankName: bankName.trim(),
       accountNumber: accountNumber.trim(),
       ifsc: ifsc.trim().toUpperCase(),
+      openingBalance: accountOpeningBalance ? parseFloat(accountOpeningBalance) : 0,
     });
 
     if (canAddMoreAccounts) {
       setAccountHolder(business.name);
       setBankName('');
+      setAccountOpeningBalance('');
       setAccountNumber('');
       setIfsc('');
       setShowAccountForm(false);
@@ -438,6 +447,19 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                         placeholder="Optional note"
                       />
                     </div>
+                    <div className="col-12 col-md-6">
+                      <Input
+                        label="Opening Balance"
+                        type="number"
+                        min="0"
+                        value={departmentOpeningBalance}
+                        onChange={(event) => {
+                          setDepartmentOpeningBalance(event.target.value);
+                          setValidationError('');
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
 
                   <div className="modal-actions">
@@ -541,6 +563,19 @@ const BusinessOnboarding: React.FC<BusinessOnboardingProps> = ({
                         }}
                         placeholder="Example: HDFC0001234"
                         required
+                      />
+                    </div>
+                    <div className="col-12 col-md-6">
+                      <Input
+                        label="Opening Balance"
+                        type="number"
+                        min="0"
+                        value={accountOpeningBalance}
+                        onChange={(event) => {
+                          setAccountOpeningBalance(event.target.value);
+                          setValidationError('');
+                        }}
+                        placeholder="0"
                       />
                     </div>
                   </div>

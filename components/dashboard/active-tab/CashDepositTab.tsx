@@ -203,6 +203,7 @@ export default function CashDepositTab({ ctx }: CashDepositTabProps) {
                 setValidationError('');
                 setIsDepositModalOpen(true);
               }}
+              style={!ctx.canPerformModuleAction('accounts', 'add') ? { display: 'none' } : undefined}
             >
               <FaPlusCircle />
               Deposit

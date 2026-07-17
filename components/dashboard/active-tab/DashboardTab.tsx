@@ -159,9 +159,9 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
 
   return (
     <div className="dashboard-page-stack dashboard-page-stack--modern">
-      <DashboardStatsSection stats={stats} isLoading={isDashboardStatsLoading} />
+      <DashboardStatsSection stats={stats} isLoading={isDashboardStatsLoading} role={currentRole} />
 
-      <div className="dashboard-command-grid">
+      {/* <div className="dashboard-command-grid">
         <WelcomeHero
           userName={displayUserName}
           role={currentRole}
@@ -209,9 +209,9 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
             />
           </div>
         </section>
-      </div>
+      </div> */}
 
-      <div className="dashboard-main-grid">
+      {/* <div className="dashboard-main-grid">
         <div className="dashboard-main-column">
           {isBusinessWorkspace ? renderBusinessPlanSection() : null}
           {isBusinessWorkspace ? null : serviceSnapshotSection}
@@ -239,7 +239,7 @@ export default function DashboardTab({ ctx }: DashboardTabProps) {
             onDismiss={handleDismissNotification}
           />
         </aside>
-      </div>
+      </div> */}
     </div>
   );
 }

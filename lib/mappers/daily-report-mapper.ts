@@ -25,9 +25,17 @@ export interface ExpenseInfoRow {
   amount: number;
 }
 
+export interface EntityBalance {
+  name: string;
+  type: 'Department' | 'Account';
+  openingBalance: number;
+  closingBalance: number;
+}
+
 export interface NetDetails {
   totalOpeningBalance: number;
   totalClosingBalance: number;
+  entityBalances: EntityBalance[];
   accountDiff: number;
   sumOutstanding: number;
   totalExpense: number;
@@ -51,6 +59,7 @@ export const parseDailyReport = (record: DailyReportRecord): ParsedDailyReport |
       netDetails: record.net_details ? { ...{
         totalOpeningBalance: 0,
         totalClosingBalance: 0,
+        entityBalances: [],
         accountDiff: 0,
         sumOutstanding: 0,
         totalExpense: 0,
@@ -60,6 +69,7 @@ export const parseDailyReport = (record: DailyReportRecord): ParsedDailyReport |
       }, ...JSON.parse(record.net_details) } : {
         totalOpeningBalance: 0,
         totalClosingBalance: 0,
+        entityBalances: [],
         accountDiff: 0,
         sumOutstanding: 0,
         totalExpense: 0,

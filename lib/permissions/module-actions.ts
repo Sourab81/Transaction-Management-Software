@@ -6,8 +6,8 @@ import type { BusinessFeatureAction, SessionAccessContext } from './types';
 const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'colors', 'customer-categories', 'transactions', 'history', 'reports']);
 const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports', 'transactions']);
 const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports']);
-const adminManageableModules = new Set(['customers', 'reports', 'role', 'additions']);
-const adminDeletableModules = new Set(['customers', 'history', 'reports', 'role', 'additions']);
+const adminManageableModules = new Set(['customers', 'reports', 'role', 'additions', 'permissions']);
+const adminDeletableModules = new Set(['customers', 'history', 'reports', 'role', 'additions', 'permissions']);
 
 const canViewBusinessRecords = (context: SessionAccessContext, moduleId: string) => {
   switch (moduleId) {
@@ -19,9 +19,8 @@ const canViewBusinessRecords = (context: SessionAccessContext, moduleId: string)
       ]);
     case 'employee':
       return hasAnyEnabledPermission(context.permissions, [
-        'employee_list',
-        'employee_salary',
-        'employee_outstanding',
+        'employees_list',
+        'employees_salary',
       ]);
     case 'services':
     case 'accounts':
@@ -60,10 +59,9 @@ export const canPerformModuleActionForSession = (
   }
 
     if (context.role === 'Customer') {
-    // Business owners (mapped to Customer role) always have full manage access
-    // to their own workspace modules — no permission gate needed
-    if (action === 'delete') return businessDeletableModules.has(moduleId);
-    return businessManageableModules.has(moduleId);
+    if (!businessManageableModules.has(moduleId)) return false;
+    if (action === 'delete' && !businessDeletableModules.has(moduleId)) return false;
+    return canUseBusinessFeature(context.permissions, moduleId, action);
   }
 
   if (context.role === 'Employee') {

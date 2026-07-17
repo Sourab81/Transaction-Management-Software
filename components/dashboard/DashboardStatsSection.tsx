@@ -21,6 +21,7 @@ import { SkeletonBlock, SkeletonCard } from '../ui/Skeleton';
 interface DashboardStatsSectionProps {
   stats: DashboardStats | null;
   isLoading: boolean;
+  role?: string;
 }
 
 const amountColors = {
@@ -45,7 +46,7 @@ const ChartSkeleton = () => (
   </div>
 );
 
-export default function DashboardStatsSection({ stats, isLoading }: DashboardStatsSectionProps) {
+export default function DashboardStatsSection({ stats, isLoading, role }: DashboardStatsSectionProps) {
   const statCards = stats?.statCards;
   const amountEntries = stats ? [
     { name: 'Advance', value: stats.amountsPie.advance, color: amountColors.advance },
@@ -83,18 +84,22 @@ export default function DashboardStatsSection({ stats, isLoading }: DashboardSta
               <div className="col-6 col-xl-3">
                 <SummaryCard icon={<FaUsers />} title="Total Customers" value={String(statCards?.totalCustomers ?? 0)} detail="All customer records" colorClass="bg-success" />
               </div>
-              <div className="col-6 col-xl-3">
-                <SummaryCard icon={<FaUsers />} title="Active Users" value={String(statCards?.activeUsers ?? 0)} detail="Currently active users" colorClass="bg-warning" />
-              </div>
-              <div className="col-6 col-xl-3">
-                <SummaryCard icon={<FaUsers />} title="Total Users" value={String(statCards?.totalUsers ?? 0)} detail="All user accounts" colorClass="bg-warning" />
-              </div>
-              <div className="col-6 col-xl-3">
-                <SummaryCard icon={<FaSms />} title="Today SMS" value={String(statCards?.todaySms ?? 0)} detail="Messages sent today" colorClass="bg-success" />
-              </div>
-              <div className="col-6 col-xl-3">
-                <SummaryCard icon={<FaSms />} title="Total Send/Remaining SMS" value={statCards?.totalSms ?? '0'} detail="SMS usage balance" colorClass="bg-success" />
-              </div>
+              {role !== 'Employee' && (
+                <>
+                  <div className="col-6 col-xl-3">
+                    <SummaryCard icon={<FaUsers />} title="Active Users" value={String(statCards?.activeUsers ?? 0)} detail="Currently active users" colorClass="bg-warning" />
+                  </div>
+                  <div className="col-6 col-xl-3">
+                    <SummaryCard icon={<FaUsers />} title="Total Users" value={String(statCards?.totalUsers ?? 0)} detail="All user accounts" colorClass="bg-warning" />
+                  </div>
+                  <div className="col-6 col-xl-3">
+                    <SummaryCard icon={<FaSms />} title="Today SMS" value={String(statCards?.todaySms ?? 0)} detail="Messages sent today" colorClass="bg-success" />
+                  </div>
+                  <div className="col-6 col-xl-3">
+                    <SummaryCard icon={<FaSms />} title="Total Send/Remaining SMS" value={statCards?.totalSms ?? '0'} detail="SMS usage balance" colorClass="bg-success" />
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -102,35 +107,66 @@ export default function DashboardStatsSection({ stats, isLoading }: DashboardSta
 
       <div className="dashboard-section-block">
         <div className="row g-4">
-          <div className="col-12 col-xl-6">
-            <section className="panel p-4 h-100">
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">Financial Snapshot</p>
-                  <h2 className="panel-title">Amounts</h2>
+          {role === 'Employee' ? (
+            <div className="col-12 col-xl-6">
+              <section className="panel p-4 h-100">
+                <div className="panel-header">
+                  <div>
+                    <p className="eyebrow">User Ranking</p>
+                    <h2 className="panel-title">Top 5 Users</h2>
+                  </div>
                 </div>
-              </div>
-              <div style={{ height: 300 }}>
-                {isLoading && !stats ? (
-                  <ChartSkeleton />
-                ) : hasAmountData ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie data={amountEntries} dataKey="value" nameKey="name" outerRadius={100} label>
-                        {amountEntries.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <NoData />
-                )}
-              </div>
-            </section>
-          </div>
+                <div style={{ height: 300 }}>
+                  {isLoading && !stats ? (
+                    <ChartSkeleton />
+                  ) : topUsers.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={topUsers}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tickLine={false} />
+                        <YAxis tickFormatter={(value) => formatCurrency(Number(value))} />
+                        <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Service Charge']} />
+                        <Legend />
+                        <Bar dataKey="totalServiceCharge" name="Service Charge" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <NoData />
+                  )}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <div className="col-12 col-xl-6">
+              <section className="panel p-4 h-100">
+                <div className="panel-header">
+                  <div>
+                    <p className="eyebrow">Financial Snapshot</p>
+                    <h2 className="panel-title">Amounts</h2>
+                  </div>
+                </div>
+                <div style={{ height: 300 }}>
+                  {isLoading && !stats ? (
+                    <ChartSkeleton />
+                  ) : hasAmountData ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie data={amountEntries} dataKey="value" nameKey="name" outerRadius={100} label>
+                          {amountEntries.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <NoData />
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
 
           <div className="col-12 col-xl-6">
             <section className="panel p-4 h-100">
@@ -164,34 +200,36 @@ export default function DashboardStatsSection({ stats, isLoading }: DashboardSta
         </div>
       </div>
 
-      <div className="dashboard-section-block">
-        <section className="panel p-4">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">User Ranking</p>
-              <h2 className="panel-title">Top 5 Users</h2>
+      {role !== 'Employee' && (
+        <div className="dashboard-section-block">
+          <section className="panel p-4">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">User Ranking</p>
+                <h2 className="panel-title">Top 5 Users</h2>
+              </div>
             </div>
-          </div>
-          <div style={{ height: 300 }}>
-            {isLoading && !stats ? (
-              <ChartSkeleton />
-            ) : topUsers.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topUsers}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tickLine={false} />
-                  <YAxis tickFormatter={(value) => formatCurrency(Number(value))} />
-                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Service Charge']} />
-                  <Legend />
-                  <Bar dataKey="totalServiceCharge" name="Service Charge" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <NoData />
-            )}
-          </div>
-        </section>
-      </div>
+            <div style={{ height: 300 }}>
+              {isLoading && !stats ? (
+                <ChartSkeleton />
+              ) : topUsers.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={topUsers}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tickLine={false} />
+                    <YAxis tickFormatter={(value) => formatCurrency(Number(value))} />
+                    <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Service Charge']} />
+                    <Legend />
+                    <Bar dataKey="totalServiceCharge" name="Service Charge" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <NoData />
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

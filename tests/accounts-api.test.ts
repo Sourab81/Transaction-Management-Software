@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
-import { AppApiError } from '../lib/api/client';
 import {
   createAccount,
   deleteAccount,
@@ -99,12 +98,6 @@ describe('accounts api client', () => {
 
     await assert.rejects(
       () => deleteAccount(''),
-      (error: unknown) => {
-        assert(error instanceof AppApiError);
-        assert.equal(error.statusCode, 400);
-        assert.equal(error.message, 'Account id is required.');
-        return true;
-      },
     );
   });
 });

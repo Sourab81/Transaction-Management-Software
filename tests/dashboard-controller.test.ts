@@ -13,6 +13,7 @@ import {
   getVisibleTransactions,
 } from '../lib/dashboard-controller';
 import { canAccessModuleForSession, createCustomerPermissions } from '../lib/platform-structure';
+import type { CustomerPermissions } from '../lib/permissions/types';
 import type { BusinessCustomer, Service, Transaction } from '../lib/store';
 
 const services: Service[] = [
@@ -135,16 +136,17 @@ const transactions: Transaction[] = [
   },
 ];
 
-const businessPermissions = createCustomerPermissions([
-  'customers_list',
-  'services_access',
-  'reports_bank_counter_report',
-  'master_account_manage',
-]);
+const businessPermissions: CustomerPermissions = {
+  customers_list: 2,
+  services_access: 2,
+  reports_bank_counter_report: 2,
+  master_account_manage: 2,
+  transactions_add: 2,
+};
 
 const restrictedPermissions = createCustomerPermissions([]);
-const addOnlyCustomerPermissions = createCustomerPermissions(['customers_add']);
-const employeeCustomerOnlyPermissions = createCustomerPermissions(['customers_list']);
+const addOnlyCustomerPermissions: CustomerPermissions = { customers_add: 2 };
+const employeeCustomerOnlyPermissions: CustomerPermissions = { customers_list: 2 };
 const cashCounterPermissions = createCustomerPermissions([
   'master_account_manage',
   'master_department_manage',

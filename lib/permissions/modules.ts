@@ -193,6 +193,16 @@ export const userDashboardModules: PlatformModule[] = [
     allowedRoles: ['Admin'],
     sidebarRoles: [],
   },
+  {
+    id: 'permissions',
+    label: 'Permissions',
+    sidebarLabel: 'Permissions',
+    heading: 'Permissions',
+    description: 'Manage user and employee permissions',
+    icon: FaUserShield,
+    allowedRoles: ['Admin', 'Customer'],
+    sidebarRoles: ['Admin', 'Customer'],
+  },
 ];
 
 export const adminDashboardModules = [

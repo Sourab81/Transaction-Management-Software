@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FaChevronDown, FaLayerGroup, FaUniversity } from 'react-icons/fa';
+import { FaChevronDown, FaLayerGroup, FaToolbox, FaUniversity } from 'react-icons/fa';
 import { getModuleLabel } from '../../lib/module-ui';
 import {
   getModuleDisplay,
@@ -25,6 +25,7 @@ interface SidebarProps {
 }
 
 const MASTER_MODULE_IDS = ['departments', 'services', 'accounts', 'colors', 'customer-categories'];
+const TOOLS_MODULE_IDS = ['permissions'];
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isCollapsed = false, onClose }) => {
   const visibleModules = getSidebarModulesForSession(accessContext);
@@ -40,17 +41,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
   const [isTransactionsMenuOpen, setIsTransactionsMenuOpen] = useState(false);
   const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(false);
   const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(false);
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
 
   const isTransactionsMenuExpanded = isTransactionsRoute || isTransactionsMenuOpen;
   const isMasterMenuExpanded = isMasterRoute || isMasterMenuOpen;
   const isAccountsMenuExpanded = isAccountsWorkflowRoute || isAccountsMenuOpen;
+  const isToolsMenuExpanded = activeTab === 'permissions' || isToolsMenuOpen;
 
   const closeOnNavigate = () => {
     if (onClose) onClose();
   };
 
   const masterModules = visibleModules.filter((module) => MASTER_MODULE_IDS.includes(module.id));
-  const moduleList = visibleModules.filter((module) => !MASTER_MODULE_IDS.includes(module.id));
+  const toolsModules = visibleModules.filter((module) => TOOLS_MODULE_IDS.includes(module.id));
+  const moduleList = visibleModules.filter((module) => !MASTER_MODULE_IDS.includes(module.id) && !TOOLS_MODULE_IDS.includes(module.id));
   const canViewExpenseCategories = visibleModules.some((module) => module.id === 'expense');
   const masterRendered = masterModules.length > 0 || canViewExpenseCategories;
 
@@ -162,6 +166,47 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
     ) : null
   );
 
+  const renderToolsDropdown = () => (
+    toolsModules.length > 0 ? (
+      <div key="tools" className={`sidebar-subnav-group ${activeTab === 'permissions' ? 'is-active' : ''}`}>
+        <button
+          type="button"
+          onClick={() => setIsToolsMenuOpen((current) => !current)}
+          aria-label="Tools"
+          aria-expanded={isToolsMenuExpanded}
+          title={isCollapsed ? 'Tools' : undefined}
+          className={`sidebar-link sidebar-link--parent ${activeTab === 'permissions' ? 'is-active' : ''}`}
+        >
+          <span className="sidebar-link__icon">
+            <FaToolbox />
+          </span>
+          <span className="fw-semibold sidebar-link__label">Tools</span>
+          {!isCollapsed ? (
+            <FaChevronDown className={`sidebar-link__chevron ${isToolsMenuExpanded ? 'is-open' : ''}`} />
+          ) : null}
+        </button>
+        {!isCollapsed && isToolsMenuExpanded ? (
+          <div className="sidebar-subnav">
+            {toolsModules.map((item) => {
+              const displayItem = getModuleDisplay(item, accessContext.role);
+              const label = displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
+              return (
+                <Link
+                  key={displayItem.id}
+                  onClick={closeOnNavigate}
+                  href={getWorkspaceModulePath(displayItem.id)}
+                  className={`sidebar-subnav__link ${pathname === getWorkspaceModulePath(displayItem.id) || activeTab === displayItem.id ? 'is-active' : ''}`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    ) : null
+  );
+
   return (
     <aside className={`sidebar-shell sidebar-mobile ${isOpen ? 'sidebar-open' : 'sidebar-closed'} ${isCollapsed ? 'is-collapsed' : ''}`}>
       <div className="sidebar-brand">
@@ -258,6 +303,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
             </React.Fragment>
           );
         })}
+        {renderToolsDropdown()}
       </nav>
     </aside>
   );

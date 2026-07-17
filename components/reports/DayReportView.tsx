@@ -313,8 +313,14 @@ export default function DayReportView({ ctx }: DayReportViewProps) {
       (s, u) => s + u.serviceCharge + u.bankCharge + u.otherCharge,
       0,
     );
+    const entityBalances = accountDeptInfo.map((e) => ({
+      name: e.name,
+      type: e.type,
+      openingBalance: e.openingBalance,
+      closingBalance: e.closingBalance,
+    }));
     const grandTotal = accountDiff - sumOutstanding + totalExpense - totalCharges;
-    return { totalOpeningBalance, totalClosingBalance, accountDiff, sumOutstanding, totalExpense, totalCharges, tax: 0, grandTotal };
+    return { totalOpeningBalance, totalClosingBalance, entityBalances, accountDiff, sumOutstanding, totalExpense, totalCharges, tax: 0, grandTotal };
   }, [accountDeptInfo, rangeTransactions, expenseInfo, serviceCharges, customerBalances]);
 
   useEffect(() => {

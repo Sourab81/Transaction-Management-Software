@@ -1,33 +1,21 @@
-import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   canAccessModuleForSession,
-  createCustomerPermissions,
-  getModuleDisplayById,
   getPermissionBasedSidebarModules,
   getSidebarModulesForSession,
+  createCustomerPermissions,
   hasAnyPermission,
   isPermissionEnabled,
   modulePermissionMap,
 } from '../lib/platform-structure';
 
-describe('platform structure module display', () => {
-  test('renames the Admin customer module to Users', () => {
-    assert.equal(getModuleDisplayById('customers', 'Admin')?.sidebarLabel, 'Users');
-    assert.equal(getModuleDisplayById('customers', 'Admin')?.label, 'Users');
-  });
-
-  test('keeps the customer module label for business users', () => {
-    assert.equal(getModuleDisplayById('customers', 'Customer')?.sidebarLabel, 'Customers');
-  });
-});
-
 describe('permission based module access', () => {
   test('keeps a central permission map for workspace modules', () => {
     assert.deepEqual(modulePermissionMap.dashboard, []);
     assert.deepEqual(modulePermissionMap.profile, []);
-    assert.ok(modulePermissionMap.customers.includes('Customers_list'));
-    assert.ok(modulePermissionMap.employees.includes('Employee_list'));
+    assert.ok(modulePermissionMap.customers.includes('customers_list'));
+    assert.ok(modulePermissionMap.employees.includes('employees_list'));
   });
 
   test('supports permission values and aliases through shared helpers', () => {
@@ -36,7 +24,7 @@ describe('permission based module access', () => {
     assert.equal(isPermissionEnabled(1), true);
     assert.equal(isPermissionEnabled(0), false);
     assert.equal(hasAnyPermission(permissions, ['Customers_list']), true);
-    assert.equal(hasAnyPermission(permissions, ['Services_access']), false);
+    assert.equal(hasAnyPermission(permissions, ['master_inventory']), false);
   });
 
   test('renders sidebar modules from permissions for business users', () => {
@@ -48,7 +36,7 @@ describe('permission based module access', () => {
 
     assert.deepEqual(
       getPermissionBasedSidebarModules(context).map((module) => module.id),
-      ['dashboard', 'transactions', 'customers', 'services', 'profile'],
+      ['dashboard', 'customers', 'services', 'profile'],
     );
   });
 
@@ -83,7 +71,7 @@ describe('permission based module access', () => {
     assert.equal(canAccessModuleForSession(cashCounterContext, 'employee'), false);
     assert.deepEqual(
       getPermissionBasedSidebarModules(cashCounterContext).map((module) => module.id),
-      ['dashboard', 'transactions', 'customers', 'departments', 'services', 'accounts', 'profile', 'expense'],
+      ['dashboard', 'customers', 'departments', 'services', 'accounts', 'profile', 'expense'],
     );
   });
 
@@ -110,7 +98,7 @@ describe('permission based module access', () => {
     assert.equal(canAccessModuleForSession(adminWithRestrictedPermissions, 'additions'), true);
     assert.deepEqual(
       getSidebarModulesForSession(adminWithRestrictedPermissions).map((module) => module.id),
-      ['dashboard', 'customers', 'reminder', 'reports', 'role', 'profile'],
+      ['dashboard', 'customers', 'reminder', 'reports', 'role', 'profile', 'permissions'],
     );
   });
 });

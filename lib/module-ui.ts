@@ -15,7 +15,8 @@ export type ModuleUiId =
   | 'reports'
   | 'role'
   | 'profile'
-  | 'additions';
+  | 'additions'
+  | 'permissions';
 
 export interface ModuleUiConfig {
   id: ModuleUiId;
@@ -154,6 +155,14 @@ export const moduleUi: Record<ModuleUiId, ModuleUiConfig> = {
     emptyDescription: 'Configuration options will appear here when system controls are available.',
     permissionTitle: 'Settings access is restricted',
     permissionDescription: 'Your current permissions do not allow you to open system settings.',
+  },
+  permissions: {
+    id: 'permissions',
+    label: 'Permissions',
+    emptyTitle: 'No users to manage',
+    emptyDescription: 'Permissions for users and employees will be manageable once business accounts are created.',
+    permissionTitle: 'Permissions access is restricted',
+    permissionDescription: 'Your signed-in role cannot manage permissions.',
   },
 };
 

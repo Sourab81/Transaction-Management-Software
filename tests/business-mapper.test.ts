@@ -94,8 +94,8 @@ describe('business mapper', () => {
     assert.equal(businesses[0]?.roleTemplateId, '5');
     assert.equal(businesses[0]?.selectedRoleName, 'Cash Counter');
     assert.equal(businesses[0]?.permissions.customers_list, 1);
-    assert.equal(businesses[0]?.permissions.services_access, 1);
-    assert.equal(businesses[0]?.permissions.employee_add, 0);
+    assert.equal(businesses[0]?.permissions.master_inventory, 1);
+    assert.equal(businesses[0]?.permissions.employees_add, 0);
   });
 
   test('keeps id-only predefined roles on Business users without requiring legacy role 2', () => {
@@ -119,7 +119,7 @@ describe('business mapper', () => {
     assert.equal(businesses.length, 1);
     assert.equal(businesses[0]?.roleTemplateId, '6');
     assert.equal(businesses[0]?.selectedRoleName, undefined);
-    assert.equal(businesses[0]?.permissions.employee_list, 1);
+    assert.equal(businesses[0]?.permissions.employees_list, 1);
     assert.equal(businesses[0]?.permissions.customers_list, 0);
   });
 

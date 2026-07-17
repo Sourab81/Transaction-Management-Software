@@ -154,10 +154,12 @@ export default function CustomerCategoryTab({ ctx }: CustomerCategoryTabProps) {
                 placeholder="Search categories"
                 style={{ minWidth: '14rem' }}
               />
-              <button type="button" className="btn-app btn-app-primary" onClick={openAddModal}>
-                <FaPlusCircle />
-                Add Category
-              </button>
+              {ctx.canManageModule('customer-categories') ? (
+                <button type="button" className="btn-app btn-app-primary" onClick={openAddModal}>
+                  <FaPlusCircle />
+                  Add Category
+                </button>
+              ) : null}
             </div>
           )}
           columns={[
@@ -180,10 +182,12 @@ export default function CustomerCategoryTab({ ctx }: CustomerCategoryTabProps) {
                 <FaEye size={12} />
                 View
               </button>
-              <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => openEditModal(category)}>
-                <FaEdit size={12} />
-                Edit
-              </button>
+              {ctx.canManageModule('customer-categories') ? (
+                <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => openEditModal(category)}>
+                  <FaEdit size={12} />
+                  Edit
+                </button>
+              ) : null}
             </div>
           )}
         />

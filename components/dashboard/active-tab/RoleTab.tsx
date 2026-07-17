@@ -125,7 +125,13 @@ export default function RoleTab({ ctx }: RoleTabProps) {
     {
       key: 'privileges',
       header: 'Privileges',
-      render: (role: RoleTemplate) => `${Object.values(role.privileges).filter((enabled) => enabled === 1).length} enabled`,
+      render: (role: RoleTemplate) => {
+        const values = Object.values(role.privileges);
+        const read = values.filter((v) => v === 1).length;
+        const write = values.filter((v) => v === 2).length;
+        const none = values.filter((v) => v === 0).length;
+        return `${read} read / ${write} write / ${none} none`;
+      },
     },
   ], []);
 
@@ -299,11 +305,11 @@ export default function RoleTab({ ctx }: RoleTabProps) {
           eyebrow="Role Templates"
           title="Manage reusable roles"
           description="Create predefined privilege sets such as Business, Cashier, or Data Entry and apply them during user creation."
-          action={{
+          action={ctx.currentRole === 'Admin' ? {
             label: 'Create Role',
             icon: <FaPlusCircle />,
             onClick: openCreateModal,
-          }}
+          } : undefined}
         />
       </div>
 
@@ -322,14 +328,18 @@ export default function RoleTab({ ctx }: RoleTabProps) {
           actionsLabel="Actions"
           renderActions={(role) => (
             <div className="table-actions">
-              <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => openEditModal(role)}>
-                <FaEdit size={12} />
-                Edit
-              </button>
-              <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => openDeleteModal(role)}>
-                <FaTrashAlt size={12} />
-                Delete
-              </button>
+              {ctx.currentRole === 'Admin' ? (
+                <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => openEditModal(role)}>
+                  <FaEdit size={12} />
+                  Edit
+                </button>
+              ) : null}
+              {ctx.currentRole === 'Admin' ? (
+                <button type="button" className="btn-icon-sm btn-icon-sm--danger" onClick={() => openDeleteModal(role)}>
+                  <FaTrashAlt size={12} />
+                  Delete
+                </button>
+              ) : null}
             </div>
           )}
         />

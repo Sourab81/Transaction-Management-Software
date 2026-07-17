@@ -1,56 +1,48 @@
 import { hasAnyPermission } from './checks';
 import type { CustomerPermissions, SessionAccessContext } from './types';
 
-const employeeModulePermissions = [
-  'Employee_list',
-  'Employee_add',
-  'Employee_salary',
-  'Employee_outstanding',
+const masterPermissionKeys = [
+  'master_account',
+  'master_color',
+  'master_counter',
+  'master_customer_category',
+  'master_expense_category',
+  'master_inventory',
+  'master_panel_details',
+  'master_reminder_event',
 ] as const;
 
 export const modulePermissionMap = {
   dashboard: [],
   customers: [
-    'Customers_list',
-    'Customers_add',
-    'Customers_payment_list',
-    'Customers_outstanding',
+    'customers_list',
+    'customers_add',
+    'customers_payment_list',
+    'customers_outstanding',
   ],
-  transactions: ['Services_access'],
-  services: ['Services_access'],
-  departments: ['Master_department_manage'],
+  transactions: ['transactions_add', 'transactions_list'],
+  services: ['master_inventory'],
+  departments: ['master_counter'],
   accounts: [
-    'Master_account_manage',
+    'master_account',
     'accounts_cash_deposit',
-    'Accounts_department_transfer',
+    'accounts_balance_transfer',
+    'accounts_balance_update',
   ],
-  colors: [
-    'Customers_list',
-    'Customers_add',
-  ],
-  'customer-categories': [
-    'Customers_list',
-    'Customers_add',
-  ],
-  employee: employeeModulePermissions,
-  employees: employeeModulePermissions,
+  colors: ['master_color'],
+  'customer-categories': ['master_customer_category'],
+  employee: ['employees_add', 'employees_list', 'employees_salary'],
+  employees: ['employees_add', 'employees_list', 'employees_salary'],
   reports: [
-    'Reports_bank_counter_report',
-    'Reports_service_report',
-    'Reports_day_report_service_charge_details',
-    'reports_day_report_account_and_counter_details',
-    'Reports_day_report_expense_details',
-    'Reports_day_report_net_details',
-    'Reports_day_report_grand_total',
-    'Reports_day_report_log_report',
+    'reports_bank_department',
+    'reports_daily',
+    'reports_log',
+    'reports_transaction',
   ],
-  expense: ['Expense_access'],
-  reminder: [
-    'Reminder_new_sms',
-    'Reminder_set_reminder',
-    'Reminder_scheduled_message',
-  ],
+  expense: ['expense_add', 'expense_list'],
+  reminder: ['reminder_manage'],
   profile: [],
+  permissions: ['permissions_manage'],
 } as const;
 
 export type PermissionMappedModuleId = keyof typeof modulePermissionMap;

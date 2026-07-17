@@ -63,6 +63,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
   const {
     accounts,
     canManageModule,
+    canPerformModuleAction,
     currentRole,
     getRoleLabel,
     handlePrintReceipt,
@@ -313,7 +314,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
       header: 'Remark',
       render: (transaction) => <RemarkCell value={transaction.remark || transaction.note} />,
     },
-    {
+    ...(canPerformModuleAction('transactions', 'edit') ? [{
       key: 'payment',
       header: 'Payment',
       render: (transaction) => {
@@ -374,7 +375,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
           </div>
         );
       },
-    },
+    }] : []),
   ];
 
   if (!canManageModule('transactions')) {

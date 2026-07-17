@@ -75,9 +75,15 @@ export const mapPermissionValue = (value: unknown): CustomerPermissions | undefi
   );
 
   if (booleanLikeEntries.length > 0) {
-    return normalizeCustomerPermissions(
-      Object.fromEntries(booleanLikeEntries.map(([key]) => [key, 1])),
+    const isNumericPermissionFormat = Object.values(value).every(
+      (v) => v === 0 || v === 1 || v === 2,
     );
+
+    if (!isNumericPermissionFormat) {
+      return normalizeCustomerPermissions(
+        Object.fromEntries(booleanLikeEntries.map(([key]) => [key, 1])),
+      );
+    }
   }
 
   return normalizeCustomerPermissions(value as Partial<CustomerPermissions>);

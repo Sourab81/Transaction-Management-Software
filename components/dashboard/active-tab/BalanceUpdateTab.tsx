@@ -145,6 +145,7 @@ export default function BalanceUpdateTab({ ctx }: BalanceUpdateTabProps) {
                 type="button"
                 className="btn-app btn-app-primary"
                 onClick={() => setView('batch')}
+                style={!ctx.canPerformModuleAction('accounts', 'edit') ? { display: 'none' } : undefined}
               >
                 <FaEdit />
                 Update

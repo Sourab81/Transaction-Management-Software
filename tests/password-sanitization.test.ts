@@ -142,7 +142,6 @@ describe('password sanitization', () => {
     );
     const employeeHtml = renderToStaticMarkup(
       React.createElement(EmployeeForm, {
-        businessPermissions: permissions,
         departments: [
           {
             id: 'counter-1',

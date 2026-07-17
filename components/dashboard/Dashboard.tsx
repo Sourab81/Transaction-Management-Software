@@ -76,7 +76,7 @@ import {
   payCustomerBalance,
   type PayCustomerBalancePayload,
 } from '../../lib/api/customerBalance';
-import { buildRoleTemplatePrivilegesPayload } from '../../lib/mappers/role-template-mapper';
+
 import {
   getCustomerWorkspaceViewUi,
   getModuleLabel as getModuleUiLabel,
@@ -89,6 +89,7 @@ import {
   getRoleLabel,
   intersectCustomerPermissions,
   isPermissionEnabled,
+  normalizeCustomerPermissions,
 } from '../../lib/platform-structure';
 import Header from '../layout/Header';
 import Sidebar from '../layout/Sidebar';
@@ -191,10 +192,9 @@ const mergeWorkspaceRecords = <T extends { id: string }>(workspaceRecords: T[], 
 
 const toBusinessStateValues = (
   values: BusinessFormValues,
-): Omit<BusinessFormValues, 'password' | 'roleTemplateBackendPrivileges'> => {
+): Omit<BusinessFormValues, 'password'> => {
   const stateValues = { ...values };
   delete stateValues.password;
-  delete stateValues.roleTemplateBackendPrivileges;
   return stateValues;
 };
 
@@ -904,10 +904,14 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [currentRole, currentUser]);
   const sessionPermissions = useMemo(() => {
     if (currentRole === 'Employee') {
-      return intersectCustomerPermissions(
-        currentUser.permissions ?? currentEmployee?.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
-        currentUser.permissions ?? currentEmployee?.permissions ?? currentBusiness?.permissions ?? buildDefaultCustomerPermissions(),
-      );
+      const employeePerms = currentUser.permissions ?? currentEmployee?.permissions ?? null;
+      const businessPerms = currentBusiness?.permissions ?? null;
+
+      if (employeePerms && businessPerms) {
+        return intersectCustomerPermissions(employeePerms, businessPerms);
+      }
+
+      return normalizeCustomerPermissions(employeePerms ?? businessPerms ?? buildDefaultCustomerPermissions());
     }
 
     if (currentRole === 'Customer') {
@@ -2795,11 +2799,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleBusinessSubmit = async (values: BusinessFormValues) => {
     if (!requireModuleAction('customers', editingBusiness ? 'edit' : 'add')) return;
 
-    if (Object.values(values.permissions).every((enabled) => enabled === 0)) {
-      addNotification('warning', 'Select at least one permission before saving the business.');
-      return;
-    }
-
     if (isBusinessEmailTaken(values.email, editingBusiness?.id)) {
       showIdentityConflict('A user already exists with this email.');
       return;
@@ -2826,19 +2825,15 @@ const Dashboard: React.FC<DashboardProps> = ({
         return;
       }
 
-      const privilegesPayload = JSON.stringify(
-        buildRoleTemplatePrivilegesPayload(values.permissions, values.roleTemplateBackendPrivileges),
-      );
       const result = await createBusinessUser({
         username: values.email,
         password: values.password,
         fullname: values.name,
-        role: values.roleTemplateId,
         email_id: values.email,
         contact_no: values.phone,
-        // role_template_id: values.roleTemplateId,
-        permission: privilegesPayload,
-        privileges: privilegesPayload,
+        role: values.role,
+        permission: JSON.stringify(values.permissions || {}),
+        privileges: JSON.stringify(values.permissions || {}),
       });
 
       if (!result.ok) {
@@ -3066,7 +3061,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   };
 
-  const handleOnboardingDepartmentSave = async (values: { name: string; remark?: string }) => {
+  const handleOnboardingDepartmentSave = async (values: { name: string; remark?: string; openingBalance?: number }) => {
     if (!canPerformModuleAction('departments', 'add') && !canCreateInitialDepartment) {
       showPermissionWarning('departments', 'add more');
       return;
@@ -3075,9 +3070,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
+    const openingBalance = values.openingBalance ?? 0;
     const departmentValues: DepartmentFormValues = {
       name: values.name,
-      openingBalance: 0,
+      openingBalance,
       remark: values.remark,
     };
     const departmentPayload = toStoredDepartmentValues(departmentValues);
@@ -3085,7 +3081,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (shouldLoadWorkspaceApi) {
       const result = await createDepartmentResponse({
         name: values.name,
-        openingBalance: 0,
+        openingBalance,
         remark: values.remark,
       });
 
@@ -3127,6 +3123,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     bankName: string;
     accountNumber: string;
     ifsc: string;
+    openingBalance?: number;
   }) => {
     if (!canPerformModuleAction('accounts', 'add') && !canCreateInitialAccount) {
       showPermissionWarning('accounts', 'add more');
@@ -3136,12 +3133,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     const businessId = requireBusinessWorkspaceId();
     if (!businessId) return;
 
+    const openingBalance = values.openingBalance ?? 0;
     const newAccountId = createRecordId();
     const accountValues: Omit<Account, 'date'> = {
       id: newAccountId,
       ...values,
-      openingBalance: 0,
-      currentBalance: 0,
+      openingBalance,
+      currentBalance: openingBalance,
       status: 'Active',
       counterId: null,
     };
@@ -4179,12 +4177,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           {currentRole === 'Admin' ? (
             <BusinessForm
               initialValues={editingBusiness || undefined}
-              roleTemplates={roleTemplates}
-              isRoleTemplatesLoading={isRoleTemplatesLoading}
-              roleTemplatesError={roleTemplatesError}
               submitLabel={editingBusiness ? 'Update User' : 'Add User'}
               onCancel={closeModal}
               onSubmit={handleBusinessSubmit}
+              roleTemplates={roleTemplates}
             />
           ) : (
             <CustomerForm
@@ -4208,7 +4204,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           onClose={closeModal}
         >
           <EmployeeForm
-            businessPermissions={currentBusiness?.permissions ?? buildDefaultCustomerPermissions()}
             initialValues={editingEmployee || undefined}
             submitLabel={editingEmployee ? 'Update Employee' : 'Add Employee'}
             onCancel={closeModal}

@@ -12,16 +12,29 @@ export function isPermissionEnabled(
   permissionId?: string,
 ) {
   if (typeof permissionId !== 'string') {
-    return toPermissionFlag(permissionsOrValue) === 1;
+    return toPermissionFlag(permissionsOrValue) >= 1;
   }
 
   const permissions = permissionsOrValue as CustomerPermissions | null | undefined;
   const canonicalPermissionId = resolveCanonicalPermissionId(permissionId);
   const aliases = customerPermissionIdAliases[canonicalPermissionId] ?? [permissionId];
 
-  return aliases.some((alias) => toPermissionFlag(permissions?.[alias]) === 1)
-    || toPermissionFlag(permissions?.[canonicalPermissionId]) === 1;
+  return aliases.some((alias) => toPermissionFlag(permissions?.[alias]) >= 1)
+    || toPermissionFlag(permissions?.[canonicalPermissionId]) >= 1;
 }
+
+export const canRead = isPermissionEnabled;
+
+export const canWrite = (
+  permissions: CustomerPermissions | null | undefined,
+  permissionId: string,
+): boolean => {
+  const canonicalPermissionId = resolveCanonicalPermissionId(permissionId);
+  const aliases = customerPermissionIdAliases[canonicalPermissionId] ?? [permissionId];
+
+  return aliases.some((alias) => toPermissionFlag(permissions?.[alias]) === 2)
+    || toPermissionFlag(permissions?.[canonicalPermissionId]) === 2;
+};
 
 export const hasAnyEnabledPermission = (
   permissions: CustomerPermissions | null | undefined,
@@ -40,6 +53,6 @@ export const hasEnabledPermissionPrefix = (
   const legacyPrefix = prefix.includes('_') ? prefix.replace('_', '.') : prefix;
   return Object.entries(permissions ?? {}).some(
     ([permissionId, enabled]) =>
-      enabled === 1 && (permissionId.startsWith(prefix) || permissionId.startsWith(legacyPrefix)),
+      (enabled as number) >= 1 && (permissionId.startsWith(prefix) || permissionId.startsWith(legacyPrefix)),
   );
 };

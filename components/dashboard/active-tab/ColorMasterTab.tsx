@@ -124,10 +124,12 @@ export default function ColorMasterTab({ ctx }: ColorMasterTabProps) {
                 placeholder="Search colors"
                 style={{ minWidth: '14rem' }}
               />
-              <button type="button" className="btn-app btn-app-primary" onClick={openAddModal}>
-                <FaPlusCircle />
-                Add Color
-              </button>
+              {ctx.canManageModule('colors') ? (
+                <button type="button" className="btn-app btn-app-primary" onClick={openAddModal}>
+                  <FaPlusCircle />
+                  Add Color
+                </button>
+              ) : null}
             </div>
           )}
           columns={[
@@ -157,10 +159,12 @@ export default function ColorMasterTab({ ctx }: ColorMasterTabProps) {
           ]}
           renderActions={(color) => (
             <div className="table-actions">
-              <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => openEditModal(color)}>
-                <FaEdit size={12} />
-                Edit
-              </button>
+              {ctx.canManageModule('colors') ? (
+                <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => openEditModal(color)}>
+                  <FaEdit size={12} />
+                  Edit
+                </button>
+              ) : null}
             </div>
           )}
         />

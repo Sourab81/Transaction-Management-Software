@@ -96,14 +96,14 @@ describe('session user mapper', () => {
       },
     }, () => null);
 
-    assert.equal(sessionUser?.permissions?.master_account_manage, 1);
-    assert.equal(sessionUser?.permissions?.master_department_manage, 1);
+    assert.equal(sessionUser?.permissions?.master_account, 1);
+    assert.equal(sessionUser?.permissions?.master_counter, 1);
     assert.equal(sessionUser?.permissions?.customers_list, 1);
-    assert.equal(sessionUser?.permissions?.services_access, 1);
-    assert.equal(sessionUser?.permissions?.accounts_department_transfer, 1);
-    assert.equal(sessionUser?.permissions?.employee_list, 1);
-    assert.equal(sessionUser?.permissions?.expense_access, 1);
-    assert.equal(sessionUser?.permissions?.reports_bank_counter_report, 0);
+    assert.equal(sessionUser?.permissions?.master_inventory, 1);
+    assert.equal(sessionUser?.permissions?.accounts_balance_transfer, 1);
+    assert.equal(sessionUser?.permissions?.employees_list, 1);
+    assert.equal(sessionUser?.permissions?.expense_add, 1);
+    assert.equal(sessionUser?.permissions?.reports_bank_department, 0);
   });
 
   test('maps role privileges from login and keeps disabled employee permissions denied', () => {
@@ -142,17 +142,15 @@ describe('session user mapper', () => {
       role: 'Customer',
       businessId: '25',
       permissions: createCustomerPermissions([
-        'employee_add',
-        'employee_list',
-        'employee_salary',
-        'employee_outstanding',
+        'employees_add',
+        'employees_list',
+        'employees_salary',
       ]),
     }));
 
-    assert.equal(sessionUser?.permissions?.employee_add, 0);
-    assert.equal(sessionUser?.permissions?.employee_list, 0);
-    assert.equal(sessionUser?.permissions?.employee_salary, 0);
-    assert.equal(sessionUser?.permissions?.employee_outstanding, 0);
+    assert.equal(sessionUser?.permissions?.employees_add, 0);
+    assert.equal(sessionUser?.permissions?.employees_list, 0);
+    assert.equal(sessionUser?.permissions?.employees_salary, 0);
     assert.equal(canAccessModuleForSession({
       role: 'Customer',
       businessId: sessionUser?.businessId,
@@ -178,8 +176,8 @@ describe('session user mapper', () => {
     }, () => null);
 
     assert.equal(sessionUser?.permissions?.customers_list, 1);
-    assert.equal(sessionUser?.permissions?.employee_add, 0);
-    assert.equal(sessionUser?.permissions?.employee_list, 0);
+    assert.equal(sessionUser?.permissions?.employees_add, 0);
+    assert.equal(sessionUser?.permissions?.employees_list, 0);
     assert.equal(canAccessModuleForSession({
       role: 'Customer',
       businessId: sessionUser?.businessId,
@@ -242,7 +240,7 @@ describe('session user mapper', () => {
       departmentId: 'department-1',
       counterId: 'department-1',
       counterName: 'Retail Counter',
-      permissions: createCustomerPermissions(['customers_list', 'services_access']),
+      permissions: createCustomerPermissions(['customers_list', 'master_inventory']),
     });
   });
 
@@ -337,7 +335,7 @@ describe('session user mapper', () => {
     assert.equal(sessionUser?.userType, 'Employee');
     assert.equal(sessionUser?.roleTemplateId, '5');
     assert.equal(sessionUser?.businessId, 'business-1');
-    assert.equal(sessionUser?.permissions?.services_access, 1);
+    assert.equal(sessionUser?.permissions?.master_inventory, 1);
   });
 
   test('allows admin user_type only when role is 1', () => {
@@ -401,8 +399,8 @@ describe('session user mapper', () => {
     assert.equal(sessionUser, null);
   });
 
-  test('reports invalid user type through the login completion flow', () => {
-    assert.throws(
+  test('reports invalid user type through the login completion flow', async () => {
+    await assert.rejects(
       () => completeApiLogin('role5@example.test', {
         data: {
           id: 41,

@@ -13,31 +13,34 @@ import {
 } from './legacy-record';
 
 const preferredBackendPrivilegeKeys: Record<string, string> = {
-  master_account_manage: 'Master_account_manage',
-  master_department_manage: 'Master_department_manage',
-  customers_add: 'Customers_add',
-  customers_list: 'Customers_list',
-  customers_payment_list: 'Customers_payment_list',
-  customers_outstanding: 'Customers_outstanding',
-  services_access: 'Services_access',
+  master_account: 'master_account',
+  master_color: 'master_color',
+  master_counter: 'master_counter',
+  master_customer_category: 'master_customer_category',
+  master_expense_category: 'master_expense_category',
+  master_inventory: 'master_inventory',
+  master_panel_details: 'master_panel_details',
+  master_reminder_event: 'master_reminder_event',
+  customers_add: 'customers_add',
+  customers_list: 'customers_list',
+  customers_payment_list: 'customers_payment_list',
+  customers_outstanding: 'customers_outstanding',
+  transactions_add: 'transactions_add',
+  transactions_list: 'transactions_list',
   accounts_cash_deposit: 'accounts_cash_deposit',
-  accounts_department_transfer: 'Accounts_department_transfer',
-  reminder_new_sms: 'Reminder_new_sms',
-  reminder_set_reminder: 'Reminder_set_reminder',
-  reminder_scheduled_message: 'Reminder_scheduled_message',
-  reports_bank_counter_report: 'Reports_bank_counter_report',
-  reports_day_report_service_charge_details: 'Reports_day_report_service_charge_details',
-  reports_day_report_account_and_counter_details: 'reports_day_report_account_and_counter_details',
-  reports_day_report_expense_details: 'Reports_day_report_expense_details',
-  reports_day_report_net_details: 'Reports_day_report_net_details',
-  reports_day_report_grand_total: 'Reports_day_report_grand_total',
-  reports_day_report_log_report: 'Reports_day_report_log_report',
-  reports_service_report: 'Reports_service_report',
-  employee_add: 'Employee_add',
-  employee_list: 'Employee_list',
-  employee_salary: 'Employee_salary',
-  employee_outstanding: 'Employee_outstanding',
-  expense_access: 'Expense_access',
+  accounts_balance_transfer: 'accounts_balance_transfer',
+  accounts_balance_update: 'accounts_balance_update',
+  reminder_manage: 'reminder_manage',
+  reports_bank_department: 'reports_bank_department',
+  reports_daily: 'reports_daily',
+  reports_log: 'reports_log',
+  reports_transaction: 'reports_transaction',
+  employees_add: 'employees_add',
+  employees_list: 'employees_list',
+  employees_salary: 'employees_salary',
+  expense_add: 'expense_add',
+  expense_list: 'expense_list',
+  permissions_manage: 'permissions_manage',
 };
 
 const canonicalPermissionIds = new Set(customerPermissionToggleItems.map((item) => item.id));
@@ -140,12 +143,13 @@ export const buildRoleTemplatePrivilegesPayload = (
   const nextPrivileges = { ...preservedUnknownPrivileges };
 
   customerPermissionToggleItems.forEach((item) => {
-    const backendKey = findExistingBackendKey(backendPrivileges, item.id)
-      || preferredBackendPrivilegeKeys[item.id]
+    const backendKey = preferredBackendPrivilegeKeys[item.id]
+      || findExistingBackendKey(backendPrivileges, item.id)
       || item.id;
 
     if (canonicalPermissionIds.has(item.id)) {
-      nextPrivileges[backendKey] = privileges[item.id] === 1 ? 1 : 0;
+      const value = privileges[item.id];
+      nextPrivileges[backendKey] = value && value >= 1 ? value : 0;
     }
   });
 

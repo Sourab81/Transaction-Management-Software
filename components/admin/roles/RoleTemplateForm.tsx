@@ -31,7 +31,10 @@ const RoleTemplateForm: React.FC<RoleTemplateFormProps> = ({
     normalizeCustomerPermissions(initialValues?.privileges ?? buildDefaultCustomerPermissions()),
   );
 
-  const enabledPrivilegeCount = Object.values(privileges).filter((enabled) => enabled === 1).length;
+  const privilegeValues = Object.values(privileges);
+  const readCount = privilegeValues.filter((v) => v === 1).length;
+  const writeCount = privilegeValues.filter((v) => v === 2).length;
+  const noneCount = privilegeValues.filter((v) => v === 0).length;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -50,7 +53,7 @@ const RoleTemplateForm: React.FC<RoleTemplateFormProps> = ({
           <h3 className="h5 fw-semibold mb-1">{initialValues ? 'Update predefined role' : 'Create predefined role'}</h3>
           <p className="page-muted small mb-0">These privileges prefill permissions when Admin creates a new user.</p>
         </div>
-        <span className="status-chip status-chip--info">{enabledPrivilegeCount} enabled</span>
+        <span className="status-chip status-chip--info">{readCount} read / {writeCount} write / {noneCount} none</span>
       </div>
 
       <div className="form-section-card business-form__section">

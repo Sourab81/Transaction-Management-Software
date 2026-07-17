@@ -29,6 +29,7 @@ const DepartmentForm: React.FC<DepartmentFormProps> = ({
   isSubmitting = false,
   submitError = '',
 }) => {
+  const isEditing = Boolean(initialValues);
   const [name, setName] = useState(initialValues?.name || '');
   const [openingBalance, setOpeningBalance] = useState(String(initialValues?.openingBalance ?? 0));
   const [remark, setRemark] = useState(initialValues?.remark || '');
@@ -92,7 +93,8 @@ const DepartmentForm: React.FC<DepartmentFormProps> = ({
               placeholder="0"
               type="number"
               value={openingBalance}
-              disabled
+              onChange={(event) => setOpeningBalance(event.target.value)}
+              disabled={isEditing}
               required
             />
           </div>

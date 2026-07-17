@@ -33,7 +33,7 @@ export interface CustomerPermissionOption {
   sectionLabel: string;
 }
 
-export type PermissionFlag = 0 | 1;
+export type PermissionFlag = 0 | 1 | 2;
 export type CustomerPermissions = Record<string, PermissionFlag>;
 export type BusinessFeatureAction = 'view' | 'add' | 'edit' | 'delete';
 

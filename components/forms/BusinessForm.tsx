@@ -1,12 +1,8 @@
-import React, { useState } from 'react';
-import { FaChevronDown, FaChevronUp, FaPlus, FaSlidersH } from 'react-icons/fa';
-import {
-  normalizeCustomerPermissions,
-} from '../../lib/platform-structure';
-import type { CustomerPermissions } from '../../lib/platform-structure';
+import React, { useMemo, useState } from 'react';
+import { FaChevronDown, FaChevronUp, FaPlus } from 'react-icons/fa';
 import type { Business } from '../../lib/store';
 import type { RoleTemplate } from '../../lib/types/role-template';
-import { isSelectableRoleTemplate } from '../../lib/mappers/role-template-mapper';
+import type { CustomerPermissions } from '../../lib/permissions';
 import {
   businessSubscriptionPlans,
   calculateBusinessSubscriptionEndDate,
@@ -22,33 +18,25 @@ import {
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
-import { SkeletonFormField } from '../ui/Skeleton';
-import PermissionEditor from './PermissionEditor';
 
 export type BusinessFormValues = Omit<Business, 'id'> & {
   password?: string;
-  roleTemplateId?: string;
-  roleTemplateBackendPrivileges?: Record<string, unknown>;
 };
 
 interface BusinessFormProps {
   initialValues?: Business;
-  roleTemplates?: RoleTemplate[];
-  isRoleTemplatesLoading?: boolean;
-  roleTemplatesError?: string;
   submitLabel: string;
   onCancel: () => void;
   onSubmit: (values: BusinessFormValues) => void;
+  roleTemplates?: RoleTemplate[];
 }
 
 const BusinessForm: React.FC<BusinessFormProps> = ({
   initialValues,
-  roleTemplates = [],
-  isRoleTemplatesLoading = false,
-  roleTemplatesError = '',
   submitLabel,
   onCancel,
   onSubmit,
+  roleTemplates = [],
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [name, setName] = useState(initialValues?.name || '');
@@ -58,60 +46,22 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const [status, setStatus] = useState<Business['status']>(initialValues?.status || 'Active');
   const [phoneError, setPhoneError] = useState('');
   const joinedDate = initialValues?.joinedDate || today;
-  const [permissions, setPermissions] = useState<Business['permissions']>(
-    initialValues?.permissions
-      ? normalizeCustomerPermissions(initialValues.permissions)
-      : ({} as CustomerPermissions)
-  );
   const [planId, setPlanId] = useState<BusinessSubscriptionPlanId>(initialValues?.subscription?.planId || 'trial-1-week');
   const [subscriptionStartDate, setSubscriptionStartDate] = useState(initialValues?.subscription?.startDate || today);
   const [subscription, setSubscription] = useState<Business['subscription']>(initialValues?.subscription);
   const [isAddingPlan, setIsAddingPlan] = useState(false);
-  const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRoleTemplateId, setSelectedRoleTemplateId] = useState(initialValues?.roleTemplateId || '');
-  const [selectedRoleTemplateBackendPrivileges, setSelectedRoleTemplateBackendPrivileges] = useState<Record<string, unknown> | undefined>();
-  const [hasPermissionDraft, setHasPermissionDraft] = useState(Boolean(initialValues));
+  const [selectedRoleTemplateId, setSelectedRoleTemplateId] = useState(initialValues?.role || '');
 
-  const enabledPermissionCount = Object.values(permissions).filter((enabled) => enabled === 1).length;
   const selectedPlan = getBusinessSubscriptionPlan(planId);
   const previewEndDate = calculateBusinessSubscriptionEndDate(planId, subscriptionStartDate);
   const activePlan = subscription ? getBusinessSubscriptionPlan(subscription.planId) : null;
-  const selectableRoleTemplates = roleTemplates.filter(isSelectableRoleTemplate);
-  const roleSelectPlaceholder = isRoleTemplatesLoading
-    ? 'Loading roles...'
-    : selectableRoleTemplates.length === 0
-      ? 'No active roles available'
-      : 'Select role';
-  const canEditPermissions = Boolean(initialValues) || hasPermissionDraft || Boolean(roleTemplatesError);
 
-  const handleRoleTemplateChange = (roleTemplateId: string) => {
-    setSelectedRoleTemplateId(roleTemplateId);
-
-    const selectedTemplate = roleTemplates.find((roleTemplate) => roleTemplate.id === roleTemplateId);
-    if (!selectedTemplate) {
-      setSelectedRoleTemplateBackendPrivileges(undefined);
-      setPermissions({} as CustomerPermissions);
-      setHasPermissionDraft(false);
-      setIsPermissionsOpen(false);
-      return;
-    }
-
-    // Selecting a predefined role intentionally overwrites the current draft
-    // permissions. Admin can still manually edit the toggles before saving.
-    setPermissions(selectedTemplate.privileges);
-    setSelectedRoleTemplateBackendPrivileges(selectedTemplate.backendPrivileges);
-    setHasPermissionDraft(true);
-    setIsPermissionsOpen(true);
-  };
-
-  const handleManualPermissionStart = () => {
-    setSelectedRoleTemplateId('');
-    setSelectedRoleTemplateBackendPrivileges(undefined);
-    setPermissions({} as CustomerPermissions);
-    setHasPermissionDraft(true);
-    setIsPermissionsOpen(true);
-  };
+  const selectedPermissions = useMemo<CustomerPermissions | null>(() => {
+    if (!selectedRoleTemplateId) return null;
+    const role = roleTemplates.find((r) => r.id === selectedRoleTemplateId);
+    return role?.privileges ?? null;
+  }, [selectedRoleTemplateId, roleTemplates]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -128,14 +78,9 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
       password: password || undefined,
       status,
       joinedDate,
-      permissions,
+      role: selectedRoleTemplateId || undefined,
+      permissions: selectedPermissions || ({} as CustomerPermissions),
       subscription,
-      roleTemplateId: selectedRoleTemplateId || undefined,
-      selectedRoleName: selectedRoleTemplateId
-        ? roleTemplates.find((roleTemplate) => roleTemplate.id === selectedRoleTemplateId)?.roleName
-          || initialValues?.selectedRoleName
-        : undefined,
-      roleTemplateBackendPrivileges: selectedRoleTemplateBackendPrivileges,
     });
   };
 
@@ -229,43 +174,45 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
               ]}
             />
           </div>
-          {!initialValues ? (
+
+          {!initialValues && roleTemplates.length > 0 ? (
             <div className="col-12 col-md-6">
-              {isRoleTemplatesLoading ? (
-                <SkeletonFormField />
-              ) : (
-                <Select
-                  label="Role"
-                  value={selectedRoleTemplateId}
-                  onChange={(event) => handleRoleTemplateChange(event.target.value)}
-                  options={[
-                    {
-                      value: '',
-                      label: roleSelectPlaceholder,
-                    },
-                    ...selectableRoleTemplates.map((roleTemplate) => ({
-                      value: roleTemplate.id,
-                      label: roleTemplate.roleName,
-                    })),
-                  ]}
-                  disabled={selectableRoleTemplates.length === 0}
-                />
-              )}
-              {roleTemplatesError ? (
-                <div className="form-hint text-warning">
-                  Unable to load roles. You can still set permissions manually.
-                </div>
-              ) : selectableRoleTemplates.length === 0 && !isRoleTemplatesLoading ? (
-                <div className="form-hint text-warning">
-                  No active roles are available for user creation.
-                </div>
-              ) : (
-                <div className="form-hint">Selecting a role fills permissions; you can still edit them below.</div>
-              )}
+              <Select
+                label="Role"
+                value={selectedRoleTemplateId}
+                onChange={(event) => setSelectedRoleTemplateId(event.target.value)}
+                options={[
+                  { value: '', label: 'Select a role...' },
+                  ...roleTemplates.map((role) => ({ value: role.id, label: role.roleName })),
+                ]}
+              />
             </div>
           ) : null}
+
         </div>
       </div>
+
+      {selectedRoleTemplateId && selectedPermissions ? (
+        <div className="form-section-card business-form__section">
+          <div className="business-form__section-header">
+            <div>
+              <div className="form-section-title mb-1">Role Permissions</div>
+              <p className="page-muted small mb-0">Default permissions from the selected role will be applied to this user.</p>
+            </div>
+          </div>
+          <div className="row g-3">
+            <div className="col-12">
+              <div className="permission-summary">
+                {Object.entries(selectedPermissions).map(([key, value]) => (
+                  <span key={key} className={`permission-badge permission-badge--${value >= 1 ? (value === 2 ? 'write' : 'read') : 'none'}`}>
+                    {key}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="form-section-card business-form__section">
         <div className="business-form__section-header">
@@ -347,57 +294,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
         ) : null}
       </div>
 
-      <div className="form-section-card business-form__section">
-        <div className="business-form__section-header">
-          <div>
-            <div className="form-section-title mb-1">Menu Permissions</div>
-            <p className="page-muted small mb-0">Assign the business access toggles used to unlock workspace modules after login.</p>
-          </div>
-          <div className="business-form__section-actions">
-            <span className="status-chip status-chip--info">
-              {canEditPermissions ? `${enabledPermissionCount} enabled` : 'No role selected'}
-            </span>
-            <button
-              type="button"
-              className="btn-app btn-app-secondary business-form__dropdown-button"
-              aria-expanded={isPermissionsOpen}
-              aria-controls="business-permissions-list"
-              onClick={() => {
-                if (!canEditPermissions) {
-                  handleManualPermissionStart();
-                  return;
-                }
 
-                setIsPermissionsOpen((current) => !current);
-              }}
-            >
-              <FaSlidersH className="business-form__button-icon" aria-hidden="true" />
-              <span>{isPermissionsOpen ? 'Hide' : canEditPermissions ? 'Permissions' : 'Set Manually'}</span>
-              {isPermissionsOpen ? (
-                <FaChevronUp className="business-form__button-chevron" aria-hidden="true" />
-              ) : (
-                <FaChevronDown className="business-form__button-chevron" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {!canEditPermissions ? (
-          <div className="business-form__inline-panel">
-            <p className="page-muted small mb-0">
-              Select a role to copy its permissions, or set permissions manually. Until then, the user has no permissions enabled.
-            </p>
-          </div>
-        ) : null}
-
-        {isPermissionsOpen && canEditPermissions ? (
-          <PermissionEditor
-            permissions={permissions}
-            onChange={setPermissions}
-            className="business-form__permissions"
-          />
-        ) : null}
-      </div>
 
       <div className="modal-actions">
         <button type="button" className="btn-app btn-app-secondary" onClick={onCancel}>Cancel</button>

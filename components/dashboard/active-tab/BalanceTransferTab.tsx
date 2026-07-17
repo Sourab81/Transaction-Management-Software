@@ -237,6 +237,7 @@ export default function BalanceTransferTab({ ctx }: BalanceTransferTabProps) {
                 type="button"
                 className="btn-app btn-app-primary"
                 onClick={openModal}
+                style={!ctx.canPerformModuleAction('accounts', 'add') ? { display: 'none' } : undefined}
               >
               <FaPlusCircle />
               Transfer
