@@ -317,7 +317,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
     ...(canPerformModuleAction('transactions', 'edit') ? [{
       key: 'payment',
       header: 'Payment',
-      render: (transaction) => {
+      render: (transaction: Transaction) => {
         const draft = getPaymentDraft(transaction.id);
         const onlineAmount = toPaymentAmount(draft.onlineAmount);
         const validationError = getPaymentError(draft);
