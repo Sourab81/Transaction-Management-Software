@@ -54,6 +54,8 @@ export const canUseBusinessFeature = (
       return false;
     case 'reminder':
       return hasAnyEnabledPermission(permissions, [...modulePermissionKeys]);
+    case 'permissions':
+      return isPermissionEnabled(permissions, 'permissions_manage');
     default:
       return false;
   }

@@ -23,6 +23,7 @@ interface UserOption {
 
 export default function PermissionsTab({ ctx }: PermissionsTabProps) {
   const isAdmin = ctx.currentRole === 'Admin';
+  const { permissionsPreselectUserId, clearPermissionsPreselectUserId } = ctx;
   const [directory, setDirectory] = useState<UserDirectoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -86,6 +87,16 @@ export default function PermissionsTab({ ctx }: PermissionsTabProps) {
     }
     setMessage(null);
   }, [userOptions]);
+
+  useEffect(() => {
+    if (permissionsPreselectUserId != null && userOptions.length > 0) {
+      const targetUser = userOptions.find((u) => u.id === permissionsPreselectUserId);
+      if (targetUser) {
+        handleSelectUser(String(permissionsPreselectUserId));
+      }
+      clearPermissionsPreselectUserId();
+    }
+  }, [permissionsPreselectUserId, userOptions, clearPermissionsPreselectUserId, handleSelectUser]);
 
   const handleSave = useCallback(async () => {
     if (!selectedUser) return;

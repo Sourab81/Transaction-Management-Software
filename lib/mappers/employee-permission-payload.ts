@@ -75,9 +75,7 @@ export const buildEmployeePermissionsPayload = (
 
   return customerPermissionToggleItems.reduce<Record<string, number>>((payload, permission) => {
     const value = normalizedPermissions[permission.id];
-    if (value && value >= 1) {
-      payload[backendPermissionKeys[permission.id] || permission.id] = value;
-    }
+    payload[backendPermissionKeys[permission.id] || permission.id] = value ?? 0;
 
     return payload;
   }, {});

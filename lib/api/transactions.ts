@@ -68,6 +68,7 @@ export interface TransactionFilters {
   date?: string;
   dateFrom?: string;
   dateTo?: string;
+  isProcessed?: number;
 }
 
 export interface CreateTransactionPayload {
@@ -161,6 +162,7 @@ const buildTransactionListBody = (filters: TransactionFilters = {}) => {
   if (typeof filters.date !== 'undefined') body.date = filters.date;
   if (typeof filters.dateFrom !== 'undefined') body.date_from = filters.dateFrom;
   if (typeof filters.dateTo !== 'undefined') body.date_to = filters.dateTo;
+  if (typeof filters.isProcessed !== 'undefined') body.is_processed = filters.isProcessed;
 
   return body;
 };

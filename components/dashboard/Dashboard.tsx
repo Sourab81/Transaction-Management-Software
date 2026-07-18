@@ -456,6 +456,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [permissionsPreselectUserId, setPermissionsPreselectUserId] = useState<number | null>(null);
   const dispatch = useAppDispatch();
   const currentRole = currentUser.role;
   const storedBusinesses = useBusinesses();
@@ -893,7 +894,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const currentEmployee = currentRole === 'Employee'
-    ? employees.find((employee) => employee.id === currentUser.id) || null
+    ? employees.find((employee) => employee.id === currentUser.id)
+      ?? {
+          id: currentUser.id,
+          name: currentUser.name,
+          fullName: currentUser.name,
+          displayName: currentUser.name,
+          phone: '',
+          mobile: '',
+          email: currentUser.email,
+          status: 'Active' as const,
+          permissions: buildDefaultCustomerPermissions(),
+        }
     : null;
   const adminAccountEmail = useMemo(() => {
     const adminUser = currentRole === 'Admin'
@@ -3401,6 +3413,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
       addHistoryEvent(`${values.name} employee updated`, 'Employees');
       addNotification('success', 'Employee updated successfully.');
+      closeModal();
     } else {
       const stateValues = toEmployeeStateValues(values);
       if (shouldLoadWorkspaceApi) {
@@ -3427,13 +3440,29 @@ const Dashboard: React.FC<DashboardProps> = ({
         }
 
         reloadEmployees();
+
+        const newEmployeeId = result.employee && typeof result.employee === 'object'
+          ? Number(
+              (result.employee as Record<string, unknown>).id
+              ?? (result.employee as Record<string, unknown>).employee_id
+              ?? (result.employee as Record<string, unknown>).user_id,
+            )
+          : NaN;
+
+        if (!Number.isNaN(newEmployeeId)) {
+          closeModal();
+          setPermissionsPreselectUserId(newEmployeeId);
+          openModule('permissions');
+        } else {
+          closeModal();
+        }
       } else {
         dispatch({ type: 'ADD_EMPLOYEE', businessId, payload: stateValues });
+        closeModal();
       }
       addHistoryEvent(`${values.name} employee added`, 'Employees');
       addNotification('success', 'Employee added successfully.');
     }
-    closeModal();
   };
 
   const handleDepartmentSubmit = async (values: DepartmentFormValues) => {
@@ -4693,6 +4722,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     setDepartmentSearchInput,
     setDepartmentAccountStatusFilter,
     setBusinessDirectoryFilters,
+    permissionsPreselectUserId,
+    clearPermissionsPreselectUserId: () => setPermissionsPreselectUserId(null),
   };
 
   const renderModuleDataState = () => {

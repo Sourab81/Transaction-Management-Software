@@ -144,6 +144,7 @@ export default function TransactionsListTab({ ctx }: TransactionsListTabProps) {
           pageNo: currentPage,
           limit: pageSize,
           status: 1,
+          isProcessed: 0,
           search: debouncedSearch || undefined,
           counterId: selectedCounter?.id,
           ...(dateFrom ? { dateFrom } : {}),

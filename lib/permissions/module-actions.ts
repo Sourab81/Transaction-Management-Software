@@ -4,7 +4,7 @@ import { canAccessModuleForSession } from './session-access';
 import type { BusinessFeatureAction, SessionAccessContext } from './types';
 
 const employeeManageableModules = new Set(['services', 'customers', 'accounts', 'colors', 'customer-categories', 'transactions', 'history', 'reports']);
-const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports', 'transactions']);
+const businessManageableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports', 'transactions', 'permissions']);
 const businessDeletableModules = new Set(['customers', 'employee', 'departments', 'services', 'accounts', 'colors', 'customer-categories', 'expense', 'reports']);
 const adminManageableModules = new Set(['customers', 'reports', 'role', 'additions', 'permissions']);
 const adminDeletableModules = new Set(['customers', 'history', 'reports', 'role', 'additions', 'permissions']);

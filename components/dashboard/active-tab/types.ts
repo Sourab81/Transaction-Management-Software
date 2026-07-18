@@ -191,4 +191,6 @@ export interface DashboardTabContext {
   setDepartmentSearchInput: Dispatch<SetStateAction<string>>;
   setDepartmentAccountStatusFilter: Dispatch<SetStateAction<'All' | 'Active' | 'Inactive' | 'Unassigned'>>;
   setBusinessDirectoryFilters: Dispatch<SetStateAction<DataTableFiltersValue>>;
+  permissionsPreselectUserId: number | null;
+  clearPermissionsPreselectUserId: () => void;
 }
