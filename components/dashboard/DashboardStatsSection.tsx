@@ -12,6 +12,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type PieLabelRenderProps,
 } from 'recharts';
 import { FaCog, FaSms, FaUsers } from 'react-icons/fa';
 import type { DashboardStats } from '../../lib/hooks/useDashboardStats';
@@ -32,6 +33,13 @@ const amountColors = {
 };
 
 const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN')}`;
+
+const renderPieLabel = (props: PieLabelRenderProps) => {
+  const percent = Number(props.percent ?? 0);
+  const value = Number(props.value ?? 0);
+  if (percent <= 0.05) return '';
+  return `${String(props.name ?? '')}: ${formatCurrency(value)}`;
+};
 
 const NoData = () => (
   <div className="d-flex align-items-center justify-content-center h-100 page-muted">
@@ -151,7 +159,7 @@ export default function DashboardStatsSection({ stats, isLoading, role }: Dashbo
                   ) : hasAmountData ? (
                     <ResponsiveContainer width="100%" height={300}>
                       <PieChart>
-                        <Pie data={amountEntries} dataKey="value" nameKey="name" outerRadius={100} label>
+                        <Pie data={amountEntries} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={85} label={renderPieLabel} labelLine>
                           {amountEntries.map((entry) => (
                             <Cell key={entry.name} fill={entry.color} />
                           ))}

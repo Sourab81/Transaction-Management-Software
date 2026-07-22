@@ -135,29 +135,14 @@ const CustomersTable: React.FC<CustomersTableProps> = ({
       : 'Not added',
     },
 
-    {
-      key: 'status',
-      header: 'Status',
-      render: (customer) => {
-        const status = customer.status || 'Active';
-
-        return (
-          <span className={`status-chip ${status === 'Active' ? 'status-chip--active' : 'status-chip--inactive'}`}>
-            {status}
-          </span>
-        );
-      },
-    },
-    ...(isCustomerDirectory
-      ? []
-      : [{
+{
           key: 'joined',
           header: 'Added Date',
           render: (customer: CustomerDirectoryRecord) => formatDateTime(
             'addedDate' in customer ? customer.addedDate || customer.joinedDate : customer.joinedDate,
             'Not added',
           ),
-        }]),
+        },
   ];
 
   return (

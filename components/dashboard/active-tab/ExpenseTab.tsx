@@ -87,7 +87,7 @@ const normalizeExpenseError = (message: string) => (
 
 export default function ExpenseTab({ ctx }: ExpenseTabProps) {
   const pathname = usePathname();
-  const view = getExpenseViewFromPath(pathname);
+  const view = getExpenseViewFromPath(pathname ?? '');
   const {
     accounts,
     counters,

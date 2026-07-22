@@ -15,6 +15,14 @@ import {
   normalizePhoneNumber,
   phoneNumberValidationMessage,
 } from '../../lib/validators/phone-validator';
+import {
+  isEmpty,
+  isValidEmail,
+  validateRequiredFields,
+  hasErrors,
+  type ValidatedField,
+  type RequiredFieldError,
+} from '../../lib/validators/required-fields';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -29,6 +37,8 @@ interface BusinessFormProps {
   onCancel: () => void;
   onSubmit: (values: BusinessFormValues) => void;
   roleTemplates?: RoleTemplate[];
+  submitError?: string;
+  fieldErrorsFromBackend?: Record<string, string>;
 }
 
 const BusinessForm: React.FC<BusinessFormProps> = ({
@@ -37,6 +47,8 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   onCancel,
   onSubmit,
   roleTemplates = [],
+  submitError = '',
+  fieldErrorsFromBackend = {},
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [name, setName] = useState(initialValues?.name || '');
@@ -44,7 +56,7 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const [email, setEmail] = useState(initialValues?.email || '');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Business['status']>(initialValues?.status || 'Active');
-  const [phoneError, setPhoneError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const joinedDate = initialValues?.joinedDate || today;
   const [planId, setPlanId] = useState<BusinessSubscriptionPlanId>(initialValues?.subscription?.planId || 'trial-1-week');
   const [subscriptionStartDate, setSubscriptionStartDate] = useState(initialValues?.subscription?.startDate || today);
@@ -67,21 +79,36 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
     event.preventDefault();
 
     if (!isValidPhoneNumber(phone)) {
-      setPhoneError(phoneNumberValidationMessage);
+      setFieldErrors(prev => ({ ...prev, phone: phoneNumberValidationMessage }));
       return;
     }
 
-    onSubmit({
-      name,
-      phone: normalizePhoneNumber(phone),
-      email,
-      password: password || undefined,
-      status,
-      joinedDate,
-      role: selectedRoleTemplateId || undefined,
-      permissions: selectedPermissions || ({} as CustomerPermissions),
-      subscription,
-    });
+    const validatedFields: ValidatedField[] = [
+      { value: name, label: 'User Name', required: true },
+      { value: phone, label: 'Mobile No.', required: true, phone: true },
+      { value: email, label: 'Email', required: true, email: true },
+      { value: password, label: 'Password', required: !initialValues },
+      { value: status ?? 'Active', label: 'Status', required: true },
+      { value: selectedPermissions, label: 'Permissions', required: true },
+      { value: subscription, label: 'Subscription Plan', required: true },
+    ];
+    
+    const errors = validateRequiredFields(validatedFields);
+    setFieldErrors(errors);
+
+    if (!Object.keys(errors).length) {
+      onSubmit({
+        name,
+        phone: normalizePhoneNumber(phone),
+        email,
+        password: password || undefined,
+        status,
+        joinedDate,
+        role: selectedRoleTemplateId || undefined,
+        permissions: selectedPermissions || ({} as CustomerPermissions),
+        subscription,
+      });
+    }
   };
 
   const handleAddPlan = () => {
@@ -91,8 +118,16 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
     setIsAddingPlan(false);
   };
 
+  const mergedFieldErrors = { ...fieldErrors, ...fieldErrorsFromBackend };
+
   return (
     <form className="business-form" onSubmit={handleSubmit}>
+      {(submitError || hasErrors(mergedFieldErrors)) && (
+        <div className="form-alert" role="alert">
+          {submitError || Object.values(mergedFieldErrors).filter(Boolean).map((error, index) => <div key={index}>{error}</div>)}
+        </div>
+      )}
+
       <div className="form-workflow-panel business-form__intro">
         <div>
           <p className="eyebrow mb-2">User</p>
@@ -122,12 +157,12 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
               inputMode="numeric"
               placeholder="Enter 10-digit mobile number"
               value={phone}
-              onChange={(event) => {
-                setPhone(event.target.value);
-                setPhoneError('');
-              }}
-              error={phoneError}
-              required
+               onChange={(event) => {
+                 setPhone(event.target.value);
+                 setFieldErrors(prev => ({ ...prev, phone: '' }));
+               }}
+               error={fieldErrors.phone}
+               required
             />
           </div>
           <div className="col-12 col-md-6">
@@ -136,8 +171,12 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
               type="email"
               placeholder="business@example.com"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={Boolean(initialValues)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setFieldErrors(prev => ({ ...prev, email: '' }));
+                if (fieldErrorsFromBackend) delete fieldErrorsFromBackend.email;
+              }}
+              error={mergedFieldErrors.email}
               required
             />
           </div>
@@ -191,28 +230,6 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
 
         </div>
       </div>
-
-      {selectedRoleTemplateId && selectedPermissions ? (
-        <div className="form-section-card business-form__section">
-          <div className="business-form__section-header">
-            <div>
-              <div className="form-section-title mb-1">Role Permissions</div>
-              <p className="page-muted small mb-0">Default permissions from the selected role will be applied to this user.</p>
-            </div>
-          </div>
-          <div className="row g-3">
-            <div className="col-12">
-              <div className="permission-summary">
-                {Object.entries(selectedPermissions).map(([key, value]) => (
-                  <span key={key} className={`permission-badge permission-badge--${value >= 1 ? (value === 2 ? 'write' : 'read') : 'none'}`}>
-                    {key}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <div className="form-section-card business-form__section">
         <div className="business-form__section-header">

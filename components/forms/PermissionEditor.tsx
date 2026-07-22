@@ -10,6 +10,7 @@ interface PermissionEditorProps {
   permissions: CustomerPermissions;
   onChange: (permissions: CustomerPermissions) => void;
   className?: string;
+  ownerPermissions?: CustomerPermissions;
 }
 
 const LEVEL_NONE: PermissionFlag = 0;
@@ -26,6 +27,7 @@ const PermissionEditor: React.FC<PermissionEditorProps> = ({
   permissions,
   onChange,
   className = '',
+  ownerPermissions,
 }) => {
   const changePermission = (permissionId: string) => {
     const current = permissions[permissionId] ?? LEVEL_NONE;
@@ -62,9 +64,25 @@ const PermissionEditor: React.FC<PermissionEditorProps> = ({
     onChange(nextPermissions);
   };
 
+  const getFilteredSections = () => {
+    if (!ownerPermissions) return customerPermissionSections;
+
+    return customerPermissionSections
+      .map((section) => {
+        const toggleItems = section.items.filter((item) => item.kind !== 'label');
+        const visibleItems = toggleItems.filter((item) => ownerPermissions[item.id] > 0);
+
+        return {
+          ...section,
+          items: visibleItems.length > 0 ? visibleItems : [],
+        };
+      })
+      .filter((section) => section.items.length > 0);
+  };
+
   return (
     <div className={`permission-builder ${className}`.trim()}>
-      {customerPermissionSections.map((section) => {
+      {getFilteredSections().map((section) => {
         const toggleItems = section.items.filter((item) => item.kind !== 'label');
         const levels = toggleItems.map((item) => (permissions[item.id] ?? LEVEL_NONE) as PermissionFlag);
         const readCount = levels.filter((l) => l === LEVEL_READ).length;
@@ -77,74 +95,80 @@ const PermissionEditor: React.FC<PermissionEditorProps> = ({
             <div className="permission-section__header">
               <div>
                 <h4 className="permission-section__title">{section.label}</h4>
-                <p className="permission-section__meta mb-0">{readCount} read / {writeCount} write / {noneCount} none</p>
+                {section.items.length > 0 && (
+                  <p className="permission-section__meta mb-0">{readCount} read / {writeCount} write / {noneCount} none</p>
+                )}
               </div>
-              <button
-                type="button"
-                className="permission-toggle permission-toggle--section"
-                aria-label={`Toggle all ${section.label} permissions`}
-                onClick={() => cycleSection(section.id)}
-              >
-                <span className="permission-toggle__text">
-                  {allSame && levels[0] === LEVEL_WRITE ? 'Write' : allSame && levels[0] === LEVEL_READ ? 'Read' : 'None'}
-                </span>
-              </button>
+              {section.items.length > 0 && (
+                <button
+                  type="button"
+                  className="permission-toggle permission-toggle--section"
+                  aria-label={`Toggle all ${section.label} permissions`}
+                  onClick={() => cycleSection(section.id)}
+                >
+                  <span className="permission-toggle__text">
+                    {allSame && levels[0] === LEVEL_WRITE ? 'Write' : allSame && levels[0] === LEVEL_READ ? 'Read' : 'None'}
+                  </span>
+                </button>
+              )}
             </div>
-            <div className="permission-list">
-              {section.items.map((item) => {
-                if (item.kind === 'label') {
+            {section.items.length > 0 && (
+              <div className="permission-list">
+                {section.items.map((item) => {
+                  if (item.kind === 'label') {
+                    return (
+                      <div
+                        key={item.id}
+                        className={`permission-group-label ${item.indent ? 'permission-group-label--child' : ''}`}
+                      >
+                        {item.label}
+                      </div>
+                    );
+                  }
+
+                  const level = (permissions[item.id] ?? LEVEL_NONE) as PermissionFlag;
+
                   return (
-                    <div
-                      key={item.id}
-                      className={`permission-group-label ${item.indent ? 'permission-group-label--child' : ''}`}
-                    >
-                      {item.label}
+                    <div key={item.id} className={`permission-row ${item.indent ? 'permission-row--child' : ''}`}>
+                      <span className="permission-label">{item.label}</span>
+                      <div className="permission-level-group">
+                        <button
+                          type="button"
+                          className={`permission-level-btn ${level === LEVEL_NONE ? 'is-active' : ''}`}
+                          title="No access"
+                          onClick={() => {
+                            if (level !== LEVEL_NONE) {
+                              const next = { ...permissions, [item.id]: LEVEL_NONE };
+                              onChange(next);
+                            }
+                          }}
+                        >
+                          None
+                        </button>
+                        <button
+                          type="button"
+                          className={`permission-level-btn permission-level-btn--read ${level === LEVEL_READ ? 'is-active' : ''}`}
+                          title="Read only"
+                          onClick={() => changePermission(item.id)}
+                        >
+                          <FaEye className="me-1" />
+                          Read
+                        </button>
+                        <button
+                          type="button"
+                          className={`permission-level-btn permission-level-btn--write ${level === LEVEL_WRITE ? 'is-active' : ''}`}
+                          title="Read and write"
+                          onClick={() => changePermission(item.id)}
+                        >
+                          <FaPencilAlt className="me-1" />
+                          Write
+                        </button>
+                      </div>
                     </div>
                   );
-                }
-
-                const level = (permissions[item.id] ?? LEVEL_NONE) as PermissionFlag;
-
-                return (
-                  <div key={item.id} className={`permission-row ${item.indent ? 'permission-row--child' : ''}`}>
-                    <span className="permission-label">{item.label}</span>
-                    <div className="permission-level-group">
-                      <button
-                        type="button"
-                        className={`permission-level-btn ${level === LEVEL_NONE ? 'is-active' : ''}`}
-                        title="No access"
-                        onClick={() => {
-                          if (level !== LEVEL_NONE) {
-                            const next = { ...permissions, [item.id]: LEVEL_NONE };
-                            onChange(next);
-                          }
-                        }}
-                      >
-                        None
-                      </button>
-                      <button
-                        type="button"
-                        className={`permission-level-btn permission-level-btn--read ${level === LEVEL_READ ? 'is-active' : ''}`}
-                        title="Read only"
-                        onClick={() => changePermission(item.id)}
-                      >
-                        <FaEye className="me-1" />
-                        Read
-                      </button>
-                      <button
-                        type="button"
-                        className={`permission-level-btn permission-level-btn--write ${level === LEVEL_WRITE ? 'is-active' : ''}`}
-                        title="Read and write"
-                        onClick={() => changePermission(item.id)}
-                      >
-                        <FaPencilAlt className="me-1" />
-                        Write
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         );
       })}

@@ -30,7 +30,7 @@ const TOOLS_MODULE_IDS = ['permissions'];
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isCollapsed = false, onClose }) => {
   const visibleModules = getSidebarModulesForSession(accessContext);
   const roleLabel = getRoleLabel(accessContext.role);
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const isTransactionsRoute = activeTab === 'transactions';
   const isExpenseCategoriesRoute = pathname === getExpenseWorkspacePath('categories');
   const isExpenseRoute = activeTab === 'expense' && !isExpenseCategoriesRoute;
@@ -87,11 +87,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
                   ? 'Inventory'
                   : displayItem.id === 'accounts'
                     ? 'Account'
-                : displayItem.id === 'colors'
-                  ? 'Colors'
-                : displayItem.id === 'customer-categories'
-                  ? 'Customer Categories'
-                : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
+                  : displayItem.id === 'colors'
+                    ? 'Colors'
+                  : displayItem.id === 'customer-categories'
+                    ? 'Customer Categories'
+                  : displayItem.id === 'subscriptions'
+                    ? 'Subscriptions'
+                  : displayItem.sidebarLabel || getModuleLabel(displayItem.id) || displayItem.label;
               return (
                 <Link
                   key={displayItem.id}
@@ -101,8 +103,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, accessContext, isOpen, isC
                 >
                   {label}
                 </Link>
-              );
-            })}
+               );
+              })}
             {canViewExpenseCategories ? (
               <Link
                 onClick={closeOnNavigate}

@@ -2,6 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { BusinessCustomer } from '../../lib/store';
 import { useCustomerColors } from '../../lib/hooks/useCustomerColors';
 import { useCustomerCategories } from '../../lib/hooks/useCustomerCategories';
+import {
+  isValidPhoneNumber,
+  normalizePhoneNumber,
+  phoneNumberValidationMessage,
+} from '../../lib/validators/phone-validator';
+import {
+  isEmpty,
+  isValidEmail,
+  validateRequiredFields,
+  hasErrors,
+  type ValidatedField,
+} from '../../lib/validators/required-fields';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 
@@ -33,6 +45,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
   const [colorId, setColorId] = useState(initialValues?.colorId || '');
   const [categoryIds, setCategoryIds] = useState<string[]>(initialValues?.categoryIds || []);
   const [validationError, setValidationError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const hasUserSelectedColor = useRef(false);
   const selectedColor = useMemo(() => (
     activeColors.find((colorOption) => colorOption.id === colorId) || null
@@ -50,33 +63,50 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+
+    const validatedFields: ValidatedField[] = [
+      { value: customerName, label: 'Customer Name', required: true },
+      { value: mobileNo, label: 'Mobile No.', required: true, phone: true },
+      { value: email, label: 'Email', email: true },
+      { value: address, label: 'Address' },
+      { value: dob, label: 'Date of Birth', date: true },
+      { value: remark, label: 'Remark' },
+    ];
+    
+    const errors = validateRequiredFields(validatedFields);
+    setFieldErrors(errors);
+
     const trimmedCustomerName = customerName.trim();
     const trimmedMobileNo = mobileNo.trim();
-    if (!trimmedCustomerName) {
-      setValidationError('Customer name is required.');
-      return;
+    
+    if (!hasErrors(errors)) {
+      if (!trimmedCustomerName) {
+        setValidationError('Customer name is required.');
+        return;
+      }
+      if (!trimmedMobileNo) {
+        setValidationError('Mobile number is required.');
+        return;
+      }
+
+      onSubmit({
+        name: trimmedCustomerName,
+        customerName: trimmedCustomerName,
+        phone: normalizePhoneNumber(trimmedMobileNo),
+        mobileNo: normalizePhoneNumber(trimmedMobileNo),
+        email: email.trim(),
+        address: address.trim() || null,
+        dob: dob.trim() || undefined,
+        remark: remark.trim() || null,
+        colorId: selectedColor?.id || null,
+        color: selectedColor?.hexCode || null,
+        status: initialValues?.status || 'Active',
+        joinedDate: initialValues?.joinedDate || new Date().toISOString().split('T')[0],
+        addedDate: initialValues?.addedDate,
+        updatedDate: initialValues?.updatedDate,
+        categoryIds,
+      });
     }
-    if (!trimmedMobileNo) {
-      setValidationError('Mobile number is required.');
-      return;
-    }
-    onSubmit({
-      name: trimmedCustomerName,
-      customerName: trimmedCustomerName,
-      phone: trimmedMobileNo,
-      mobileNo: trimmedMobileNo,
-      email: email.trim(),
-      address: address.trim() || null,
-      dob: dob.trim() || undefined,
-      remark: remark.trim() || null,
-      colorId: selectedColor?.id || null,
-      color: selectedColor?.hexCode || null,
-      status: initialValues?.status || 'Active',
-      joinedDate: initialValues?.joinedDate || new Date().toISOString().split('T')[0],
-      addedDate: initialValues?.addedDate,
-      updatedDate: initialValues?.updatedDate,
-      categoryIds,
-    });
   };
 
   return (
@@ -126,7 +156,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
               inputMode="numeric"
               placeholder="Enter mobile number"
               value={mobileNo}
-              onChange={(e) => { setMobileNo(e.target.value); setValidationError(''); }}
+              onChange={(e) => { setMobileNo(e.target.value); setValidationError(''); setFieldErrors(prev => ({ ...prev, 'Mobile No.': '' })); }}
+              error={fieldErrors['Mobile No.']}
               required
             />
           </div>

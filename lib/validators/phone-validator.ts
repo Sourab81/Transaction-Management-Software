@@ -1,14 +1,12 @@
-export const normalizePhoneNumber = (value: string) => {
-  const digits = value.replace(/\D/g, '');
-
-  if (digits.length === 12 && digits.startsWith('91')) {
-    return digits.slice(2);
-  }
-
-  return digits;
+export const isValidPhoneNumber = (value: string): boolean => {
+  if (!value) return true;
+  const normalized = value.replace(/^\s*(?:\+?91)?\s*(\d{10})\s*$/, '$1');
+  return /^6\d{9}$|^7\d{9}$|^8\d{9}$|^9\d{9}$/.test(normalized);
 };
 
-export const isValidPhoneNumber = (value: string) =>
-  /^[6-9]\d{9}$/.test(normalizePhoneNumber(value));
+export const normalizePhoneNumber = (value: string): string => {
+  if (!value) return '';
+  return value.replace(/^\s*(?:\+?91)?\s*(\d{10})\s*$/, '$1');
+};
 
 export const phoneNumberValidationMessage = 'Enter a valid 10-digit mobile number.';

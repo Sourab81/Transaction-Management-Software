@@ -15,8 +15,8 @@ interface TransactionsTabProps {
 
 export default function TransactionsTab({ ctx }: TransactionsTabProps) {
   const searchParams = useSearchParams();
-  const editTransactionId = searchParams.get('transaction_id')?.trim() || '';
-  const isEditMode = searchParams.get('mode') === 'edit' && Boolean(editTransactionId);
+  const editTransactionId = searchParams?.get('transaction_id')?.trim() || '';
+  const isEditMode = searchParams?.get('mode') === 'edit' && Boolean(editTransactionId);
   const {
     currentRole,
     canManageModule,

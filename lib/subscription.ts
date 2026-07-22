@@ -1,6 +1,6 @@
 'use client';
 
-export type BusinessSubscriptionPlanId = 'trial-1-week' | 'month-1' | 'month-6' | 'year-1' | 'year-3' | 'year-10';
+export type BusinessSubscriptionPlanId = 'trial-1-week' | 'month-1' | 'month-6' | 'year-1' | 'year-3' | 'year-5' | 'year-10';
 export type BusinessSubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
 export type BusinessStatusReason = 'manual' | 'subscription-expired' | 'subscription-cancelled';
 
@@ -86,6 +86,13 @@ export const businessSubscriptionPlans: BusinessSubscriptionPlan[] = [
     durationLabel: '3 years',
     description: 'A long-term plan for established business teams.',
     duration: { unit: 'years', value: 3 },
+  },
+  {
+    id: 'year-5',
+    label: '5 Years',
+    durationLabel: '5 years',
+    description: 'A medium-long term plan for growing business teams.',
+    duration: { unit: 'years', value: 5 },
   },
   {
     id: 'year-10',
@@ -221,23 +228,23 @@ export const getBusinessAccessState = (
 
   if (subscription.status === 'expired') {
     return {
-      status: 'Inactive',
+      status: 'Active',
       reason: 'subscription-expired',
       subscription,
-      isSubscriptionLocked: true,
+      isSubscriptionLocked: false,
       allowBusinessOwnerLogin: true,
-      allowEmployeeLogin: false,
+      allowEmployeeLogin: true,
     };
   }
 
   if (subscription.status === 'cancelled') {
     return {
-      status: 'Inactive',
+      status: 'Active',
       reason: 'subscription-cancelled',
       subscription,
-      isSubscriptionLocked: true,
+      isSubscriptionLocked: false,
       allowBusinessOwnerLogin: true,
-      allowEmployeeLogin: false,
+      allowEmployeeLogin: true,
     };
   }
 

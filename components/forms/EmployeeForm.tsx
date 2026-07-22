@@ -6,6 +6,13 @@ import {
   normalizePhoneNumber,
   phoneNumberValidationMessage,
 } from '../../lib/validators/phone-validator';
+import {
+  isEmpty,
+  isValidEmail,
+  validateRequiredFields,
+  hasErrors,
+  type ValidatedField,
+} from '../../lib/validators/required-fields';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -21,6 +28,8 @@ interface EmployeeFormProps {
   onCancel: () => void;
   onSubmit: (values: EmployeeFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
+  submitError?: string;
+  fieldErrorsFromBackend?: Record<string, string>;
 }
 
 import type { Counter } from '../../lib/store';
@@ -31,6 +40,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   onCancel,
   onSubmit,
   isSubmitting = false,
+  submitError = '',
+  fieldErrorsFromBackend = {},
 }) => {
   const [fullName, setFullName] = useState(initialValues?.fullName || initialValues?.name || '');
   const [nickName, setNickName] = useState(initialValues?.nickName || initialValues?.displayName || initialValues?.name || '');
@@ -44,60 +55,66 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const [status, setStatus] = useState<Employee['status']>(initialValues?.status || 'Active');
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState('');
-  const [phoneError, setPhoneError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const mergedFieldErrors = { ...fieldErrors, ...fieldErrorsFromBackend };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!fullName.trim()) {
-      setValidationError('Full Name is required.');
-      return;
-    }
+    const validatedFields: ValidatedField[] = [
+      { value: fullName, label: 'Full Name', required: true },
+      { value: nickName, label: 'Nick Name', required: true },
+      { value: mobile, label: 'Mobile', required: true, phone: true },
+      { value: email, label: 'Email', required: true, email: true },
+      { value: password, label: 'Password', required: !initialValues },
+      { value: status, label: 'Status', required: true },
+    ];
+    
+    const errors = validateRequiredFields(validatedFields);
+    setFieldErrors(errors);
 
-    if (!nickName.trim()) {
-      setValidationError('Nick Name is required.');
-      return;
-    }
+    if (!hasErrors(errors)) {
+      if (!fullName.trim()) {
+        setValidationError('Full Name is required.');
+        return;
+      }
 
-    if (!isValidPhoneNumber(mobile)) {
-      setPhoneError(phoneNumberValidationMessage);
-      return;
-    }
+      if (!nickName.trim()) {
+        setValidationError('Nick Name is required.');
+        return;
+      }
 
-    if (!email.trim()) {
-      setValidationError('Email is required.');
-      return;
-    }
+      if (!isValidPhoneNumber(mobile)) {
+        setFieldErrors(prev => ({ ...prev, mobile: phoneNumberValidationMessage }));
+        return;
+      }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setValidationError('Please enter a valid email address.');
-      return;
-    }
+      if (!initialValues && !password.trim()) {
+        setValidationError('Password is required when creating an employee.');
+        return;
+      }
 
-    if (!initialValues && !password.trim()) {
-      setValidationError('Password is required when creating an employee.');
-      return;
+      setValidationError('');
+      void onSubmit({
+        name: nickName.trim() || fullName.trim(),
+        fullName: fullName.trim(),
+        nickName: nickName.trim(),
+        displayName: nickName.trim() || fullName.trim(),
+        phone: normalizePhoneNumber(mobile),
+        mobile: normalizePhoneNumber(mobile),
+        email: email.trim().toLowerCase(),
+        password: password || undefined,
+        gender: gender || undefined,
+        dob: dob || undefined,
+        address: address.trim() || undefined,
+        remark: remark.trim() || undefined,
+        permissions: buildDefaultCustomerPermissions(),
+        status,
+        joinedDate: initialValues?.joinedDate || initialValues?.addedDate,
+        addedDate: initialValues?.addedDate,
+      });
     }
-
-    setValidationError('');
-    void onSubmit({
-      name: nickName.trim() || fullName.trim(),
-      fullName: fullName.trim(),
-      nickName: nickName.trim(),
-      displayName: nickName.trim() || fullName.trim(),
-      phone: normalizePhoneNumber(mobile),
-      mobile: normalizePhoneNumber(mobile),
-      email: email.trim().toLowerCase(),
-      password: password || undefined,
-      gender: gender || undefined,
-      dob: dob || undefined,
-      address: address.trim() || undefined,
-      remark: remark.trim() || undefined,
-      permissions: buildDefaultCustomerPermissions(),
-      status,
-      joinedDate: initialValues?.joinedDate || initialValues?.addedDate,
-      addedDate: initialValues?.addedDate,
-    });
   };
 
   return (
@@ -153,9 +170,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               value={mobile}
               onChange={(event) => {
                 setMobile(event.target.value);
-                setPhoneError('');
+                setFieldErrors(prev => ({ ...prev, mobile: '' }));
               }}
-              error={phoneError}
+              error={fieldErrors.mobile}
               required
             />
           </div>

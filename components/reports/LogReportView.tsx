@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getActivityLogs, type ActivityLogFilters } from '../../lib/api/activity-logs';
+import { getActivityLogs, getAdminActivityLogs, type ActivityLogFilters } from '../../lib/api/activity-logs';
 import {
   mapActivityLogResponse,
   type ActivityLogRow,
 } from '../../lib/mappers/activity-log-mapper';
 import DataTable, { type DataTableColumn } from '../tables/DataTable';
 import KeyValueList from './KeyValueList';
+import type { DashboardTabContext } from '../dashboard/active-tab/types';
 
 const getTodayDateValue = () => {
   const date = new Date();
@@ -62,7 +63,8 @@ function JsonPreview({ data }: { data: unknown }) {
 
 const today = getTodayDateValue();
 
-export default function LogReportView() {
+export default function LogReportView({ ctx }: { ctx?: DashboardTabContext }) {
+  const isAdmin = ctx?.accessContext.role === 'Admin';
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [logType, setLogType] = useState('');
@@ -97,7 +99,8 @@ export default function LogReportView() {
       if (operation) filters.operation = operation;
 
       try {
-        const payload = await getActivityLogs(filters);
+        const fetcher = isAdmin ? getAdminActivityLogs : getActivityLogs;
+        const payload = await fetcher(filters);
         if (cancelled) return;
         const mapped = mapActivityLogResponse(payload);
         setRows(mapped.data);
@@ -258,6 +261,13 @@ export default function LogReportView() {
             </select>
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="d-flex align-items-center gap-2 mb-3">
+            <span className="badge bg-info">Admin Activity Log</span>
+            <small className="text-muted">Shows all admin actions and business user login/logout events across all businesses.</small>
+          </div>
+        )}
 
         <DataTable
           rows={rows}

@@ -116,15 +116,6 @@ export default function CustomersTab({ ctx }: CustomersTabProps) {
           value: option.id,
         })),
       },
-      {
-        field: 'status',
-        label: 'Status',
-        type: 'single-select',
-        options: [
-          { label: 'Active', value: 'Active' },
-          { label: 'Inactive', value: 'Inactive' },
-        ],
-      },
     ],
   };
   const customerModuleUi = getModuleUi('customers');

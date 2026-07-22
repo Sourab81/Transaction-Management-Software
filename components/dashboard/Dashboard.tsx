@@ -8,6 +8,12 @@ import {
   checkUserIdentityAvailability,
   createBusinessUser,
 } from '../../lib/api/business-users';
+import {
+  getBusinessSubscription,
+  saveBusinessSubscription,
+  cancelBusinessSubscription,
+} from '../../lib/api/subscriptions';
+import { isRecord, readStringValue } from '../../lib/mappers/legacy-record';
 import { buildCsv } from '../../lib/csv';
 import { formatCustomerBalance, getCustomerBalanceClassName } from '../../lib/customer-balance-format';
 import { formatDate, formatDateTime } from '../../src/utils/dateFormatter';
@@ -105,6 +111,8 @@ import SubscriptionPlanForm from '../forms/SubscriptionPlanForm';
 import TransactionEditForm, { type TransactionEditorValues } from '../forms/TransactionEditForm';
 import { type SummaryCardProps } from './SummaryCard';
 import SummaryGrid from './SummaryGrid';
+import DashboardCard from './DashboardCard';
+import AdminDashboardContent from './AdminDashboardContent';
 import {
   readDataTableMultiSelectFilter,
   readDataTableSingleSelectFilter,
@@ -1965,167 +1973,54 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
   };
 
+  const customerMetrics = useMemo(() => {
+    const total = businesses.length;
+    const now = new Date();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+    
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
+    
+    const oneWeekInactive = businesses.filter(b => {
+      if (b.status !== 'Inactive') return false;
+      if (!b.joinedDate) return false;
+      const joinedDate = new Date(b.joinedDate);
+      return joinedDate >= oneWeekAgo && joinedDate <= now;
+    }).length;
+    
+    const oneMonthInactive = businesses.filter(b => {
+      if (b.status !== 'Inactive') return false;
+      if (!b.joinedDate) return false;
+      const joinedDate = new Date(b.joinedDate);
+      return joinedDate >= oneMonthAgo && joinedDate <= now;
+    }).length;
+    
+    const sixMonthsInactive = businesses.filter(b => {
+      if (b.status !== 'Inactive') return false;
+      if (!b.joinedDate) return false;
+      const joinedDate = new Date(b.joinedDate);
+      return joinedDate >= sixMonthsAgo && joinedDate <= now;
+    }).length;
+    
+    return {
+      total,
+      oneWeekInactive,
+      oneMonthInactive,
+      sixMonthsInactive,
+    };
+  }, [businesses]);
+
   const renderAdminDashboard = () => (
-    <div className="row g-4">
-      <div className="col-12">
-        <section className="hero-panel glass-card">
-          <div className="hero-panel__content">
-            <p className="eyebrow">Admin Workspace</p>
-            <h1 className="hero-panel__headline">Monitor business performance, subscriptions, and renewal.</h1>
-            <div className="section-hero__actions">
-              <button type="button" className="btn-app btn-app-primary" onClick={() => openModule('customers')}>
-                Open Users
-              </button>
-              <button type="button" className="btn-app btn-app-secondary" onClick={() => openModule('reports')}>
-                Open Reports
-              </button>
-            </div>
-
-            <div className="hero-panel__meta">
-              <div className="hero-stat">
-                <span className="hero-stat__label">Users</span>
-                <span className="hero-stat__value">{businesses.length}</span>
-                <span className="hero-stat__hint">Managed from the admin workspace</span>
-              </div>
-              <div className="hero-stat">
-                <span className="hero-stat__label">Active Plans</span>
-                <span className="hero-stat__value">
-                  {adminBusinessPlanRows.filter((row) => row.planStatus === 'active' || row.planStatus === 'trial').length}
-                </span>
-                <span className="hero-stat__hint">Users with software access</span>
-              </div>
-              <div className="hero-stat">
-                <span className="hero-stat__label">Expiring Soon</span>
-                <span className="hero-stat__value">{adminExpiringBusinessRows.length}</span>
-                <span className="hero-stat__hint">Need plan follow-up in 14 days</span>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <SummaryGrid cards={adminDashboardSummary} loading={isBackendBusinessesLoading} />
-
-      <div className="col-12 col-xl-6 dashboard-balance-col">
-        <section className="panel p-4 dashboard-balance-panel">
-          <div className="panel-header mb-4">
-            <div>
-              <p className="eyebrow">Your Business</p>
-              <h2 className="panel-title">Workspace directory snapshot</h2>
-              <p className="panel-copy">A quick look at the businesses you manage and the plans currently attached to them.</p>
-            </div>
-            <button type="button" className="btn-app btn-app-secondary" onClick={() => openModule('customers')}>
-              Open Directory
-            </button>
-          </div>
-          <div className="dashboard-balance-panel__body">
-            <div className="admin-plan-list">
-              {adminBusinessPlanRows.slice(0, 6).map((row) => (
-                <div key={row.businessId} className="admin-plan-list__item">
-                  <div>
-                    <p className="admin-plan-list__title">{row.businessName}</p>
-                    <p className="admin-plan-list__meta">{row.businessPhone} | {row.planLabel}</p>
-                  </div>
-                  <div className="d-flex gap-2 flex-wrap justify-content-end">
-                    <span className={row.planStatusClass}>{row.planStatusLabel}</span>
-                    <span className={row.workspaceStatusClass}>{row.workspaceStatusLabel}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="col-12 col-xl-6 dashboard-balance-col">
-        <NotificationCenter
-          notifications={notifications}
-          onDismiss={handleDismissNotification}
-        />
-      </div>
-
-      <div className="col-12 col-xl-6 dashboard-balance-col">
-        <section className="panel p-4 dashboard-balance-panel">
-          <div className="panel-header mb-4">
-            <div>
-              <p className="eyebrow">Your Plans</p>
-              <h2 className="panel-title">Subscription information</h2>
-              <p className="panel-copy">See how plan purchases are distributed across the businesses in your admin workspace.</p>
-            </div>
-          </div>
-          <div className="dashboard-balance-panel__body">
-            <div className="admin-plan-distribution">
-              {adminPlanDistribution.map((plan) => (
-                <div key={plan.id} className="admin-plan-distribution__item">
-                  <div>
-                    <p className="admin-plan-list__title">{plan.label}</p>
-                    <p className="admin-plan-list__meta">{plan.durationLabel}</p>
-                  </div>
-                  <span className="status-chip status-chip--info">{plan.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="col-12 col-xl-6 dashboard-balance-col">
-        <section className="panel p-4 dashboard-balance-panel">
-          <div className="panel-header mb-4">
-            <div>
-              <p className="eyebrow">Renewal Watch</p>
-              <h2 className="panel-title">Plans expiring soon</h2>
-              <p className="panel-copy">Businesses that need renewal attention soon so their workspaces do not get locked unexpectedly.</p>
-            </div>
-          </div>
-          <div className="dashboard-balance-panel__body">
-            {adminExpiringBusinessRows.length === 0 ? (
-              <div className="notification-empty">
-                <p className="mb-0">No business plans are expiring in the next 14 days.</p>
-              </div>
-            ) : (
-              <div className="admin-plan-list">
-                {adminExpiringBusinessRows.map((row) => (
-                  <div key={row.businessId} className="admin-plan-list__item">
-                    <div>
-                      <p className="admin-plan-list__title">{row.businessName}</p>
-                      <p className="admin-plan-list__meta">{row.planLabel} ends on {row.endDate}</p>
-                    </div>
-                    <div className="d-flex gap-2 flex-wrap justify-content-end align-items-center">
-                      <span className="status-chip status-chip--pending">{row.daysRemaining} day{row.daysRemaining === 1 ? '' : 's'} left</span>
-                      <button type="button" className="btn-icon-sm btn-icon-sm--primary" onClick={() => handleManageBusinessPlan(row.businessId)}>
-                        Manage
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-      
-      {isAdminPlanFiltersOpen ? renderAdminPlanFilters() : null}
-
-      <div className="col-12">
-        <SubscriptionTransactionsTable
-          rows={filteredAdminPlanRows}
-          onManagePlan={handleManageBusinessPlan}
-          onEditBusiness={handleEditCustomer}
-          headerAction={
-            <div className="table-filter-trigger">
-              <button type="button" className="btn-app btn-app-secondary" onClick={() => setIsAdminPlanFiltersOpen((current) => !current)}>
-                <FaFilter />
-                Filter
-              </button>
-              {hasActiveAdminPlanFilters ? (
-                <span className="status-chip status-chip--info">Filtered</span>
-              ) : null}
-            </div>
-          }
-        />
-      </div>
-    </div>
+    <AdminDashboardContent
+      businesses={businesses}
+      customerMetrics={customerMetrics}
+      isLoading={isBackendBusinessesLoading}
+      openModule={openModule}
+    />
   );
 
   const handleDismissNotification = (id: string) => {
@@ -2853,6 +2748,19 @@ const Dashboard: React.FC<DashboardProps> = ({
         return;
       }
 
+      if (values.subscription) {
+        const payloadRecord = isRecord(result.payload) ? result.payload : null;
+        const businessId = readStringValue(payloadRecord, ['id', 'user_id']) || '';
+        if (businessId) {
+          await saveBusinessSubscription(businessId, {
+            planId: values.subscription.planId,
+            startDate: values.subscription.startDate,
+            endDate: values.subscription.endDate,
+            status: values.subscription.status,
+          });
+        }
+      }
+
       addHistoryEvent(`${values.name} business added`, 'Customers');
       addNotification('success', 'Business added successfully.');
       reloadBackendBusinesses();
@@ -2872,6 +2780,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           onboardingStep: editingBusiness.onboardingStep,
         },
       });
+
+      if (values.subscription) {
+        await saveBusinessSubscription(editingBusiness.id, {
+          planId: values.subscription.planId,
+          startDate: values.subscription.startDate,
+          endDate: values.subscription.endDate,
+          status: values.subscription.status,
+        });
+      }
+
       addHistoryEvent(`${values.name} business updated`, 'Customers');
       addNotification('success', 'Business updated successfully.');
     } else {
@@ -3005,7 +2923,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     addNotification('success', 'Profile updated successfully.');
   };
 
-  const handlePlanUpdate = (subscription: BusinessSubscription) => {
+  const handlePlanUpdate = async (subscription: BusinessSubscription) => {
     const targetBusiness = currentRole === 'Customer' ? currentBusiness : selectedPlanBusiness;
     if (!targetBusiness) {
       return;
@@ -3016,13 +2934,19 @@ const Dashboard: React.FC<DashboardProps> = ({
       subscription,
       status: 'Active',
     });
+    await saveBusinessSubscription(targetBusiness.id, {
+      planId: subscription.planId,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+      status: subscription.status,
+    });
     addHistoryEvent(`${targetBusiness.name || 'Business'} plan updated to ${nextPlan.label}`, 'Dashboard');
     addNotification('success', `${nextPlan.label} is active until ${subscription.endDate}.`);
     closeModal();
     onNavigate('dashboard');
   };
 
-  const handlePlanCancel = () => {
+  const handlePlanCancel = async () => {
     const targetBusiness = currentRole === 'Customer' ? currentBusiness : selectedPlanBusiness;
     if (!targetBusiness) {
       addNotification('error', 'The selected plan details are no longer available.');
@@ -3049,6 +2973,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       },
       status: 'Inactive',
     });
+    await cancelBusinessSubscription(targetBusiness.id);
     addHistoryEvent(`${targetBusiness.name || 'Business'} plan cancelled`, 'Dashboard', 'Pending');
     addNotification('warning', 'The plan has been cancelled. Renew it to restore full workspace access.');
     closeModal();
@@ -3372,12 +3297,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (!businessId) return;
 
     if (isEmployeeEmailTaken(values.email, editingEmployee?.id)) {
-      addNotification('error', 'That employee email is already assigned to another login.');
+      showIdentityConflict('That employee email is already assigned to another login.');
       return;
     }
 
     if (isEmployeePhoneTaken(values.mobile || values.phone || '', editingEmployee?.id)) {
-      addNotification('error', 'That employee phone number is already assigned to another employee.');
+      showIdentityConflict('That employee phone number is already assigned to another employee.');
       return;
     }
 
@@ -3435,7 +3360,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         if (!result.success) {
           console.log('[EmployeeCreate] Backend error:', result.message);
-          addNotification('error', result.message || 'Unable to create employee.');
+          const errorMsg = result.message || 'Unable to create employee.';
+          if (/already exists|in use|duplicate|already assigned/i.test(errorMsg)) {
+            showIdentityConflict(errorMsg);
+          } else {
+            addNotification('error', errorMsg);
+          }
           return;
         }
 
@@ -3461,6 +3391,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         closeModal();
       }
       addHistoryEvent(`${values.name} employee added`, 'Employees');
+      addNotification('success', 'Employee added successfully.');
       addNotification('success', 'Employee added successfully.');
     }
   };

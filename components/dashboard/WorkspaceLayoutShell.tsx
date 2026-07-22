@@ -82,7 +82,7 @@ const WorkspaceLayoutShell = ({
   initialUser,
   initialWorkspaceData,
 }: WorkspaceLayoutShellProps) => {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(initialUser);
   const routeState = useMemo(() => resolveWorkspaceRouteState(pathname), [pathname]);

@@ -144,6 +144,16 @@ export const userDashboardModules: PlatformModule[] = [
     sidebarRoles: ['Admin', 'Employee', 'Customer'],
   },
   {
+    id: 'subscriptions',
+    label: 'Subscription',
+    sidebarLabel: 'Subscriptions',
+    heading: 'Subscription',
+    description: 'Manage subscription plans and business subscriptions',
+    icon: FaDollarSign,
+    allowedRoles: ['Admin'],
+    sidebarRoles: ['Admin'],
+  },
+  {
     id: 'role',
     label: 'Role',
     sidebarLabel: 'Role',

@@ -6,8 +6,8 @@ import { getUsersDirectory, updateUserPermissions, type UserDirectoryEntry } fro
 import { buildDefaultCustomerPermissions, normalizeCustomerPermissions } from '../../../lib/platform-structure';
 import PermissionEditor from '../../forms/PermissionEditor';
 import SectionHero from '../SectionHero';
-import type { CustomerPermissions } from '../../../lib/platform-structure';
 import type { DashboardTabContext } from './types';
+import { type CustomerPermissions } from '../../../lib/platform-structure';
 
 interface PermissionsTabProps {
   ctx: DashboardTabContext;
@@ -75,6 +75,10 @@ export default function PermissionsTab({ ctx }: PermissionsTabProps) {
     () => userOptions.find((u) => u.id === selectedUserId) ?? null,
     [userOptions, selectedUserId],
   );
+
+  const businessOwnerPermissions: CustomerPermissions | undefined = isAdmin
+    ? undefined
+    : ctx.currentBusinessProfile?.permissions ?? undefined;
 
   const handleSelectUser = useCallback((userId: string) => {
     const id = Number(userId);
@@ -220,6 +224,7 @@ export default function PermissionsTab({ ctx }: PermissionsTabProps) {
           <PermissionEditor
             permissions={permissions}
             onChange={setPermissions}
+            ownerPermissions={businessOwnerPermissions}
           />
         </div>
       )}

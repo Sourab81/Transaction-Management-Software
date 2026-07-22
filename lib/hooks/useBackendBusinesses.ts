@@ -9,7 +9,9 @@ import {
 import {
   mapBusinessesPageResponse,
 } from '../mappers/business-mapper';
+import { getBusinessSubscription } from '../api/subscriptions';
 import type { Business } from '../store';
+import type { BusinessSubscriptionPlanId, BusinessSubscriptionStatus } from '../subscription';
 import { usePersistentPageSize } from './usePersistentPageSize';
 
 interface UseBackendBusinessesResult {
@@ -74,7 +76,24 @@ export function useBackendBusinesses(
         const mappedPage = mapBusinessesPageResponse(result.payload, page, limit);
 
         if (!isCancelled) {
-          setBusinesses(mappedPage.businesses);
+          const withSubscriptions = await Promise.all(
+            mappedPage.businesses.map(async (business) => {
+              const subResult = await getBusinessSubscription(business.id);
+              if (subResult.success && subResult.subscription) {
+                const subscription = {
+                  planId: subResult.subscription.planId as BusinessSubscriptionPlanId,
+                  startDate: subResult.subscription.startDate,
+                  endDate: subResult.subscription.endDate,
+                  status: subResult.subscription.status as BusinessSubscriptionStatus,
+                  cancelledAt: subResult.subscription.cancelledAt,
+                  updatedAt: subResult.subscription.updatedAt,
+                };
+                return { ...business, subscription };
+              }
+              return business;
+            }),
+          );
+          setBusinesses(withSubscriptions);
           setPagination(mappedPage.pagination);
         }
       } catch (requestError) {

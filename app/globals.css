@@ -1539,6 +1539,18 @@ small {
   padding: 1rem 1.1rem;
 }
 
+.hero-stat--blue {
+  border-left: 4px solid #3b82f6;
+}
+
+.hero-stat--green {
+  border-left: 4px solid #22c55e;
+}
+
+.hero-stat--red {
+  border-left: 4px solid #ef4444;
+}
+
 .hero-stat__label {
   color: var(--foreground-muted);
   display: block;
@@ -5923,6 +5935,18 @@ body,
   border: 0.0625rem solid var(--border-soft);
   border-radius: 1.25rem;
   padding: 0.9rem;
+}
+
+.hero-panel__meta .hero-stat--blue {
+  border-left: 4px solid #3b82f6;
+}
+
+.hero-panel__meta .hero-stat--green {
+  border-left: 4px solid #22c55e;
+}
+
+.hero-panel__meta .hero-stat--red {
+  border-left: 4px solid #ef4444;
 }
 
 .hero-stat__value {
